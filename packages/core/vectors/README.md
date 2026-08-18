@@ -46,11 +46,18 @@ cd contracts/justanaccount && git submodule update --init lib/solady
 
 ## Re-deriving a vector
 
-`signature-wrap.json`, one entry:
+`signature-wrap.json`, first entry:
 
 ```bash
 cast abi-encode "f((uint256,bytes))" "(0,0x$(printf 'aa%.0s' {1..32})$(printf 'bb%.0s' {1..32})1b)"
 ```
+
+The bytes handed to `cast` are what `wrapSignature` produces on the way in, not
+its `input.signature`. For a 65-byte signature it repacks as
+`abi.encodePacked(r, s, v)` with `v` normalised to 27 or 28 first, so the second
+entry takes a signature ending in `01` and its expected bytes end in `1c`. Drop
+the raw input into the command above and you will derive something that ends in
+`01` and conclude, wrongly, that the vector is broken.
 
 `signature-webauthn.json`:
 
@@ -83,10 +90,18 @@ notices. That is where `challengeIndex ?? 23` and `typeIndex ?? 1` in
 **We declare `ownerIndex` narrower than the contract does.** The struct says
 `uint256`, `wrapSignature` encodes `uint8`. The bytes are identical for any
 value that fits in a byte, verified with `cast`, so nothing is wrong today. Past
-255 viem refuses to encode while the contract would accept it, so an account
-with more than 256 owners cannot be signed for through this SDK. Reported rather
-than changed, since this directory is about pinning the encoding, not altering
-it.
+255 viem refuses to encode while the contract would accept it.
+
+That ceiling is easier to reach than it looks. `MultiOwnable` hands out indices
+from a counter that only goes up (`s_nextOwnerIndex++`), and removing an owner
+deletes its slot without reusing the index or compacting the rest. So the limit
+is on how many owners the account has ever had, not on how many it has now: an
+account that has rotated owners 300 times has whatever owners it has today, and
+if one of them sits at index 260 that owner cannot sign through this SDK at all.
+
+Reported rather than changed, since this directory is about pinning the
+encoding. Widening `wrapSignature` to `uint256` would produce identical bytes
+for every value that fits today.
 
 ## Changing a vector
 

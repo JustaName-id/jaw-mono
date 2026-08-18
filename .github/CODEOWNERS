@@ -3,7 +3,12 @@
 # The golden vectors are the contract's own statement of how the SDK must encode
 # what it signs, and the API report is the record of everything the package
 # publishes. A diff in either is either a deliberate decision or a bug, never
-# noise, so neither should be able to merge on a rubber stamp.
+# noise, so neither should merge without one of us reading it.
+#
+# This file only auto-requests reviewers. It becomes a gate once `main` has a
+# ruleset with "Require review from Code Owners", which the repo does not have
+# today: the branch has neither classic protection nor a ruleset. Until then,
+# treat the request as a convention.
 
 /packages/core/vectors/    @Ghadi8 @mariano-aguero
 /packages/core/etc/        @Ghadi8 @mariano-aguero
