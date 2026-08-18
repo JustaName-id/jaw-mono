@@ -14,7 +14,7 @@
  * Decoding what we produced, with the shape written out independently, does not
  * move with it.
  */
-import { decodeAbiParameters, parseSignature, size, type Hex } from 'viem';
+import { decodeAbiParameters, hashTypedData, parseSignature, size, type Hex } from 'viem';
 import { describe, it, expect, vi } from 'vitest';
 
 import { wrapSignature, toWebAuthnSignature, sign, signTypedData } from './toJustanAccount.js';
@@ -149,6 +149,27 @@ describe('toWebAuthnSignature', () => {
     });
 });
 
+describe('sign, WebAuthn metadata defaults', () => {
+    it('fills in the offsets and the verification flag when the authenticator omits them', async () => {
+        // An authenticator response can arrive without these. The fallbacks are
+        // what the contract slices clientDataJSON at, so a wrong default fails
+        // verification on chain rather than here.
+        const owner = {
+            type: 'webAuthn' as const,
+            sign: vi.fn().mockResolvedValue({
+                signature: P256_SIGNATURE,
+                webauthn: { authenticatorData: WEBAUTHN.authenticatorData, clientDataJSON: WEBAUTHN.clientDataJSON },
+            }),
+        };
+
+        const out = await sign({ hash: `0x${'ab'.repeat(32)}`, owner: owner as never });
+
+        const [decoded] = decodeAbiParameters(WEBAUTHN_SIGNATURE, out);
+        expect(decoded.challengeIndex).toBe(23n);
+        expect(decoded.typeIndex).toBe(1n);
+    });
+});
+
 describe('sign', () => {
     it('wraps a WebAuthn owner signature into the contract tuple', async () => {
         const owner = {
@@ -196,20 +217,15 @@ describe('signTypedData', () => {
         expect(out).toBe(toWebAuthnSignature({ webauthn: WEBAUTHN, signature: P256_SIGNATURE }));
     });
 
-    it('hashes the typed data itself before handing it to a local owner', async () => {
+    it('signs the EIP-712 digest of the typed data, not some other hash of it', async () => {
         const owner = { type: 'local' as const, sign: vi.fn().mockResolvedValue(SECP256K1_SIGNATURE) };
 
         await signTypedData({ typedData, owner: owner as never });
 
-        // The real EIP-712 digest, not whatever a stub returned. It has to be a
-        // 32-byte hash and it has to change with the message.
-        const [{ hash }] = owner.sign.mock.calls[0] as [{ hash: Hex }];
-        expect(size(hash)).toBe(32);
-
-        owner.sign.mockClear();
-        await signTypedData({ typedData: { ...typedData, message: { value: 'other' } }, owner: owner as never });
-        const [{ hash: other }] = owner.sign.mock.calls[0] as [{ hash: Hex }];
-        expect(other).not.toBe(hash);
+        // The exact digest, against viem's hasher. "32 bytes and it changes
+        // with the message" is also true of keccak over the JSON, and a
+        // signature over that is rejected by every verifier.
+        expect(owner.sign).toHaveBeenCalledWith({ hash: hashTypedData(typedData) });
     });
 
     it('refuses an owner that cannot sign', async () => {

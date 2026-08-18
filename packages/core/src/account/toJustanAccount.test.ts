@@ -2,6 +2,7 @@ import * as viem from 'viem';
 import { type Hex } from 'viem';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { toJustanAccount } from './toJustanAccount.js';
+import { CONTRACT_NAME, CONTRACT_VERSION } from '../constants.js';
 
 vi.mock('viem/actions', () => ({
     readContract: vi.fn(),
@@ -29,8 +30,6 @@ const WRAPPED_SIGNATURE = [
 ] as const;
 
 const MOCK_SIGNATURE = '0x1234' as Hex;
-/** What the mocked signUserOperation resolves to, in the 7702 tests. */
-const MOCK_WRAPPED_SIGNATURE = '0xdead' as Hex;
 const MOCK_ADDRESS = '0x1234567890123456789012345678901234567890' as const;
 const MOCK_FACTORY_ADDRESS = '0xfac70000000000000000000000000000000fac70' as const;
 const MOCK_DELEGATION_CONTRACT = '0xde1e6a7100000000000000000000000000de1e6a' as const;
@@ -576,7 +575,23 @@ describe('toJustanAccount unit tests', () => {
 
                 const signature = await account.signMessage({ message: MOCK_MESSAGE });
 
-                expect(mockOwner.sign).toHaveBeenCalled();
+                // What gets signed is an ERC-7739 digest bound to this account
+                // through the verifier domain. Signing a plain message hash
+                // instead would be a replay-shaped change, and nothing else here
+                // would notice.
+                const { hashMessage: erc7739HashMessage } = await import('viem/experimental/erc7739');
+                expect(mockOwner.sign).toHaveBeenCalledWith({
+                    hash: erc7739HashMessage({
+                        message: MOCK_MESSAGE,
+                        verifierDomain: {
+                            name: CONTRACT_NAME,
+                            version: CONTRACT_VERSION,
+                            verifyingContract: MOCK_ADDRESS,
+                            chainId: MOCK_PUBLIC_CLIENT.chain.id,
+                        },
+                    }),
+                });
+
                 // Decoded, not "was called": the wrapping is what the contract
                 // reads, and toJustanAccount.encoding.test.ts pins its shape.
                 const [wrapped] = viem.decodeAbiParameters(WRAPPED_SIGNATURE, signature);
@@ -658,11 +673,18 @@ describe('toJustanAccount unit tests', () => {
                 const signature = await account.signTypedData(MOCK_TYPED_DATA);
 
                 expect(mockOwner.sign).toHaveBeenCalled();
-                // The ERC-7739 envelope runs for real, so the owner's raw
-                // signature is the prefix of what comes back wrapped.
-                const [wrapped] = viem.decodeAbiParameters(WRAPPED_SIGNATURE, signature);
-                expect(wrapped.ownerIndex).toBe(0);
-                expect(wrapped.signatureData.startsWith(MOCK_SIGNATURE)).toBe(true);
+                // The ERC-7739 envelope carries the domain the verifier checks.
+                // A prefix check would pass with the envelope dropped entirely,
+                // so compare against the whole thing.
+                // The envelope goes around the owner tuple, not inside it, so
+                // decoding the tuple off the front reads right past it. Assert
+                // the whole value: the inner tuple built from the shape written
+                // out above, wrapped by viem's own helper.
+                const { wrapTypedDataSignature } = await import('viem/experimental/erc7739');
+                const inner = viem.encodeAbiParameters(WRAPPED_SIGNATURE, [
+                    { ownerIndex: 0, signatureData: MOCK_SIGNATURE },
+                ]);
+                expect(signature).toBe(wrapTypedDataSignature({ ...MOCK_TYPED_DATA, signature: inner }));
             });
 
             it('should throw error for address-type owner', async () => {
@@ -738,11 +760,10 @@ describe('toJustanAccount unit tests', () => {
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 vi.mocked(getUserOperationTypedData).mockReturnValue(MOCK_TYPED_DATA as any);
 
-                const mockSignUserOperation = vi.fn().mockResolvedValue(MOCK_WRAPPED_SIGNATURE);
-                vi.mocked(toSmartAccount).mockReturnValue({
-                    signUserOperation: mockSignUserOperation,
-                    getAddress: vi.fn().mockResolvedValue(MOCK_ADDRESS),
-                } as any);
+                // Spread rather than replaced, or `account.signUserOperation`
+                // would be the mock and this would assert what the mock was
+                // told to return.
+                vi.mocked(toSmartAccount).mockImplementation((params: any) => ({ ...params }));
 
                 const account = await toJustanAccount({
                     client: MOCK_PUBLIC_CLIENT,
@@ -759,7 +780,9 @@ describe('toJustanAccount unit tests', () => {
                     maxPriorityFeePerGas: 1n,
                 } as any);
 
-                expect(signature).toBe(MOCK_WRAPPED_SIGNATURE);
+                const [wrapped] = viem.decodeAbiParameters(WRAPPED_SIGNATURE, signature);
+                expect(wrapped.ownerIndex).toBe(0);
+                expect(wrapped.signatureData).toBe(MOCK_SIGNATURE);
             });
 
             it('should throw error for address-type owner', async () => {
