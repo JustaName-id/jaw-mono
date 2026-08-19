@@ -61,6 +61,16 @@ module.exports = {
         url: ['10px', { lineHeight: '1.3', fontWeight: '400' }], // mono origin, under the app name
       },
 
+      // Tailwind's default box-shadows bake literal black; re-declare sm/md/lg/xl on the
+      // shadow token so a dApp skin can tint (or kill) elevation. Same offsets/blurs as stock.
+      // (md covers PopoverContent — the fee-token selector inside the dialogs.)
+      boxShadow: {
+        sm: '0 1px 2px 0 oklch(var(--jaw-color-shadow) / 0.05)',
+        md: '0 4px 6px -1px oklch(var(--jaw-color-shadow) / 0.1), 0 2px 4px -2px oklch(var(--jaw-color-shadow) / 0.1)',
+        lg: '0 10px 15px -3px oklch(var(--jaw-color-shadow) / 0.1), 0 4px 6px -4px oklch(var(--jaw-color-shadow) / 0.1)',
+        xl: '0 20px 25px -5px oklch(var(--jaw-color-shadow) / 0.1), 0 8px 10px -6px oklch(var(--jaw-color-shadow) / 0.1)',
+      },
+
       // Radii: 99 · 16.5 · 12 · 8 · 4. Nothing else is legal.
       borderRadius: {
         card: '16.5px',
@@ -139,6 +149,22 @@ module.exports = {
           DEFAULT: 'oklch(var(--jaw-color-success) / <alpha-value>)',
           foreground: 'oklch(var(--jaw-color-success-foreground) / <alpha-value>)',
         },
+        warning: {
+          DEFAULT: 'oklch(var(--jaw-color-warning) / <alpha-value>)',
+          foreground: 'oklch(var(--jaw-color-warning-foreground) / <alpha-value>)',
+        },
+        info: {
+          DEFAULT: 'oklch(var(--jaw-color-info) / <alpha-value>)',
+          foreground: 'oklch(var(--jaw-color-info-foreground) / <alpha-value>)',
+        },
+        // Text-legible asset-delta pair. `destructive`/`success` are fill colors — dark
+        // destructive (L 0.396) is unreadable as small text, which is why red-400 crept in.
+        positive: 'oklch(var(--jaw-color-positive) / <alpha-value>)',
+        negative: 'oklch(var(--jaw-color-negative) / <alpha-value>)',
+        scrim: 'oklch(var(--jaw-color-scrim) / <alpha-value>)',
+        halo: 'oklch(var(--jaw-color-halo) / <alpha-value>)',
+        'identicon-tile': 'oklch(var(--jaw-color-identicon-tile) / <alpha-value>)',
+        'identicon-ring': 'oklch(var(--jaw-color-identicon-ring) / <alpha-value>)',
         border: 'oklch(var(--jaw-color-border) / <alpha-value>)',
         input: 'oklch(var(--jaw-color-input) / <alpha-value>)',
         ring: 'oklch(var(--jaw-color-ring) / <alpha-value>)',

@@ -155,13 +155,14 @@ export const UsdtIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => {
   );
 };
 
-// Generic token icon for unknown tokens
+// Generic token icon for unknown tokens — no brand, so it draws in theme tokens
+// (disc = muted-foreground, ring/dot = muted) rather than literal grays.
 export const GenericTokenIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" {...props}>
-      <circle cx="12" cy="12" r="12" fill="#9CA3AF" />
-      <circle cx="12" cy="12" r="6" stroke="white" strokeWidth="1.5" fill="none" />
-      <circle cx="12" cy="12" r="2" fill="white" />
+      <circle cx="12" cy="12" r="12" fill="oklch(var(--jaw-color-muted-foreground))" />
+      <circle cx="12" cy="12" r="6" stroke="oklch(var(--jaw-color-muted))" strokeWidth="1.5" fill="none" />
+      <circle cx="12" cy="12" r="2" fill="oklch(var(--jaw-color-muted))" />
     </svg>
   );
 };

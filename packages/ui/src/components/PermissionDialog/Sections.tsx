@@ -31,8 +31,8 @@ export function spendRate(duration?: string): string {
 /** Amber badge pinned to an avatar, marking an unrestricted scope. */
 function WarnBadge() {
   return (
-    <span className="ring-popover absolute -bottom-0.5 -right-0.5 flex size-3 items-center justify-center rounded-full bg-amber-500 ring-2">
-      <TriangleAlert className="size-2 text-black" strokeWidth={3} />
+    <span className="ring-popover bg-warning absolute -bottom-0.5 -right-0.5 flex size-3 items-center justify-center rounded-full ring-2">
+      <TriangleAlert className="text-warning-foreground size-2" strokeWidth={3} />
     </span>
   );
 }
@@ -82,7 +82,7 @@ function SpendRow({
           className="size-token flex-none rounded-full"
         />
         {/* A spend token that won't answer decimals() is either not an ERC-20 or deliberately
-            opaque — worth the same amber as an unbounded scope. */}
+            opaque — worth the same warning tone as an unbounded scope. */}
         {!isLoading && spend.decimalsUnknown && <WarnBadge />}
       </span>
       {isLoading ? (
@@ -95,7 +95,7 @@ function SpendRow({
             </span>
             {!isNative && <CopyButton value={spend.tokenAddress} size={11} label="Copy token address" />}
           </span>
-          {spend.decimalsUnknown && <span className="text-code mt-1 font-mono text-amber-500">decimals unknown</span>}
+          {spend.decimalsUnknown && <span className="text-code text-warning mt-1 font-mono">decimals unknown</span>}
         </span>
       )}
       {isLoading ? (
@@ -222,7 +222,7 @@ function ContractGroup({
           </span>
           <span className="flex min-w-0 flex-1 flex-col items-start">
             {anyTarget ? (
-              <span className="text-body-sm truncate font-semibold text-amber-500">Any contract</span>
+              <span className="text-body-sm text-warning truncate font-semibold">Any contract</span>
             ) : tokenSymbol || resolvedName ? (
               <>
                 <span className="text-foreground text-body-sm truncate font-medium">{tokenSymbol ?? resolvedName}</span>
@@ -232,7 +232,7 @@ function ContractGroup({
               <span className="text-foreground text-body-xs truncate font-mono font-medium">{truncatedAddress}</span>
             )}
           </span>
-          <span className={`text-code flex-none font-mono ${anyFunction ? 'text-amber-500' : 'text-muted-foreground'}`}>
+          <span className={`text-code flex-none font-mono ${anyFunction ? 'text-warning' : 'text-muted-foreground'}`}>
             {fnMeta}
           </span>
         </span>
@@ -248,7 +248,7 @@ function ContractGroup({
           <ul className="bg-secondary rounded-chip flex flex-col gap-1 p-2">
             {group.calls.map((call, i) =>
               isWildcard(call.selector) ? (
-                <li key={i} className="text-body-sm flex items-center gap-1.5 font-semibold text-amber-500">
+                <li key={i} className="text-body-sm text-warning flex items-center gap-1.5 font-semibold">
                   <TriangleAlert className="size-3 flex-none" strokeWidth={2.4} />
                   Any function
                 </li>

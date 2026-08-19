@@ -706,9 +706,73 @@ export interface JawTheme {
     readonly accentColor?: string;
     readonly accentColorForeground?: string;
     readonly borderRadius?: JawBorderRadius;
+    readonly colors?: JawThemeColors;
     readonly cssVariables?: Readonly<Record<string, string>>;
     readonly fontStack?: JawFontStack;
     readonly mode?: JawThemeMode;
+}
+
+// @public
+export interface JawThemeColors {
+    // (undocumented)
+    readonly accent?: string;
+    // (undocumented)
+    readonly accentForeground?: string;
+    // (undocumented)
+    readonly background?: string;
+    // (undocumented)
+    readonly border?: string;
+    // (undocumented)
+    readonly card?: string;
+    // (undocumented)
+    readonly cardForeground?: string;
+    // (undocumented)
+    readonly destructive?: string;
+    // (undocumented)
+    readonly destructiveForeground?: string;
+    // (undocumented)
+    readonly destructiveHover?: string;
+    // (undocumented)
+    readonly foreground?: string;
+    readonly halo?: string;
+    readonly identiconRing?: string;
+    readonly identiconTile?: string;
+    // (undocumented)
+    readonly info?: string;
+    // (undocumented)
+    readonly infoForeground?: string;
+    // (undocumented)
+    readonly input?: string;
+    // (undocumented)
+    readonly muted?: string;
+    // (undocumented)
+    readonly mutedForeground?: string;
+    readonly negative?: string;
+    // (undocumented)
+    readonly popover?: string;
+    // (undocumented)
+    readonly popoverForeground?: string;
+    readonly positive?: string;
+    // (undocumented)
+    readonly primary?: string;
+    // (undocumented)
+    readonly primaryForeground?: string;
+    // (undocumented)
+    readonly ring?: string;
+    readonly scrim?: string;
+    // (undocumented)
+    readonly secondary?: string;
+    // (undocumented)
+    readonly secondaryForeground?: string;
+    readonly shadow?: string;
+    // (undocumented)
+    readonly success?: string;
+    // (undocumented)
+    readonly successForeground?: string;
+    // (undocumented)
+    readonly warning?: string;
+    // (undocumented)
+    readonly warningForeground?: string;
 }
 
 // @public
