@@ -19,12 +19,19 @@ function srgbToLinear(value: number): number {
 // --- Hex -> sRGB (0-1 floats) ---
 
 function hexToSrgb(hex: string): readonly [number, number, number] {
-  const cleaned = hex.replace(/^#/, '');
+  // Trim here, in the one canonical converter: keys' parseHex tolerates padded
+  // input, and if this one doesn't, the same theme renders differently per host.
+  const cleaned = hex.trim().replace(/^#/, '');
   if (cleaned.length !== 6 && cleaned.length !== 3) {
     throw new Error(`Invalid hex color: ${hex}`);
   }
   const full =
     cleaned.length === 3 ? cleaned[0] + cleaned[0] + cleaned[1] + cleaned[1] + cleaned[2] + cleaned[2] : cleaned;
+  // Length alone is not enough: 'red'/'purple'-style strings of length 3/6 would
+  // otherwise parse to NaN and flow through the matrices as "NaN NaN NaN".
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) {
+    throw new Error(`Invalid hex color: ${hex}`);
+  }
   const r = parseInt(full.slice(0, 2), 16) / 255;
   const g = parseInt(full.slice(2, 4), 16) / 255;
   const b = parseInt(full.slice(4, 6), 16) / 255;

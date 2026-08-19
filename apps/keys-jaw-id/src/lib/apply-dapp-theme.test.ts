@@ -341,6 +341,33 @@ describe('applyDappTheme cssVariables (Layer 2)', () => {
     expect(style['--warning']).toMatch(/%/);
   });
 
+  it('semantic colors: whitespace-padded hex applies instead of throwing (regression: handshake hang)', () => {
+    const { win, style } = fakeWindow();
+    expect(() => applyDappTheme({ colors: { primary: ' #ff0000 ' } }, win)).not.toThrow();
+    expect(style['--jaw-color-primary']).toMatch(/^[\d.]+ [\d.]+ [\d.]+$/);
+    expect(style['--primary']).toMatch(/%/);
+  });
+
+  it('invalid accentColorForeground falls back to the auto foreground — never a half-applied accent (regression)', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme({ accentColor: '#fde047', accentColorForeground: 'nope!' }, win);
+    // Accent applied in both token systems…
+    expect(style['--primary']).toBe(hexToHslTriplet('#fde047'));
+    expect(style['--jaw-color-primary']).toMatch(/^[\d.]+ [\d.]+ [\d.]+$/);
+    // …and the foreground fell back to the luminance auto-detect (dark on a light accent),
+    // instead of staying at the stylesheet default next to a repainted button.
+    expect(style['--primary-foreground']).toBe('222.2 47.4% 11.2%');
+    expect(style['--jaw-color-primary-foreground']).toBe('0.2077 0.0398 265.755');
+  });
+
+  it('invalid accentColor neither throws nor writes NaN channels (regression)', () => {
+    for (const bad of ['red', '#ff000', '#zzzzzz', 'hotpink']) {
+      const { win, style } = fakeWindow();
+      expect(() => applyDappTheme({ accentColor: bad }, win), bad).not.toThrow();
+      expect(style['--jaw-color-primary'] ?? '').not.toMatch(/NaN/);
+    }
+  });
+
   it('semantic colors: invalid hex is skipped, cssVariables still outrank colors', () => {
     const { win, style } = fakeWindow();
     applyDappTheme(

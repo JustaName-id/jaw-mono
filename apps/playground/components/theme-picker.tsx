@@ -15,7 +15,7 @@ const COLOR_GROUPS: readonly { label: string; keys: readonly ColorKey[] }[] = [
   { label: 'Text', keys: ['foreground', 'mutedForeground'] },
   { label: 'Brand', keys: ['primary', 'primaryForeground', 'secondary', 'muted', 'accent', 'ring'] },
   { label: 'Status', keys: ['warning', 'success', 'destructive', 'info', 'positive', 'negative'] },
-  { label: 'Chrome', keys: ['scrim', 'halo', 'identiconTile', 'shadow'] },
+  { label: 'Chrome', keys: ['scrim', 'halo', 'identiconTile', 'identiconRing', 'shadow'] },
 ];
 
 /** 'cardForeground' → 'card foreground', for input labels. */

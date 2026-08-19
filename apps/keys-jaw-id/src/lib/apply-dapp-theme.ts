@@ -220,32 +220,36 @@ export function applyDappTheme(theme: JawTheme, win: Window = window): void {
   root.classList.add(mode);
   root.style.colorScheme = mode;
 
-  // Accent → --primary / --ring, with a contrast-aware --primary-foreground.
+  // Accent → --primary / --ring, with a contrast-aware --primary-foreground, written into BOTH
+  // token systems (keys HSL triplets + the package's oklch channels — channels, not `oklch(...)`:
+  // the theme wraps them for the alpha modifier). Every value is computed before the first write
+  // so an invalid input can never leave a half-applied accent (colored button, default label),
+  // and nothing here may throw — this runs bare inside keys' postMessage handler. An invalid
+  // explicit foreground is treated as absent: fall back to the luminance auto-detect.
   if (theme.accentColor) {
     const triplet = hexToHslTriplet(theme.accentColor);
     if (triplet) {
+      const fgIsDark = luminance(theme.accentColor) > 0.5;
+      const fg =
+        (theme.accentColorForeground && hexToHslTriplet(theme.accentColorForeground)) ||
+        (fgIsDark ? FG_DARK : FG_LIGHT);
+      let accent: string | null = null;
+      let jawFg: string | null = null;
+      try {
+        accent = oklchToString(hexToOklch(theme.accentColor));
+        jawFg = theme.accentColorForeground ? oklchToString(hexToOklch(theme.accentColorForeground)) : null;
+      } catch {
+        jawFg = null; // invalid explicit foreground — auto-detect below
+      }
+
       setProp('--primary', triplet);
       setProp('--ring', triplet);
-      const fg = theme.accentColorForeground
-        ? hexToHslTriplet(theme.accentColorForeground)
-        : luminance(theme.accentColor) > 0.5
-          ? FG_DARK
-          : FG_LIGHT;
-      if (fg) setProp('--primary-foreground', fg);
-    }
-
-    // …and the same accent in the package's own tokens, reusing its converters so the two can't
-    // drift. Channels, not `oklch(...)`: the theme wraps them for the alpha modifier.
-    const accent = oklchToString(hexToOklch(theme.accentColor));
-    if (accent) {
-      setProp('--jaw-color-primary', accent);
-      setProp('--jaw-color-ring', accent);
-      const jawFg = theme.accentColorForeground
-        ? oklchToString(hexToOklch(theme.accentColorForeground))
-        : luminance(theme.accentColor) > 0.5
-          ? JAW_FG_DARK
-          : JAW_FG_LIGHT;
-      setProp('--jaw-color-primary-foreground', jawFg);
+      setProp('--primary-foreground', fg);
+      if (accent) {
+        setProp('--jaw-color-primary', accent);
+        setProp('--jaw-color-ring', accent);
+        setProp('--jaw-color-primary-foreground', jawFg ?? (fgIsDark ? JAW_FG_DARK : JAW_FG_LIGHT));
+      }
     }
   }
 
@@ -265,14 +269,22 @@ export function applyDappTheme(theme: JawTheme, win: Window = window): void {
   // in keys' own HSL token. Runs after accent (explicit colors win) and before
   // cssVariables, matching resolveTheme's precedence in @jaw.id/ui.
   if (theme.colors) {
-    for (const [key, hex] of Object.entries(theme.colors)) {
-      if (typeof hex !== 'string') continue;
+    for (const [key, raw] of Object.entries(theme.colors)) {
+      if (typeof raw !== 'string') continue;
+      // Trim before converting: hexToHslTriplet tolerates padding but hexToOklch
+      // does not, and a throw here runs bare inside keys' postMessage handler —
+      // it would abort the theme apply and hang the connect handshake.
+      const hex = raw.trim();
       const triplet = hexToHslTriplet(hex);
       if (!triplet) continue; // invalid hex — keep the default
-      const jawVar = themeColorVar(key);
-      setProp(jawVar, oklchToString(hexToOklch(hex)));
-      const mirror = CSS_VAR_MIRROR[jawVar];
-      if (mirror) setProp(mirror, triplet);
+      try {
+        const jawVar = themeColorVar(key);
+        setProp(jawVar, oklchToString(hexToOklch(hex)));
+        const mirror = CSS_VAR_MIRROR[jawVar];
+        if (mirror) setProp(mirror, triplet);
+      } catch {
+        // conversion failed — keep the default rather than aborting the apply
+      }
     }
   }
 

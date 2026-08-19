@@ -35,7 +35,7 @@ export function AccountIdenticon({ seed, size = 40, className }: AccountIdentico
         height: size,
         borderRadius: Math.round(size * 0.29),
         background: 'oklch(var(--jaw-color-identicon-tile))',
-        boxShadow: 'inset 0 0 0 1px oklch(var(--jaw-color-border) / 0.35)',
+        boxShadow: 'inset 0 0 0 1px oklch(var(--jaw-color-identicon-ring) / 0.08)',
       }}
     >
       <img src={svgUri} alt="" style={{ width: '100%', height: '100%', display: 'block' }} />

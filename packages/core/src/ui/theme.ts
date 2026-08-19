@@ -56,6 +56,8 @@ export interface JawThemeColors {
     readonly halo?: string;
     /** Tile behind account identicons. */
     readonly identiconTile?: string;
+    /** Hairline ring around the identicon tile (rendered at 8% alpha). */
+    readonly identiconRing?: string;
     /** Elevation shadow color. */
     readonly shadow?: string;
 }

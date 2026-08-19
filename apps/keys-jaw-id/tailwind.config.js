@@ -85,6 +85,7 @@ module.exports = {
       // shadow token so a dApp skin can tint elevation (mirrors @jaw.id/ui's --jaw-color-shadow).
       boxShadow: {
         sm: '0 1px 2px 0 hsl(var(--shadow-color) / 0.05)',
+        md: '0 4px 6px -1px hsl(var(--shadow-color) / 0.1), 0 2px 4px -2px hsl(var(--shadow-color) / 0.1)',
         lg: '0 10px 15px -3px hsl(var(--shadow-color) / 0.1), 0 4px 6px -4px hsl(var(--shadow-color) / 0.1)',
         xl: '0 20px 25px -5px hsl(var(--shadow-color) / 0.1), 0 8px 10px -6px hsl(var(--shadow-color) / 0.1)',
       },

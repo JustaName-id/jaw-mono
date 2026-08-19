@@ -39,4 +39,18 @@ describe('resolveTheme semantic colors', () => {
     const { variables } = resolveTheme({ colors: { primary: 'not-a-color' } }, 'light');
     expect(variables['--jaw-color-primary']).toBe(base);
   });
+
+  it('applies whitespace-padded hex like keys does (two-hosts parity regression)', () => {
+    const { variables } = resolveTheme({ colors: { primary: ' #34E3A0 ' } }, 'light');
+    expect(variables['--jaw-color-primary']).toBe(oklchToString(hexToOklch('#34E3A0')));
+  });
+
+  it('rejects 3/6-char non-hex values instead of emitting NaN channels (regression)', () => {
+    const base = resolveTheme({}, 'light').variables['--jaw-color-primary'];
+    for (const bad of ['red', 'purple', '#00gg00', '#xyz']) {
+      const { variables } = resolveTheme({ colors: { primary: bad } }, 'light');
+      expect(variables['--jaw-color-primary'], bad).toBe(base);
+      expect(variables['--jaw-color-primary']).not.toMatch(/NaN/);
+    }
+  });
 });

@@ -37,6 +37,7 @@
     --jaw-color-scrim: 0 0 0;
     --jaw-color-halo: 0.9608 0.0058 264.532;
     --jaw-color-identicon-tile: 0.9666 0.0026 106.449;
+    --jaw-color-identicon-ring: 0.2077 0.0398 265.755;
     --jaw-color-shadow: 0 0 0;
     --jaw-radius: 0.625rem;
     --jaw-font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
@@ -80,7 +81,7 @@
     --jaw-color-success: 0.7064 0.1825 150.038;
     --jaw-color-success-foreground: 0.985 0 0;
     --jaw-color-warning: 0.769 0.188 70.08;
-    --jaw-color-warning-foreground: 0.92 0.15 80;
+    --jaw-color-warning-foreground: 0.205 0 0;
     --jaw-color-info: 0.623 0.214 259.815;
     --jaw-color-info-foreground: 0.985 0 0;
     /* New tokens pinned to the exact literals they replaced (same in both modes). */
@@ -89,6 +90,7 @@
     --jaw-color-scrim: 0 0 0;
     --jaw-color-halo: 0.9608 0.0058 264.532;
     --jaw-color-identicon-tile: 0.9666 0.0026 106.449;
+    --jaw-color-identicon-ring: 0.2077 0.0398 265.755;
     --jaw-color-shadow: 0 0 0;
 
     /* Chart colors (dark) */
