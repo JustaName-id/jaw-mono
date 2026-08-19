@@ -132,13 +132,11 @@ export default class SessionSetup extends BaseCommand {
           const revokeAnswer = await ask('Revoke old permission on-chain first? (Y/n) ');
           if (revokeAnswer.toLowerCase() !== 'n') {
             this.log('Opening browser to revoke old permission...');
-            const pm = config.paymasters?.[existing.chainId];
             const revokeBridge = await getBridge({
               keysUrl: config.keysUrl,
               apiKey,
               chainId: existing.chainId,
               ens: config.ens,
-              paymasterUrl: pm?.url,
             });
             try {
               await revokeBridge.request('wallet_revokePermissions', [{ id: existing.permissionId }]);
@@ -237,7 +235,6 @@ export default class SessionSetup extends BaseCommand {
         apiKey,
         chainId,
         ens: config.ens,
-        paymasterUrl: pm?.url,
       });
 
       let grantResponse: { permissionId: string; account: string };

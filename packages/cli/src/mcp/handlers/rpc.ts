@@ -87,7 +87,6 @@ export function registerRpcTool(server: McpServer): void {
             apiKey,
             chainId,
             ens: config.ens,
-            paymasterUrl: config.paymasters?.[chainId]?.url,
           });
         }
 

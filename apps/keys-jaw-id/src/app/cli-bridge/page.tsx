@@ -206,6 +206,9 @@ function CLIBridgeContent() {
                   const chainId = (inner.chainId as number) ?? 1;
                   const ens = inner.ens as string | undefined;
                   const paymasterUrl = inner.paymasterUrl as string | undefined;
+                  // Only meaningful alongside the url it was written for; the CLI
+                  // sends the two together or not at all.
+                  const paymasterContext = inner.paymasterContext as Record<string, unknown> | undefined;
 
                   if (!apiKey) {
                     setState('error');
@@ -224,7 +227,16 @@ function CLIBridgeContent() {
                       },
                       apiKey,
                       ...(ens ? { ens } : {}),
-                      ...(paymasterUrl ? { paymasters: { [chainId]: { url: paymasterUrl } } } : {}),
+                      ...(paymasterUrl
+                        ? {
+                            paymasters: {
+                              [chainId]: {
+                                url: paymasterUrl,
+                                ...(paymasterContext ? { context: paymasterContext } : {}),
+                              },
+                            },
+                          }
+                        : {}),
                     });
                   }
 

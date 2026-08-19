@@ -25,7 +25,6 @@ export interface BridgeOptions {
   apiKey: string;
   chainId?: number;
   ens?: string;
-  paymasterUrl?: string;
   timeout?: number;
 }
 
@@ -91,6 +90,10 @@ async function connectBridge(
   openBrowser: boolean
 ): Promise<WSBridge> {
   const config = loadConfig();
+  // Read as one entry, so the url and the context cannot come from different
+  // paymasters. Every caller used to look this up and forward the url alone,
+  // which is how a configured `context` was lost before it reached the browser.
+  const paymaster = config.paymasters?.[chainId];
   const bridge = new WSBridge({
     relayUrl,
     session: relaySession.session,
@@ -99,7 +102,8 @@ async function connectBridge(
       apiKey: options.apiKey,
       chainId,
       ens: options.ens ?? config.ens,
-      paymasterUrl: options.paymasterUrl ?? config.paymasters?.[chainId]?.url,
+      paymasterUrl: paymaster?.url,
+      paymasterContext: paymaster?.context,
     },
     privateKeyHex: relaySession.privateKey,
     publicKeyHex: relaySession.publicKey,
