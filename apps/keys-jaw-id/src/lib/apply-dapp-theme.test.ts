@@ -1,7 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { BORDER_RADIUS_MAP } from '@jaw.id/ui';
 
-import { hexToHslTriplet, luminance, applyDappTheme, THEME_MODE_ATTR, isModePinned } from './apply-dapp-theme';
+import {
+  hexToHslTriplet,
+  oklchChannelsToHslTriplet,
+  luminance,
+  applyDappTheme,
+  THEME_MODE_ATTR,
+  isModePinned,
+} from './apply-dapp-theme';
 
 describe('isModePinned', () => {
   it('treats explicit light/dark as pinned (OS listener yields)', () => {
@@ -67,6 +74,7 @@ describe('applyDappTheme', () => {
       style: {
         colorScheme: '',
         setProperty: (k: string, v: string) => (style[k] = v),
+        removeProperty: (k: string) => delete style[k],
       },
       classList: {
         add: (c: string) => classes.add(c),
@@ -175,6 +183,217 @@ describe('applyDappTheme', () => {
     for (const value of Object.values(style)) {
       expect(value).not.toMatch(/oklch|hsl|rgb|#/);
     }
+  });
+});
+
+describe('oklchChannelsToHslTriplet', () => {
+  function parseTriplet(t: string): [number, number, number] {
+    const [h, s, l] = t.split(' ');
+    return [Number(h), parseFloat(s), parseFloat(l)];
+  }
+
+  it('roundtrips a color through the ui package channel format (#34E3A0 mint)', () => {
+    // channels produced by hex -> OKLCH for #34E3A0
+    const viaOklch = oklchChannelsToHslTriplet('0.8147 0.1674 161.722')!;
+    const direct = hexToHslTriplet('#34E3A0')!;
+    const a = parseTriplet(viaOklch);
+    const b = parseTriplet(direct);
+    for (let i = 0; i < 3; i++) expect(Math.abs(a[i] - b[i])).toBeLessThanOrEqual(2);
+  });
+
+  it('rejects wrapped colors and garbage', () => {
+    expect(oklchChannelsToHslTriplet('oklch(0.8 0.16 161)')).toBeNull();
+    expect(oklchChannelsToHslTriplet('#34E3A0')).toBeNull();
+    expect(oklchChannelsToHslTriplet('red')).toBeNull();
+    expect(oklchChannelsToHslTriplet('0.8 0.16')).toBeNull();
+  });
+});
+
+describe('applyDappTheme cssVariables (Layer 2)', () => {
+  function fakeWindow() {
+    const style: Record<string, string> = {};
+    const root = {
+      style: {
+        colorScheme: '',
+        setProperty: (k: string, v: string) => (style[k] = v),
+        removeProperty: (k: string) => delete style[k],
+      },
+      classList: { add: vi.fn(), remove: vi.fn(), contains: () => false },
+      setAttribute: vi.fn(),
+      getAttribute: () => null,
+    };
+    return {
+      win: {
+        document: { documentElement: root },
+        matchMedia: vi.fn(() => ({ matches: false })),
+      } as unknown as Window,
+      style,
+    };
+  }
+
+  it('applies an allowlisted color verbatim and mirrors it into the keys HSL token', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme({ cssVariables: { '--jaw-color-background': '0.2784 0.0407 176.891' } }, win);
+    expect(style['--jaw-color-background']).toBe('0.2784 0.0407 176.891');
+    expect(style['--background']).toMatch(/^\d+ \d+% \d+%$/);
+  });
+
+  it('drops entries with wrapped/invalid color values entirely', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme({ cssVariables: { '--jaw-color-background': 'oklch(0.28 0.04 177)' } }, win);
+    expect(style['--jaw-color-background']).toBeUndefined();
+    expect(style['--background']).toBeUndefined();
+  });
+
+  it('applies and mirrors the semantic tokens — theming is fully open', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme(
+      {
+        cssVariables: {
+          '--jaw-color-destructive': '0.6368 0.2078 25.331',
+          '--jaw-color-warning': '0.666 0.17 62',
+          '--jaw-color-scrim': '0 0 0',
+        },
+      },
+      win
+    );
+    expect(style['--jaw-color-destructive']).toBe('0.6368 0.2078 25.331');
+    expect(style['--destructive']).toMatch(/%/);
+    expect(style['--jaw-color-warning']).toBe('0.666 0.17 62');
+    expect(style['--warning']).toMatch(/%/);
+    expect(style['--scrim']).toMatch(/%/);
+  });
+
+  it('passes unmirrored --jaw-* tokens through verbatim', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme(
+      {
+        cssVariables: {
+          '--jaw-color-destructive-hover': '0.5 0.235 27.325',
+          '--jaw-color-halo': '0.96 0.004 250',
+          '--jaw-future-token': '1rem',
+        },
+      },
+      win
+    );
+    expect(style['--jaw-color-destructive-hover']).toBe('0.5 0.235 27.325');
+    expect(style['--jaw-color-halo']).toBe('0.96 0.004 250');
+    expect(style['--jaw-future-token']).toBe('1rem');
+  });
+
+  it('rejects non --jaw-* names and structurally unsafe values', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme(
+      {
+        cssVariables: {
+          '--evil': 'url(https://x)',
+          'background-image': 'url(https://x)',
+          '--primary': '0 0% 0%',
+          '--jaw-injection': 'red; } body { display: none',
+        },
+      },
+      win
+    );
+    expect(style['--evil']).toBeUndefined();
+    expect(style['background-image']).toBeUndefined();
+    expect(style['--primary']).toBeUndefined();
+    expect(style['--jaw-injection']).toBeUndefined();
+  });
+
+  it('mirrors --jaw-radius and --jaw-font-family with validation', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme({ cssVariables: { '--jaw-radius': '1rem', '--jaw-font-family': '"Nunito", sans-serif' } }, win);
+    expect(style['--radius']).toBe('1rem');
+    expect(style['--jaw-radius']).toBe('1rem');
+    expect(style['--app-font-family']).toBe('"Nunito", sans-serif');
+
+    const bad = fakeWindow();
+    applyDappTheme({ cssVariables: { '--jaw-radius': 'calc(1rem + 100vw)' } }, bad.win);
+    expect(bad.style['--radius']).toBeUndefined();
+  });
+
+  it('clears stale overrides when re-applied without cssVariables (declarative re-theme)', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme(
+      {
+        cssVariables: {
+          '--jaw-color-background': '0.2784 0.0407 176.891',
+          '--jaw-color-halo': '0.96 0.004 250', // pass-through var must revert too
+        },
+      },
+      win
+    );
+    expect(style['--background']).toBeDefined();
+    expect(style['--jaw-color-halo']).toBeDefined();
+    applyDappTheme({ mode: 'auto' }, win);
+    expect(style['--jaw-color-background']).toBeUndefined();
+    expect(style['--background']).toBeUndefined();
+    expect(style['--jaw-color-halo']).toBeUndefined();
+  });
+
+  it('semantic colors: hex lands in both token systems, camelCase keys map to kebab vars', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme({ colors: { background: '#0E2F28', cardForeground: '#ECFDF5', warning: '#F5C24B' } }, win);
+    expect(style['--jaw-color-background']).toMatch(/^[\d.]+ [\d.]+ [\d.]+$/); // channels
+    expect(style['--background']).toMatch(/%/); // keys HSL twin
+    expect(style['--jaw-color-card-foreground']).toBeDefined();
+    expect(style['--card-foreground']).toBeDefined();
+    expect(style['--warning']).toMatch(/%/);
+  });
+
+  it('semantic colors: whitespace-padded hex applies instead of throwing (regression: handshake hang)', () => {
+    const { win, style } = fakeWindow();
+    expect(() => applyDappTheme({ colors: { primary: ' #ff0000 ' } }, win)).not.toThrow();
+    expect(style['--jaw-color-primary']).toMatch(/^[\d.]+ [\d.]+ [\d.]+$/);
+    expect(style['--primary']).toMatch(/%/);
+  });
+
+  it('invalid accentColorForeground falls back to the auto foreground — never a half-applied accent (regression)', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme({ accentColor: '#fde047', accentColorForeground: 'nope!' }, win);
+    // Accent applied in both token systems…
+    expect(style['--primary']).toBe(hexToHslTriplet('#fde047'));
+    expect(style['--jaw-color-primary']).toMatch(/^[\d.]+ [\d.]+ [\d.]+$/);
+    // …and the foreground fell back to the luminance auto-detect (dark on a light accent),
+    // instead of staying at the stylesheet default next to a repainted button.
+    expect(style['--primary-foreground']).toBe('222.2 47.4% 11.2%');
+    expect(style['--jaw-color-primary-foreground']).toBe('0.2077 0.0398 265.755');
+  });
+
+  it('invalid accentColor neither throws nor writes NaN channels (regression)', () => {
+    for (const bad of ['red', '#ff000', '#zzzzzz', 'hotpink']) {
+      const { win, style } = fakeWindow();
+      expect(() => applyDappTheme({ accentColor: bad }, win), bad).not.toThrow();
+      expect(style['--jaw-color-primary'] ?? '').not.toMatch(/NaN/);
+    }
+  });
+
+  it('semantic colors: invalid hex is skipped, cssVariables still outrank colors', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme(
+      {
+        colors: { background: 'nope', primary: '#34E3A0' },
+        cssVariables: { '--jaw-color-primary': '0.5 0.1 200' },
+      },
+      win
+    );
+    expect(style['--jaw-color-background']).toBeUndefined();
+    expect(style['--jaw-color-primary']).toBe('0.5 0.1 200');
+  });
+
+  it('semantic colors clear declaratively like everything else', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme({ colors: { background: '#0E2F28' } }, win);
+    expect(style['--background']).toBeDefined();
+    applyDappTheme({ mode: 'auto' }, win);
+    expect(style['--background']).toBeUndefined();
+    expect(style['--jaw-color-background']).toBeUndefined();
+  });
+
+  it('outranks accentColor for the tokens it sets (matches resolveTheme precedence)', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme({ accentColor: '#6366f1', cssVariables: { '--jaw-color-primary': '0.8147 0.1674 161.722' } }, win);
+    expect(style['--jaw-color-primary']).toBe('0.8147 0.1674 161.722');
   });
 });
 

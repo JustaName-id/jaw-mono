@@ -21,7 +21,7 @@ import { TriangleAlert } from 'lucide-react';
 
 /**
  * One label/value row. Pass `copyValue` for a copy button; pass `warning` to flag the row
- * with a hover-only danger icon (and tint the value) — `warningTone` picks red vs amber.
+ * with a hover-only danger icon (and tint the value) — `warningTone` picks destructive vs warning.
  */
 function Field({
   label,
@@ -36,8 +36,8 @@ function Field({
   warning?: string;
   warningTone?: 'danger' | 'warning';
 }) {
-  const warnText = warningTone === 'warning' ? 'text-amber-600 dark:text-amber-500' : 'text-destructive';
-  const warnIcon = warningTone === 'warning' ? 'text-amber-500' : 'text-destructive';
+  const warnText = warningTone === 'warning' ? 'text-warning' : 'text-destructive';
+  const warnIcon = warningTone === 'warning' ? 'text-warning' : 'text-destructive';
   return (
     <div className="border-border/40 flex items-center justify-between gap-3 border-t px-3 py-2 first:border-t-0">
       <span className="text-muted-foreground text-label flex-none font-mono uppercase">{label}</span>
@@ -113,7 +113,7 @@ export const SiweDialog = ({
     !!accountAddress && !!declaredAddress && accountAddress.toLowerCase() !== declaredAddress.toLowerCase();
 
   // EIP-4361 requires the nonce to be at least 8 alphanumeric chars; a shorter one
-  // means the site's replay protection is weak. Advisory (amber), not a hard gate.
+  // means the site's replay protection is weak. Advisory (warning), not a hard gate.
   const weakNonce = !!parsed?.nonce && parsed.nonce.length < 8;
 
   // Only an already-expired sign-in is worth flagging (its signature can't be used). A

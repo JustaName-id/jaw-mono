@@ -77,7 +77,7 @@ describe('ReactUIHandler — dialog presentation follows the viewport', () => {
     // through around the card — this sheet renders directly ON the dApp.
     stubViewport(390);
     const { overlay } = open(UNSUPPORTED);
-    expect(overlay.className).toContain('bg-black/50');
+    expect(overlay.className).toContain('bg-scrim/50');
     expect(overlay.className).not.toContain('bg-transparent');
   });
 

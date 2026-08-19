@@ -29,7 +29,7 @@ type TreeNode = {
   kind: 'leaf' | 'group';
   badge?: string; // solidity type (leaves)
   value?: string; // formatted, truncated value (leaves)
-  tone?: DateTone; // warning state (leaves): expired → red, far/Unlimited/No-expiry → amber
+  tone?: DateTone; // warning state (leaves): expired → destructive, far/Unlimited/No-expiry → warning
   copyValue?: string; // full untruncated value to copy (address/bytes leaves)
   note?: string; // hover-tooltip text explaining the tone (leaves)
   children?: TreeNode[];
@@ -100,7 +100,7 @@ export function formatValue(type: string, value: unknown, fieldName = ''): Forma
 
     const mx = maxUintFor(type);
     if (mx !== null && big === mx) {
-      // "No expiry" / "Unlimited" are self-explanatory — amber icon only, no redundant note.
+      // "No expiry" / "Unlimited" are self-explanatory — warning icon only, no redundant note.
       if (isTimestamp) return { text: 'No expiry', tone: 'far' };
       if (isAmount) return { text: 'Unlimited', tone: 'far' };
     }
@@ -218,8 +218,7 @@ function LeafValue({
   tone?: DateTone;
   note?: string;
 }) {
-  const toneClass =
-    tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-amber-600 dark:text-amber-500' : 'text-foreground';
+  const toneClass = tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-warning' : 'text-foreground';
   const showIcon = tone === 'expired' || tone === 'far';
   return (
     <span className="ml-auto flex min-w-0 items-center justify-end gap-1">

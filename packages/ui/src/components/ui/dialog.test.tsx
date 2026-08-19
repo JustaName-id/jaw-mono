@@ -56,12 +56,12 @@ describe('dialog overlay scrim', () => {
   });
 
   it('dims the page by default', () => {
-    expect(mount('center').overlay.className).toContain('bg-black/50');
+    expect(mount('center').overlay.className).toContain('bg-scrim/50');
   });
 
   it('keeps dimming the page for a bottom sheet — the sheet does not imply a see-through backdrop', () => {
     const { overlay, content } = mount('bottom-sheet');
-    expect(overlay.className).toContain('bg-black/50');
+    expect(overlay.className).toContain('bg-scrim/50');
     expect(overlay.className).not.toContain('bg-transparent');
     // ...and it really is the sheet presentation, not an accidental center.
     expect(content.className).toContain('bottom-0');
@@ -83,7 +83,7 @@ describe('dialog overlay scrim', () => {
   it('goes see-through only where the host opts out (the iframe shell)', () => {
     const { overlay } = mount('bottom-sheet', false);
     expect(overlay.className).toContain('bg-transparent');
-    expect(overlay.className).not.toContain('bg-black/50');
+    expect(overlay.className).not.toContain('bg-scrim/50');
     // The opt-out is about the backdrop, not the position — still a sheet.
     expect(mount('top', false).overlay.className).toContain('bg-transparent');
   });

@@ -17,13 +17,13 @@ interface ClearSignedViewProps {
 
 function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }) {
   // Max-uint approvals read as "Unlimited" (matching the raw tree) rather than a
-  // 78-digit number, and carry a warning tone (amber + triangle) — an unbounded
+  // 78-digit number, and carry a warning tone (warning + triangle) — an unbounded
   // allowance is exactly what a user must notice. Full amounts wrap, never truncate.
   const unlimited = isUnlimitedAmount(row.rawValue);
   return (
     <div className="flex min-w-0 flex-row items-center justify-end gap-1.5">
       {unlimited ? (
-        <TriangleAlert className="size-3.5 flex-none text-amber-500" strokeWidth={2} />
+        <TriangleAlert className="text-warning size-3.5 flex-none" strokeWidth={2} />
       ) : (
         <TokenIcon
           chainId={chainId}
@@ -32,9 +32,7 @@ function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }
           className="size-4 flex-none"
         />
       )}
-      <p
-        className={`text-body-sm break-all font-mono ${unlimited ? 'text-amber-600 dark:text-amber-500' : 'text-foreground'}`}
-      >
+      <p className={`text-body-sm break-all font-mono ${unlimited ? 'text-warning' : 'text-foreground'}`}>
         <span className="font-semibold">{unlimited ? 'Unlimited' : groupNumber(row.value)}</span>
         {row.symbol && <span className={unlimited ? '' : 'text-muted-foreground'}> {row.symbol}</span>}
       </p>
@@ -45,8 +43,7 @@ function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }
 /** Deadline/expiry value: "1 Jan 2030", tinted + a hover ⚠ when expired (past) or far-future. */
 function DateValue({ raw }: { raw: string }) {
   const tone = dateTone(raw);
-  const toneClass =
-    tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-amber-600 dark:text-amber-500' : 'text-foreground';
+  const toneClass = tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-warning' : 'text-foreground';
   const note =
     tone === 'expired' ? 'This date is in the past.' : tone === 'far' ? 'More than a year in the future.' : undefined;
   return (

@@ -43,7 +43,7 @@ describe('EmbeddedShell', () => {
     );
     expect(html).toContain('app content');
     // No modal chrome in standalone
-    expect(html).not.toContain('bg-black/40');
+    expect(html).not.toContain('bg-scrim/40');
   });
 
   it('hydration safety: the first (pre-mount) render in an embedded context shows no modal chrome', () => {
@@ -55,7 +55,7 @@ describe('EmbeddedShell', () => {
       <EmbeddedShell communicator={mockCommunicator('embedded')}>{child}</EmbeddedShell>
     );
     expect(html).toContain('app content');
-    expect(html).not.toContain('bg-black/40');
+    expect(html).not.toContain('bg-scrim/40');
     expect(html).not.toContain('fixed inset-0 z-50');
   });
 
@@ -200,7 +200,7 @@ describe('EmbeddedShell — dialog anchor and drawer sheet presentation', () => 
       stubViewport(400);
       mount(<DefaultDialog open>sheet</DefaultDialog>);
       expect(overlay().className).toContain('bg-transparent');
-      expect(overlay().className).not.toContain('bg-black/50');
+      expect(overlay().className).not.toContain('bg-scrim/50');
     });
 
     it('floating: same — the dApp shows through around the card', () => {
@@ -212,7 +212,7 @@ describe('EmbeddedShell — dialog anchor and drawer sheet presentation', () => 
     it('popup/standalone: the shell is inactive, so the dialog dims the page as usual', () => {
       stubViewport(400);
       mount(<DefaultDialog open>card</DefaultDialog>, mockCommunicator('standalone'));
-      expect(overlay().className).toContain('bg-black/50');
+      expect(overlay().className).toContain('bg-scrim/50');
     });
   });
 

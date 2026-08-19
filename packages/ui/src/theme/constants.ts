@@ -35,6 +35,14 @@ export const DEFAULT_LIGHT_PALETTE: Readonly<Record<string, string>> = Object.fr
   '--jaw-color-warning-foreground': '0.205 0 0',
   '--jaw-color-info': '0.623 0.214 259.815',
   '--jaw-color-info-foreground': '0.985 0 0',
+  // New tokens pinned to the exact literals they replaced, so the stock look is unchanged.
+  '--jaw-color-positive': '0.8003 0.1821 151.711',
+  '--jaw-color-negative': '0.7106 0.1661 22.216',
+  '--jaw-color-scrim': '0 0 0',
+  '--jaw-color-halo': '0.9608 0.0058 264.532',
+  '--jaw-color-identicon-tile': '0.9666 0.0026 106.449',
+  '--jaw-color-identicon-ring': '0.2077 0.0398 265.755',
+  '--jaw-color-shadow': '0 0 0',
 });
 
 // ---------------------------------------------------------------------------
@@ -65,9 +73,21 @@ export const DEFAULT_DARK_PALETTE: Readonly<Record<string, string>> = Object.fre
   '--jaw-color-success': '0.7064 0.1825 150.038',
   '--jaw-color-success-foreground': '0.985 0 0',
   '--jaw-color-warning': '0.769 0.188 70.08',
-  '--jaw-color-warning-foreground': '0.920 0.150 80',
+  // Near-black like light mode: this sits ON the amber warning fill (WarnBadge
+  // glyph). The old dark value (0.92 0.15 80, light gold) was a never-consumed
+  // token; wiring text-warning-foreground up made it a 1.56:1 contrast bug.
+  '--jaw-color-warning-foreground': '0.205 0 0',
   '--jaw-color-info': '0.623 0.214 259.815',
   '--jaw-color-info-foreground': '0.985 0 0',
+  // New tokens pinned to the exact literals they replaced (same in both modes,
+  // matching the previous hardcoded classes), so the stock look is unchanged.
+  '--jaw-color-positive': '0.8003 0.1821 151.711',
+  '--jaw-color-negative': '0.7106 0.1661 22.216',
+  '--jaw-color-scrim': '0 0 0',
+  '--jaw-color-halo': '0.9608 0.0058 264.532',
+  '--jaw-color-identicon-tile': '0.9666 0.0026 106.449',
+  '--jaw-color-identicon-ring': '0.2077 0.0398 265.755',
+  '--jaw-color-shadow': '0 0 0',
 });
 
 // ---------------------------------------------------------------------------

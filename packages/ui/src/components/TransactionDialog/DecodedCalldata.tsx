@@ -275,7 +275,7 @@ export const DecodedCalldataView = ({
               <div className="flex flex-row items-center gap-1">
                 {resolvedAvatar && <IdentityAvatar src={resolvedAvatar} fallback={null} />}
                 {unlimitedApproval ? (
-                  <p className="flex items-center gap-1.5 font-mono text-xs font-semibold leading-normal text-amber-600 dark:text-amber-500">
+                  <p className="text-warning flex items-center gap-1.5 font-mono text-xs font-semibold leading-normal">
                     <TriangleAlert className="size-3.5 flex-none" strokeWidth={2} />
                     Unlimited
                   </p>
