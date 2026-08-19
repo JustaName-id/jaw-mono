@@ -1,3 +1,13 @@
+## 1.2.1 (2026-08-19)
+
+### 🩹 Fixes
+
+- theme configuration across screens ([#286](https://github.com/JustaName-id/jaw-mono/pull/286))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 1.2.0 (2026-08-17)
 
 ### 🚀 Features
