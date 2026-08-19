@@ -23,7 +23,7 @@ const WRAPPED_SIGNATURE = [
     {
         type: 'tuple',
         components: [
-            { name: 'ownerIndex', type: 'uint8' },
+            { name: 'ownerIndex', type: 'uint256' },
             { name: 'signatureData', type: 'bytes' },
         ],
     },
@@ -595,7 +595,7 @@ describe('toJustanAccount unit tests', () => {
                 // Decoded, not "was called": the wrapping is what the contract
                 // reads, and toJustanAccount.encoding.test.ts pins its shape.
                 const [wrapped] = viem.decodeAbiParameters(WRAPPED_SIGNATURE, signature);
-                expect(wrapped.ownerIndex).toBe(0);
+                expect(wrapped.ownerIndex).toBe(0n);
                 expect(wrapped.signatureData).toBe(MOCK_SIGNATURE);
             });
 
@@ -682,7 +682,7 @@ describe('toJustanAccount unit tests', () => {
                 // out above, wrapped by viem's own helper.
                 const { wrapTypedDataSignature } = await import('viem/experimental/erc7739');
                 const inner = viem.encodeAbiParameters(WRAPPED_SIGNATURE, [
-                    { ownerIndex: 0, signatureData: MOCK_SIGNATURE },
+                    { ownerIndex: 0n, signatureData: MOCK_SIGNATURE },
                 ]);
                 expect(signature).toBe(wrapTypedDataSignature({ ...MOCK_TYPED_DATA, signature: inner }));
             });
@@ -781,7 +781,7 @@ describe('toJustanAccount unit tests', () => {
                 } as any);
 
                 const [wrapped] = viem.decodeAbiParameters(WRAPPED_SIGNATURE, signature);
-                expect(wrapped.ownerIndex).toBe(0);
+                expect(wrapped.ownerIndex).toBe(0n);
                 expect(wrapped.signatureData).toBe(MOCK_SIGNATURE);
             });
 

@@ -52,6 +52,12 @@ cd contracts/justanaccount && git submodule update --init lib/solady
 cast abi-encode "f((uint256,bytes))" "(0,0x$(printf 'aa%.0s' {1..32})$(printf 'bb%.0s' {1..32})1b)"
 ```
 
+Fourth entry, the index past a byte:
+
+```bash
+cast abi-encode "f((uint256,bytes))" "(300,0x1234)"
+```
+
 The bytes handed to `cast` are what `wrapSignature` produces on the way in, not
 its `input.signature`. For a 65-byte signature it repacks as
 `abi.encodePacked(r, s, v)` with `v` normalised to 27 or 28 first, so the second
@@ -87,21 +93,18 @@ value that follows the key fails verification on chain and nothing off chain
 notices. That is where `challengeIndex ?? 23` and `typeIndex ?? 1` in
 `toJustanAccount.ts` come from.
 
-**We declare `ownerIndex` narrower than the contract does.** The struct says
-`uint256`, `wrapSignature` encodes `uint8`. The bytes are identical for any
-value that fits in a byte, verified with `cast`, so nothing is wrong today. Past
-255 viem refuses to encode while the contract would accept it.
+**`ownerIndex` is `uint256`, and used to be `uint8` here.** Reading the struct
+is what surfaced it. The bytes are identical for any value that fits in a byte,
+so the first three vectors do not move, but the narrower declaration made viem
+refuse to encode past 255 for an index the contract accepts.
 
 That ceiling is easier to reach than it looks. `MultiOwnable` hands out indices
 from a counter that only goes up (`s_nextOwnerIndex++`), and removing an owner
 deletes its slot without reusing the index or compacting the rest. So the limit
 is on how many owners the account has ever had, not on how many it has now: an
 account that has rotated owners 300 times has whatever owners it has today, and
-if one of them sits at index 260 that owner cannot sign through this SDK at all.
-
-Reported rather than changed, since this directory is about pinning the
-encoding. Widening `wrapSignature` to `uint256` would produce identical bytes
-for every value that fits today.
+if one of them sits at index 260 that owner could not sign through this SDK at
+all. The fourth vector pins index 300, which the old declaration threw on.
 
 ## Changing a vector
 
