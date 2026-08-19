@@ -9,3 +9,4 @@ export * from './siwe';
 export * from './sanitize';
 export * from './safeUrl';
 export * from './assetPreview';
+export * from './resolvePaymaster';
