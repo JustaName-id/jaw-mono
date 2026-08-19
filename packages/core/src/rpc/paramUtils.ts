@@ -52,6 +52,25 @@ export function requireHexAddress(value: unknown, method: string, field: string)
     return value as `0x${string}`;
 }
 
+/**
+ * Requires a 32-byte hex value — the shape of a permission id, which is the
+ * `bytes32` hash emitted by `PermissionApproved`.
+ *
+ * A missing id is refused here rather than treated as "no permission named":
+ * `wallet_revokePermissions` is *about* a permission, so an absent id is a
+ * malformed request, not an absence. Skipping the check on a falsy id is what
+ * previously let an empty id open a signing window with nothing to sign.
+ */
+export function requireHexBytes32(value: unknown, method: string, field: string): `0x${string}` {
+    if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
+        // The value is deliberately not echoed: JSON.stringify throws on a BigInt (and on a
+        // circular object), and `request` is in-process, so a dapp passing `{ id: 1n }` would get
+        // that TypeError out of the validator instead of -32602. `requireHexAddress` does the same.
+        throw standardErrors.rpc.invalidParams(`${method}: ${field} must be a 32-byte hex value`);
+    }
+    return value as `0x${string}`;
+}
+
 export function optionalHexAddress(value: unknown, method: string, field: string): `0x${string}` | undefined {
     if (value === undefined || value === null) return undefined;
     return requireHexAddress(value, method, field);

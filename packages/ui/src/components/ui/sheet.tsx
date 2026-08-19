@@ -9,30 +9,29 @@ import { cn, PortalContainerContext } from '../../lib/utils';
 function Sheet({ open, ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   const prevOpenRef = React.useRef(open);
 
-  // Cleanup pointer-events when sheet closes OR unmounts
+  // Cleanup pointer-events when sheet closes: wait out the close animation
+  // (300ms duration-300) plus buffer. The timer is cancelled if the sheet
+  // reopens or unmounts first — the unmount effect below takes over then.
   React.useEffect(() => {
-    // Track when sheet transitions from open to closed
-    if (prevOpenRef.current === true && open === false) {
-      // Wait for close animation to complete (300ms duration-300) plus buffer
-      const cleanup = setTimeout(() => {
-        document.body.style.removeProperty('pointer-events');
-      }, 350);
-
-      prevOpenRef.current = open;
-      return () => clearTimeout(cleanup);
-    }
-
+    const closing = prevOpenRef.current === true && open === false;
     prevOpenRef.current = open;
+    if (!closing) return;
 
-    // Cleanup on unmount - remove pointer-events if sheet was open
-    return () => {
-      if (open === true) {
-        setTimeout(() => {
-          document.body.style.removeProperty('pointer-events');
-        }, 350);
-      }
-    };
+    const cleanup = setTimeout(() => {
+      document.body.style.removeProperty('pointer-events');
+    }, 350);
+    return () => clearTimeout(cleanup);
   }, [open]);
+
+  // Cleanup on unmount. Synchronous, not a timer: the node is gone instantly so
+  // there is no animation to wait for, and a timer here would outlive the
+  // component with no way to cancel it (it also covers a close immediately
+  // followed by an unmount, which cancels the close-path timer above).
+  React.useEffect(() => {
+    return () => {
+      document.body.style.removeProperty('pointer-events');
+    };
+  }, []);
 
   return <SheetPrimitive.Root data-slot="sheet" open={open} {...props} />;
 }
@@ -61,7 +60,7 @@ function SheetOverlay({ className, ...props }: React.ComponentProps<typeof Sheet
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
-        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50',
+        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 bg-scrim/50 fixed inset-0 z-50',
         className
       )}
       {...props}
@@ -97,7 +96,7 @@ function SheetContent({
         {...props}
       >
         {children}
-        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary focus:outline-hidden absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 disabled:pointer-events-none">
+        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:pointer-events-none">
           <XIcon className="size-4" />
           <span className="sr-only">Close</span>
         </SheetPrimitive.Close>

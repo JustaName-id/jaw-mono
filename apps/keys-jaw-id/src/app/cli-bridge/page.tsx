@@ -342,7 +342,7 @@ function CLIBridgeContent() {
 
         {state === 'connected' && (
           <>
-            <p className="text-base font-semibold text-emerald-600 dark:text-emerald-400">Connected</p>
+            <p className="text-success text-base font-semibold">Connected</p>
             <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
               This tab is your CLI&apos;s signing backend.
               <br />

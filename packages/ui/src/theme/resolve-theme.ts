@@ -5,10 +5,33 @@
  * into a single frozen record of CSS custom properties.
  */
 
-import { JawTheme } from '@jaw.id/core';
+import { JawTheme, JawThemeColors } from '@jaw.id/core';
 
 import { DEFAULT_DARK_PALETTE, DEFAULT_LIGHT_PALETTE, BORDER_RADIUS_MAP, FONT_STACK_MAP } from './constants.js';
 import { deriveAccentPalette, hexToOklch, oklchToString } from './palette.js';
+
+/**
+ * `theme.colors.cardForeground` → `--jaw-color-card-foreground`. Purely
+ * mechanical, so every present and future JawThemeColors key resolves without
+ * a hand-maintained table.
+ */
+export function themeColorVar(key: string): string {
+  return `--jaw-color-${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
+}
+
+/** Resolve the semantic `colors` palette (hex values) into `--jaw-color-*` channel entries. */
+function resolveColors(colors: JawThemeColors): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, hex] of Object.entries(colors)) {
+    if (typeof hex !== 'string') continue;
+    try {
+      out[themeColorVar(key)] = oklchToString(hexToOklch(hex));
+    } catch {
+      // Invalid hex — skip this key, keep the palette default (same policy as accentColor)
+    }
+  }
+  return out;
+}
 
 export interface ResolvedTheme {
   readonly variables: Readonly<Record<string, string>>;
@@ -22,9 +45,35 @@ export interface ResolvedTheme {
  * 1. Default palette (light or dark)
  * 2. Accent color overrides (derived from `accentColor`)
  * 3. Explicit `accentColorForeground` override
- * 4. Border radius & font stack presets
- * 5. Raw `cssVariables` (Layer 2 user overrides)
+ * 4. Semantic `colors` palette (hex → channels)
+ * 5. Border radius & font stack presets
+ * 6. Raw `cssVariables` (highest-priority user overrides)
  */
+/**
+ * Warn when a `--jaw-color-*` override looks like a complete colour.
+ *
+ * These variables hold bare `L C H` channels, because the Tailwind theme wraps them as
+ * `oklch(var(--x) / <alpha-value>)` — that wrapper is what makes opacity modifiers (`bg-primary/90`)
+ * generate CSS at all. A complete `oklch(...)` here nests to `oklch(oklch(...) / 1)`, which browsers
+ * drop, so the override is silently ignored.
+ *
+ * Channels are the only accepted form. The value is passed through unchanged rather than repaired:
+ * quietly rewriting one wrong format while a different one (`hsl()`, hex) still fails would make the
+ * behaviour inconsistent. This warning is the compensation for that — the failure is loud instead.
+ */
+function warnOnWrappedColors(vars: Readonly<Record<string, string>>): void {
+  for (const [name, value] of Object.entries(vars)) {
+    if (!name.startsWith('--jaw-color-')) continue;
+    if (/^(oklch|hsl|rgba?|color-mix)\(|^#/.test(value.trim())) {
+      console.warn(
+        `[jaw] ${name}: "${value}" looks like a complete color. Color tokens take bare OKLCH ` +
+          `channels ("0.15 0.02 280"), which the theme wraps for opacity support. This value will ` +
+          `produce invalid CSS and be ignored.`
+      );
+    }
+  }
+}
+
 export function resolveTheme(theme: JawTheme, systemMode: 'light' | 'dark'): ResolvedTheme {
   // 1. Determine effective color scheme
   const effectiveMode: 'light' | 'dark' = theme.mode === 'light' || theme.mode === 'dark' ? theme.mode : systemMode;
@@ -53,18 +102,24 @@ export function resolveTheme(theme: JawTheme, systemMode: 'light' | 'dark'): Res
     }
   }
 
-  // 5. Border radius preset
+  // 5. Semantic colors palette — explicit hex per token, outranks the accent derivation
+  if (theme.colors) {
+    Object.assign(result, resolveColors(theme.colors));
+  }
+
+  // 6. Border radius preset
   if (theme.borderRadius) {
     result['--jaw-radius'] = BORDER_RADIUS_MAP[theme.borderRadius];
   }
 
-  // 6. Font stack preset
+  // 7. Font stack preset
   if (theme.fontStack) {
     result['--jaw-font-family'] = FONT_STACK_MAP[theme.fontStack];
   }
 
-  // 7. Raw CSS variable overrides (highest priority)
+  // 8. Raw CSS variable overrides (highest priority)
   if (theme.cssVariables) {
+    warnOnWrappedColors(theme.cssVariables);
     Object.assign(result, theme.cssVariables);
   }
 

@@ -7,7 +7,7 @@ const MAX_BATCH = 50;
 const ENS_METADATA_AVATAR_BASE = 'https://metadata.ens.domains/mainnet/avatar/';
 
 /** The ENS metadata proxy URL for a name's avatar. */
-function ensMetadataAvatarUrl(name: string): string {
+export function ensMetadataAvatarUrl(name: string): string {
   return ENS_METADATA_AVATAR_BASE + encodeURIComponent(name);
 }
 

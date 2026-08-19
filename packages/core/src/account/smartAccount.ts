@@ -152,6 +152,12 @@ export const getBundlerClient = (
 ): BundlerClient<Transport, ViemChain> => {
     const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chain.id);
 
+    // Deliberately no `batch: { multicall: true }` here, unlike the store's client in
+    // store/chain-clients/utils.ts. Nothing issues an eth_call through this one: the
+    // account implementation and findOwnerIndex both read through the bundler client
+    // below, and all this client is asked for is estimateFeesPerGas/getGasPrice. Setting
+    // it would only put a Multicall3 hop and a setTimeout(0) defer on the userOp path
+    // for no round-trip saved.
     const publicClient = createPublicClient({
         chain: viemChain,
         transport: http(chain.rpcUrl),
@@ -201,6 +207,8 @@ async function prepareEip7702Calls(
     calls: Array<{ to: Address; value: bigint; data: Hex }>,
     chain: Chain
 ): Promise<PreparedCalls> {
+    // No multicall batching: the three reads below are strictly sequential (each one
+    // gates the next), so there is never more than one eth_call in flight to fold.
     const publicClient = createPublicClient({
         chain: SUPPORTED_CHAINS.find((c) => c.id === chain.id),
         transport: http(chain.rpcUrl),

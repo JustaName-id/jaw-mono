@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 
-import { DialogAnchorContext } from '@jaw.id/ui';
+import { DialogAnchorContext, DialogScrimContext, PortalContainerContext } from '@jaw.id/ui';
 
 import type { PopupCommunicator } from '../../lib/popup-communicator';
 import {
@@ -37,6 +37,12 @@ export interface EmbeddedShellProps {
 export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   const embedded = communicator.getContext() === 'embedded';
   const [presentation, setPresentation] = useState<EmbeddedPresentation>('floating');
+  // Whether the host currently shows the iframe. The SDK mirrors its
+  // host-side visibility flips as DialogVisibility messages; the drawer card
+  // sits offscreen (translate-y-full) while concealed and slides up on
+  // reveal. Defaults to true so older SDKs that never send the event still
+  // show the UI — statically, without the slide.
+  const [revealed, setRevealed] = useState(true);
   // Context detection needs `window` (opener/parent), so the server always
   // renders the plain children. Gate the shell to post-mount so the first
   // client render matches the SSR output (avoids a hydration mismatch);
@@ -59,6 +65,14 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
     return () => query.removeEventListener('change', onChange);
   }, [embedded]);
 
+  useEffect(() => {
+    if (!embedded) return;
+    return communicator.onMessage((message) => {
+      if (message.event !== 'DialogVisibility') return;
+      setRevealed(Boolean((message.data as { visible?: boolean } | undefined)?.visible));
+    });
+  }, [embedded, communicator]);
+
   // Passkey creation failed because this browser/extension cannot
   // create credentials inside a cross-origin iframe — continue in a popup.
   useEffect(() => {
@@ -75,15 +89,50 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   // children). Toggling `active` only changes classNames — children never
   // change tree position, so they are never remounted (they hold the keys
   // session/crypto state, which a remount would reset and break the connect).
+  // Styling scope for the SDK's CSS, and the container the Radix modals portal into.
+  //
+  // Both sit on the overlay wrapper, not the card. Putting them on the card looks tempting — our
+  // utilities are `[data-jaw-ui] .foo`, a descendant selector, so the carrier is excluded and the
+  // card's own overrides stop competing — but it also moves the portal target, and a modal portaled
+  // into the card sits inside `max-h-[85vh] overflow-y-auto` and inherits `translate-y-full` while
+  // the drawer is concealed. It renders clipped, or offscreen entirely.
+  //
+  // So the card stays a descendant of the scope, which means `[data-jaw-ui] .bg-background` ties
+  // with its `has-[[data-jaw-shell]]` overrides at (0,2,0) and would win on stylesheet order. Those
+  // overrides carry `!` to settle it by weight instead.
+  const [scopeRoot, setScopeRoot] = useState<HTMLDivElement | null>(null);
+
   const active = embedded && mounted;
 
-  // Anchored to the TOP of the viewport (like Porto's dialog) rather than
-  // centered/bottom, so it appears near where the user's attention is.
   const card =
     presentation === 'drawer'
-      ? // Mobile: full-width sheet at the top.
-        `fixed inset-x-0 top-0 max-h-[85vh] rounded-b-2xl`
-      : // Desktop: floating card near the top, centered horizontally.
+      ? // Mobile: full-width bottom sheet, sliding up when the SDK reveals the
+        // iframe (translate driven by `revealed`, see DialogVisibility above).
+        // Safe-area padding keeps content clear of the iOS home bar, and the
+        // height cap leaves a strip of dApp visible above (dvh so a collapsing
+        // mobile URL bar doesn't leave the sheet short). Both are LEGACY-screen
+        // chrome: a revamped screen's DialogShell renders as the sheet itself and
+        // owns its own inset and cap, so this wrapper drops them — keeping the
+        // inset from stacking into two home-bar gaps and the cap from making the
+        // wrapper a second scroll container around the card's own scroller.
+        // A revamped screen rendered INLINE (not portaled) also arrives wrapped in
+        // the popup's centering chrome — `min-h-screen items-center justify-center
+        // p-4` around a `w-full max-w-md`. Fine for a popup window, wrong for a
+        // sheet: the p-4 insets it 16px on the left, right and bottom so the edges
+        // stop touching the viewport, and max-w-md caps it at 448px near the
+        // breakpoint. Neutralized here, next to the existing min-h-0 reset, since
+        // the screens are created outside this provider and can't read the
+        // presentation themselves. The portaled dialogs are position:fixed and
+        // never see this wrapper — which is why only the inline screens need it.
+        // Written as `[&:has(...)_.x]:` rather than a stacked
+        // `has-[...]:[&_.x]:`, which compiles to `.wrapper .x:has([data-jaw-shell])`
+        // — the :has() lands on the descendant, not on this wrapper.
+        `fixed inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ease-out has-[[data-jaw-shell]]:max-h-none has-[[data-jaw-shell]]:pb-0 [&:has([data-jaw-shell])_.max-w-md]:max-w-none [&:has([data-jaw-shell])_.min-h-screen]:p-0 motion-reduce:transition-none ${
+          revealed ? 'translate-y-0' : 'translate-y-full'
+        }`
+      : // Desktop: floating card near the top (like Porto's dialog), centered
+        // horizontally, so it appears near where the user's attention is. No
+        // slide here — it matches the host's plain visibility flip.
         `fixed left-1/2 top-6 w-[450px] max-w-[calc(100vw-2rem)] max-h-[85vh] -translate-x-1/2 rounded-2xl`;
 
   // Click on the empty area (the overlay itself, not the card) dismisses the
@@ -98,31 +147,49 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   return (
     // The Radix-based modals (Connect, Transaction, …) portal to document.body,
     // escaping this card and Radix-centering at 50% by default. Anchor them via
-    // context so they line up with the card's inline screens; the same context
-    // makes their overlay transparent, matching this shell's scrim-free
-    // backdrop. 'top' matches the floating card; 'top-sheet' matches the
-    // drawer card (full-width, top-pinned, content-sized) and suppresses the
+    // context so they line up with the card's inline screens. 'top' matches the
+    // floating card; 'bottom-sheet' matches the drawer card (full-width,
+    // bottom-pinned, content-sized, sliding up on open) and suppresses the
     // dialogs' own mobile full-screen sizing, which is meant for
     // popup/standalone contexts.
-    <DialogAnchorContext.Provider value={active ? (presentation === 'floating' ? 'top' : 'top-sheet') : 'center'}>
-      <div
-        className={
-          // Transparent (no scrim): the dApp shows through around the card.
-          active ? 'fixed inset-0 z-50' : 'contents'
-        }
-        onClick={onOverlayClick}
-      >
-        {/* [&_.min-h-screen]:min-h-0 — existing screens center with min-h-screen,
-            which must not stretch the card to the full viewport */}
+    //
+    // The scrim opt-out is a SEPARATE context, because it belongs to this shell
+    // rather than to the anchor: app-specific mode renders the same
+    // bottom-sheet anchor directly on the dApp's page, where the scrim must
+    // stay. Here it goes, so the modals match this shell's own transparent
+    // backdrop and the dApp shows through around the card.
+    <DialogAnchorContext.Provider value={active ? (presentation === 'floating' ? 'top' : 'bottom-sheet') : 'center'}>
+      <DialogScrimContext.Provider value={!active}>
         <div
-          role={active ? 'document' : undefined}
-          className={active ? `bg-background overflow-y-auto shadow-xl [&_.min-h-screen]:min-h-0 ${card}` : 'contents'}
+          ref={setScopeRoot}
+          data-jaw-ui
+          className={
+            // Transparent (no scrim): the dApp shows through around the card.
+            active ? 'fixed inset-0 z-50' : 'contents'
+          }
+          onClick={onOverlayClick}
         >
-          <EnsureVisibility communicator={communicator} active={active}>
-            {children}
-          </EnsureVisibility>
+          <PortalContainerContext.Provider value={scopeRoot}>
+            {/* [&_.min-h-screen]:min-h-0 — existing screens center with min-h-screen,
+            which must not stretch the card to the full viewport */}
+            <div
+              role={active ? 'document' : undefined}
+              className={
+                active
+                  ? // Screens that bring their own DialogShell card (the revamped design)
+                    // get no extra chrome — the shell IS the card. Legacy screens keep
+                    // the classic card look until they migrate.
+                    `bg-background overflow-y-auto shadow-xl has-[[data-jaw-shell]]:!bg-transparent has-[[data-jaw-shell]]:!shadow-none [&_.min-h-screen]:min-h-0 ${card}`
+                  : 'contents'
+              }
+            >
+              <EnsureVisibility communicator={communicator} active={active}>
+                {children}
+              </EnsureVisibility>
+            </div>
+          </PortalContainerContext.Provider>
         </div>
-      </div>
+      </DialogScrimContext.Provider>
     </DialogAnchorContext.Provider>
   );
 }

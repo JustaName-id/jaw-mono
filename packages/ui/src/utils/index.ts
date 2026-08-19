@@ -1,3 +1,4 @@
+export * from './publicClient';
 export * from './justaNameInstance';
 export * from './reverseResolve';
 export * from './tokenPrice';
@@ -8,5 +9,9 @@ export * from './clearSigning';
 export * from './siwe';
 export * from './sanitize';
 export * from './safeUrl';
+export * from './displayFormat';
+export * from './functionSignature';
+export * from './transactionFailure';
+export * from './permissionExecution';
 export * from './assetPreview';
 export * from './resolvePaymaster';

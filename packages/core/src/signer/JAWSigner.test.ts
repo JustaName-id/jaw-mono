@@ -29,7 +29,7 @@ class TestSigner extends JAWSigner {
     protected async handleWalletConnectUnauthenticated(): Promise<unknown> {
         return null;
     }
-    protected async handleSigningRequest(): Promise<unknown> {
+    protected async handleSigningRequest(_request: RequestArguments): Promise<unknown> {
         return null;
     }
 }
@@ -96,6 +96,19 @@ describe('JAWSigner eth_accounts (silent reconnect)', () => {
 describe('JAWSigner signature analytics reporting', () => {
     const API_KEY = 'test-api-key';
     const SIGNER_ADDRESS = '0x2222222222222222222222222222222222222222' as Address;
+    const SIGNABLE_TYPED_DATA = JSON.stringify({
+        domain: { name: 'Test', version: '1', chainId: 1 },
+        primaryType: 'Msg',
+        types: {
+            EIP712Domain: [
+                { name: 'name', type: 'string' },
+                { name: 'version', type: 'string' },
+                { name: 'chainId', type: 'uint256' },
+            ],
+            Msg: [{ name: 'content', type: 'string' }],
+        },
+        message: { content: 'hi' },
+    });
 
     /** Signer whose signing outcome is scripted per test. */
     class SigningTestSigner extends TestSigner {
@@ -152,7 +165,9 @@ describe('JAWSigner signature analytics reporting', () => {
         // When an eth_signTypedData_v4 request resolves successfully
         await signer.request({
             method: 'eth_signTypedData_v4',
-            params: [SIGNER_ADDRESS, '{"types":{}}'],
+            // Must be genuinely signable: dispatchSigningRequest refuses typed data that
+            // can't be hashed, so `{"types":{}}` no longer reaches the signing path.
+            params: [SIGNER_ADDRESS, SIGNABLE_TYPED_DATA],
         });
 
         // Then the signature is reported with the signer address from params
@@ -333,5 +348,104 @@ describe('JAWSigner SIWE signature reporting (wallet_connect)', () => {
         // Then the connect still succeeds and nothing is reported
         expect(result).toBeDefined();
         expect(logSignature).not.toHaveBeenCalled();
+    });
+});
+
+// The typed-data guard is dispatched per method by validateSigningRequest:
+// eth_signTypedData_v4 always carries typed data; ERC-7871 wallet_sign only for
+// request type 0x01 (0x45 is personal_sign). ReactUIHandler reshapes 0x01 into
+// an eth_signTypedData_v4 dialog, so guarding only the former would leave the
+// wallet_sign path unvalidated.
+describe('JAWSigner typed-data validation dispatch', () => {
+    /** Records whether the (would-be) dialog-opening signing path was reached. */
+    class DispatchTestSigner extends TestSigner {
+        signingRequests: RequestArguments[] = [];
+        protected override async handleSigningRequest(request: RequestArguments): Promise<unknown> {
+            this.signingRequests.push(request);
+            return '0xsignature';
+        }
+    }
+
+    const SIGNABLE = {
+        domain: { name: 'Test', version: '1', chainId: 1 },
+        primaryType: 'Msg',
+        types: {
+            EIP712Domain: [
+                { name: 'name', type: 'string' },
+                { name: 'version', type: 'string' },
+                { name: 'chainId', type: 'uint256' },
+            ],
+            Msg: [{ name: 'content', type: 'string' }],
+        },
+        message: { content: 'hi' },
+    };
+    const UNSIGNABLE = { primaryType: 'Permit', types: { Other: [] }, message: {} };
+
+    const walletSign = (type: string, data: unknown): RequestArguments => ({
+        method: 'wallet_sign',
+        params: [{ address: ACCOUNT, request: { type, data } }],
+    });
+
+    function makeDispatchSigner(): DispatchTestSigner {
+        seedSession({ accounts: [ACCOUNT], connectedAt: Date.now() });
+        return new DispatchTestSigner({ metadata: { name: 'test', defaultChainId: 1 } as never, callback: null });
+    }
+
+    it('refuses an unsignable eth_signTypedData_v4 before the signing path runs', async () => {
+        const signer = makeDispatchSigner();
+        await expect(
+            signer.request({ method: 'eth_signTypedData_v4', params: [ACCOUNT, JSON.stringify(UNSIGNABLE)] })
+        ).rejects.toThrow(/"primaryType" "Permit" is not defined in "types"/);
+        expect(signer.signingRequests).toHaveLength(0);
+    });
+
+    it('refuses an eth_signTypedData_v4 with no typed-data parameter', async () => {
+        const signer = makeDispatchSigner();
+        await expect(signer.request({ method: 'eth_signTypedData_v4', params: [ACCOUNT] })).rejects.toThrow(
+            /typed data is required/
+        );
+    });
+
+    it('passes a signable eth_signTypedData_v4 through to the signing path', async () => {
+        const signer = makeDispatchSigner();
+        await expect(
+            signer.request({ method: 'eth_signTypedData_v4', params: [ACCOUNT, JSON.stringify(SIGNABLE)] })
+        ).resolves.toBe('0xsignature');
+        expect(signer.signingRequests).toHaveLength(1);
+    });
+
+    it('refuses an unsignable wallet_sign 0x01 payload', async () => {
+        const signer = makeDispatchSigner();
+        await expect(signer.request(walletSign('0x01', UNSIGNABLE))).rejects.toThrow(
+            /"primaryType" "Permit" is not defined in "types"/
+        );
+        expect(signer.signingRequests).toHaveLength(0);
+    });
+
+    it('refuses a wallet_sign 0x01 with no typed data at all', async () => {
+        const signer = makeDispatchSigner();
+        await expect(signer.request(walletSign('0x01', undefined))).rejects.toThrow(/typed data is required/);
+    });
+
+    it('passes a signable wallet_sign 0x01 through to the signing path', async () => {
+        const signer = makeDispatchSigner();
+        await expect(signer.request(walletSign('0x01', SIGNABLE))).resolves.toBe('0xsignature');
+    });
+
+    it('leaves wallet_sign 0x45 (personal_sign) unguarded — it carries a message, not typed data', async () => {
+        const signer = makeDispatchSigner();
+        await expect(signer.request(walletSign('0x45', { message: 'hello' }))).resolves.toBe('0xsignature');
+    });
+
+    it('leaves a wallet_sign with no request object to the signing path', async () => {
+        const signer = makeDispatchSigner();
+        await expect(signer.request({ method: 'wallet_sign', params: [{}] })).resolves.toBe('0xsignature');
+    });
+
+    it('leaves personal_sign untouched by typed-data validation', async () => {
+        const signer = makeDispatchSigner();
+        await expect(signer.request({ method: 'personal_sign', params: ['0xdeadbeef', ACCOUNT] })).resolves.toBe(
+            '0xsignature'
+        );
     });
 });

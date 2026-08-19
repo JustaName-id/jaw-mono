@@ -302,6 +302,95 @@ describe('PasskeyManager', () => {
             const accounts = manager.fetchAccounts();
             expect(accounts.length).toBe(2);
         });
+
+        it('fills in the address when re-adding an existing account that had none (create path)', () => {
+            // createPasskey stores the account first, before the address is derived.
+            const withoutAddress: PasskeyAccount = {
+                username: mockUsername,
+                credentialId: mockCredentialId,
+                publicKey: mockPublicKey,
+                creationDate: new Date().toISOString(),
+                isImported: false,
+            };
+            manager.addAccountToList(withoutAddress);
+            expect(manager.fetchAccounts()[0].address).toBeUndefined();
+
+            // storePasskeyAccount re-adds the same credential once the address is known.
+            manager.addAccountToList({ ...withoutAddress, address: mockAddress });
+
+            const accounts = manager.fetchAccounts();
+            expect(accounts.length).toBe(1);
+            expect(accounts[0].address).toBe(mockAddress);
+        });
+
+        it('does not overwrite an address the stored account already has', () => {
+            manager.addAccountToList({
+                username: mockUsername,
+                credentialId: mockCredentialId,
+                publicKey: mockPublicKey,
+                creationDate: new Date().toISOString(),
+                isImported: false,
+                address: mockAddress,
+            });
+            manager.addAccountToList({
+                username: mockUsername,
+                credentialId: mockCredentialId,
+                publicKey: mockPublicKey,
+                creationDate: new Date().toISOString(),
+                isImported: false,
+                address: '0x0000000000000000000000000000000000000001',
+            });
+
+            expect(manager.fetchAccounts()[0].address).toBe(mockAddress);
+        });
+    });
+
+    describe('setAccountAddresses', () => {
+        const makeAccount = (credentialId: string): PasskeyAccount => ({
+            username: `${credentialId}.justan.id`,
+            credentialId,
+            publicKey: mockPublicKey,
+            creationDate: new Date().toISOString(),
+            isImported: false,
+        });
+
+        it('persists every address in a single batched write (no lost writes)', () => {
+            manager.addAccountToList(makeAccount('credA'));
+            manager.addAccountToList(makeAccount('credB'));
+
+            // The pre-fix code issued one read-modify-write per address; concurrent
+            // backfill completions would clobber each other. A single batched write
+            // must land both.
+            manager.setAccountAddresses([
+                { credentialId: 'credA', address: '0x00000000000000000000000000000000000000AA' },
+                { credentialId: 'credB', address: '0x00000000000000000000000000000000000000BB' },
+            ]);
+
+            const accounts = manager.fetchAccounts();
+            expect(accounts.find((a) => a.credentialId === 'credA')?.address).toBe(
+                '0x00000000000000000000000000000000000000AA'
+            );
+            expect(accounts.find((a) => a.credentialId === 'credB')?.address).toBe(
+                '0x00000000000000000000000000000000000000BB'
+            );
+        });
+
+        it('does not overwrite an address that is already set', () => {
+            manager.addAccountToList({ ...makeAccount('credA'), address: mockAddress });
+            manager.setAccountAddresses([
+                { credentialId: 'credA', address: '0x00000000000000000000000000000000000000AA' },
+            ]);
+            expect(manager.fetchAccounts()[0].address).toBe(mockAddress);
+        });
+
+        it('is a no-op for an empty batch or unknown credentials', () => {
+            manager.addAccountToList(makeAccount('credA'));
+            manager.setAccountAddresses([]);
+            manager.setAccountAddresses([
+                { credentialId: 'missing', address: '0x00000000000000000000000000000000000000AA' },
+            ]);
+            expect(manager.fetchAccounts()[0].address).toBeUndefined();
+        });
     });
 
     describe('storePasskeyAccount', () => {
@@ -326,6 +415,24 @@ describe('PasskeyManager', () => {
 
             const accounts = manager.fetchAccounts();
             expect(accounts[0].username).toBe('test.justan.id');
+        });
+
+        it('persists the address on the stored account entry, even when it was pre-added without one', async () => {
+            // Reproduce the create path: createPasskey adds the account before the
+            // address is derived, then storePasskeyAccount re-adds it with the address.
+            manager.addAccountToList({
+                username: mockUsername,
+                credentialId: mockCredentialId,
+                publicKey: mockPublicKey,
+                creationDate: new Date().toISOString(),
+                isImported: false,
+            });
+
+            await manager.storePasskeyAccount(mockUsername, mockCredentialId, mockPublicKey, mockAddress);
+
+            const accounts = manager.fetchAccounts();
+            expect(accounts.length).toBe(1);
+            expect(accounts[0].address).toBe(mockAddress);
         });
 
         it('should set isImported to false', async () => {

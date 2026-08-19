@@ -12,7 +12,7 @@ export type { Oklch } from './palette.js';
 export { DEFAULT_LIGHT_PALETTE, DEFAULT_DARK_PALETTE, BORDER_RADIUS_MAP, FONT_STACK_MAP } from './constants.js';
 
 // Resolution pipeline
-export { resolveTheme } from './resolve-theme.js';
+export { resolveTheme, themeColorVar } from './resolve-theme.js';
 export type { ResolvedTheme } from './resolve-theme.js';
 
 // DOM application

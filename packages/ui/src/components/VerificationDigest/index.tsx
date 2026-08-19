@@ -10,9 +10,8 @@
 // human-readable description); the digests are an extra verification surface.
 // ============================================================================
 
-import { useState } from 'react';
 import { computeEip712Digests } from '../../utils/erc8213';
-import { CopyIcon, CopiedIcon } from '../../icons';
+import { CopyButton } from '../CopyButton';
 
 /** A single labeled, monospace, 0x-prefixed hash value with copy-to-clipboard. */
 export const DigestRow = ({
@@ -24,32 +23,14 @@ export const DigestRow = ({
   value: string;
   prominent?: boolean;
 }) => {
-  const [copied, setCopied] = useState(false);
-
-  const onCopy = () => {
-    if (typeof window !== 'undefined' && navigator?.clipboard) {
-      navigator.clipboard
-        .writeText(value)
-        .then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        })
-        .catch(() => undefined);
-    }
-  };
-
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-row items-center justify-between gap-2">
-        <p className={`text-foreground text-xs leading-[133%] ${prominent ? 'font-bold' : 'font-semibold'}`}>{label}</p>
-        {copied ? (
-          <CopiedIcon className="h-4 w-4 flex-shrink-0" />
-        ) : (
-          <CopyIcon className="h-4 w-4 flex-shrink-0 cursor-pointer" onClick={onCopy} />
-        )}
+        <p className={`text-foreground text-xs leading-snug ${prominent ? 'font-bold' : 'font-semibold'}`}>{label}</p>
+        <CopyButton value={value} size={16} resetAfterMs={1500} label={`Copy ${label}`} />
       </div>
-      <div className="bg-secondary overflow-x-auto rounded-[6px] p-2">
-        <p className="text-foreground break-all font-mono text-xs leading-[150%]">{value}</p>
+      <div className="bg-secondary rounded-chip p-2">
+        <p className="text-foreground break-all font-mono text-xs leading-normal">{value}</p>
       </div>
     </div>
   );
@@ -72,14 +53,25 @@ export const Eip712VerificationDigests = ({ typedDataJson }: { typedDataJson: st
   }
 
   return (
-    <details className="text-xs">
-      <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
-        Show verification digests
+    <details className="border-border rounded-chip group overflow-hidden border text-xs [&_summary::-webkit-details-marker]:hidden">
+      <summary className="hover:bg-foreground/[0.03] flex cursor-pointer list-none items-center justify-between px-3 py-2">
+        <span className="text-muted-foreground text-body-sm font-medium">Digests data</span>
+        <svg
+          className="text-muted-foreground h-3 w-3 transition-transform group-open:rotate-180"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
       </summary>
-      <div className="border-border mt-2 flex flex-col gap-2.5 rounded-[6px] border p-3.5">
-        <DigestRow label="EIP-712 Digest" value={digests.eip712Digest} prominent />
+      <div className="border-border/40 flex flex-col gap-3 border-t p-3">
         <DigestRow label="Domain Hash" value={digests.domainHash} />
         <DigestRow label="Message Hash" value={digests.messageHash} />
+        <DigestRow label="EIP-712 Digest" value={digests.eip712Digest} prominent />
       </div>
     </details>
   );

@@ -301,7 +301,21 @@ describe('AppSpecificSigner', () => {
 
         it('should handle eth_signTypedData_v4 request', async () => {
             // Arrange
-            const typedData = JSON.stringify({ types: {}, primaryType: 'Test', domain: {}, message: {} });
+            // Must be genuinely signable: dispatchSigningRequest refuses typed data that
+            // can't be hashed, so a primaryType absent from `types` no longer gets here.
+            const typedData = JSON.stringify({
+                domain: { name: 'Test', version: '1', chainId: 1 },
+                primaryType: 'Msg',
+                types: {
+                    EIP712Domain: [
+                        { name: 'name', type: 'string' },
+                        { name: 'version', type: 'string' },
+                        { name: 'chainId', type: 'uint256' },
+                    ],
+                    Msg: [{ name: 'content', type: 'string' }],
+                },
+                message: { content: 'hi' },
+            });
             const request: RequestArguments = {
                 method: 'eth_signTypedData_v4',
                 params: ['0x1234567890123456789012345678901234567890', typedData],
@@ -513,7 +527,7 @@ describe('AppSpecificSigner', () => {
             const mockResponse: UIResponse = {
                 id: 'test-response-id',
                 approved: true,
-                data: { permissionId: '0xpermission123' },
+                data: { permissionId: '0xabababababababababababababababababababababababababababababababab' },
             };
 
             (mockUIHandler.request as Mock).mockResolvedValue(mockResponse);
@@ -522,7 +536,9 @@ describe('AppSpecificSigner', () => {
             const result = await signer.request(request);
 
             // Assert
-            expect(result).toEqual({ permissionId: '0xpermission123' });
+            expect(result).toEqual({
+                permissionId: '0xabababababababababababababababababababababababababababababababab',
+            });
             expect(mockUIHandler.request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     type: 'wallet_grantPermissions',
@@ -540,7 +556,7 @@ describe('AppSpecificSigner', () => {
         it('should handle wallet_revokePermissions request', async () => {
             // Arrange - Using WalletRevokePermissionsRequest params structure
             const revokeData = {
-                id: '0xpermission123' as `0x${string}`,
+                id: '0xabababababababababababababababababababababababababababababababab' as `0x${string}`,
             };
 
             const request: RequestArguments = {
@@ -556,7 +572,7 @@ describe('AppSpecificSigner', () => {
 
             // Mock the relay permission response with chainId
             (getPermissionFromRelay as Mock).mockResolvedValue({
-                hash: '0xpermission123',
+                hash: '0xabababababababababababababababababababababababababababababababab',
                 account: '0x1234567890123456789012345678901234567890',
                 spender: '0xspender',
                 start: '0',
@@ -574,12 +590,15 @@ describe('AppSpecificSigner', () => {
 
             // Assert
             expect(result).toEqual({ success: true });
-            expect(getPermissionFromRelay).toHaveBeenCalledWith('0xpermission123', 'test-api-key');
+            expect(getPermissionFromRelay).toHaveBeenCalledWith(
+                '0xabababababababababababababababababababababababababababababababab',
+                'test-api-key'
+            );
             expect(mockUIHandler.request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     type: 'wallet_revokePermissions',
                     data: expect.objectContaining({
-                        permissionId: '0xpermission123',
+                        permissionId: '0xabababababababababababababababababababababababababababababababab',
                         address: '0x1234567890123456789012345678901234567890',
                         chainId: 1,
                     }),
@@ -590,7 +609,7 @@ describe('AppSpecificSigner', () => {
         it('should throw error when permission not found in relay', async () => {
             // Arrange
             const revokeData = {
-                id: '0xnonexistent' as `0x${string}`,
+                id: '0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd' as `0x${string}`,
             };
 
             const request: RequestArguments = {
@@ -603,9 +622,12 @@ describe('AppSpecificSigner', () => {
 
             // Act & Assert
             await expect(signer.request(request)).rejects.toThrow(
-                'Permission not found: 0xnonexistent. It may have already been revoked.'
+                'Permission not found: 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd. It may have already been revoked.'
             );
-            expect(getPermissionFromRelay).toHaveBeenCalledWith('0xnonexistent', 'test-api-key');
+            expect(getPermissionFromRelay).toHaveBeenCalledWith(
+                '0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd',
+                'test-api-key'
+            );
             expect(mockUIHandler.request).not.toHaveBeenCalled();
         });
 
@@ -1078,6 +1100,112 @@ describe('AppSpecificSigner', () => {
 
             // Act & Assert
             await expect(signer.request(request)).rejects.toThrow('No RPC URL set for chain');
+        });
+    });
+
+    // Integration cover for the claim that matters: an unsignable payload is refused at
+    // the RPC boundary, so the caller gets -32602 and NO dialog is ever shown. Testing
+    // the validator alone would not prove the UI handler stays untouched.
+    describe('unsignable typed data never reaches the UI', () => {
+        const SIGNABLE = JSON.stringify({
+            domain: { name: 'Test', version: '1', chainId: 1 },
+            primaryType: 'Msg',
+            types: {
+                EIP712Domain: [
+                    { name: 'name', type: 'string' },
+                    { name: 'version', type: 'string' },
+                    { name: 'chainId', type: 'uint256' },
+                ],
+                Msg: [{ name: 'content', type: 'string' }],
+            },
+            message: { content: 'hi' },
+        });
+
+        beforeEach(async () => {
+            (mockUIHandler.request as Mock).mockResolvedValue({
+                id: 'test-response-id',
+                approved: true,
+                data: { accounts: [{ address: '0x1234567890123456789012345678901234567890' }] },
+            });
+            await signer.handshake({ method: 'wallet_connect', params: [{ version: '1.0', capabilities: {} }] });
+            (mockUIHandler.request as Mock).mockClear();
+        });
+
+        it.each([
+            ['types missing entirely', '{"primaryType":"Permit","message":{}}'],
+            ['primaryType absent from types', '{"primaryType":"Permit","types":{"Other":[]},"message":{}}'],
+            ['types is not an object', '{"primaryType":"Permit","types":"nope","message":{}}'],
+            ['payload is null', 'null'],
+            ['payload is an array', '[]'],
+            ['payload is a bare number', '42'],
+            ['payload is not JSON', 'not json at all'],
+        ])('rejects %s with -32602 and opens no dialog', async (_label, typedData) => {
+            await expect(
+                signer.request({
+                    method: 'eth_signTypedData_v4',
+                    params: ['0x1234567890123456789012345678901234567890', typedData],
+                })
+            ).rejects.toMatchObject({ code: -32602 });
+
+            // The load-bearing assertion: no dialog for a request that cannot succeed.
+            expect(mockUIHandler.request).not.toHaveBeenCalled();
+        });
+
+        // A revocation is built entirely from the stored permission, so a request that names no
+        // usable permission cannot succeed. Both signers used to guard the relay lookup with
+        // `if (permissionId)`, which skipped the check for exactly the input that needed it: an
+        // empty id reached the UI, which rendered an empty permission and offered to sign it.
+        it.each([
+            ['missing', undefined],
+            ['an empty string', ''],
+            ['a bare 0x', '0x'],
+            ['too short', '0xdeadbeef'],
+            ['not hex', `0x${'zz'.repeat(32)}`],
+        ])('rejects a revoke id that is %s with -32602 and opens no dialog', async (_label, id) => {
+            await expect(
+                signer.request({
+                    method: 'wallet_revokePermissions',
+                    params: [{ id, address: '0x1234567890123456789012345678901234567890' }],
+                } as never)
+            ).rejects.toMatchObject({ code: -32602 });
+
+            // The load-bearing assertion: no dialog for a request that cannot succeed.
+            expect(mockUIHandler.request).not.toHaveBeenCalled();
+            // And the relay is never consulted for an id that can't be one.
+            expect(getPermissionFromRelay).not.toHaveBeenCalled();
+        });
+
+        // ERC-7871 wallet_sign 0x01 reaches the same EIP-712 dialog, so it must be
+        // refused at the same boundary rather than only eth_signTypedData_v4.
+        it.each([
+            ['types missing entirely', { primaryType: 'Permit', message: {} }],
+            ['primaryType absent from types', { primaryType: 'Permit', types: { Other: [] }, message: {} }],
+        ])('rejects wallet_sign 0x01 with %s and opens no dialog', async (_label, payload) => {
+            await expect(
+                signer.request({
+                    method: 'wallet_sign',
+                    params: [
+                        {
+                            address: '0x1234567890123456789012345678901234567890',
+                            request: { type: '0x01', data: payload },
+                        },
+                    ],
+                })
+            ).rejects.toMatchObject({ code: -32602 });
+
+            expect(mockUIHandler.request).not.toHaveBeenCalled();
+        });
+
+        it('still opens the dialog for a signable payload', async () => {
+            (mockUIHandler.request as Mock).mockResolvedValue({ id: 'x', approved: true, data: '0xsig' });
+
+            const result = await signer.request({
+                method: 'eth_signTypedData_v4',
+                params: ['0x1234567890123456789012345678901234567890', SIGNABLE],
+            });
+
+            expect(result).toBe('0xsig');
+            expect(mockUIHandler.request).toHaveBeenCalledTimes(1);
         });
     });
 });

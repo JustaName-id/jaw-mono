@@ -3,6 +3,7 @@ import type { Address, Hex } from 'viem';
 import type { Account, TokenEstimate, TransactionCall } from '@jaw.id/core';
 import { estimateErc20PaymasterCosts, JAW_PAYMASTER_URL } from '@jaw.id/core';
 import type { FeeTokenOption } from '../components/FeeTokenSelector';
+import { classifyRevert, INSUFFICIENT_FUNDS_ERROR } from '../utils/transactionFailure';
 
 // ============================================================================
 // Types
@@ -66,11 +67,20 @@ export interface UseGasEstimationResult {
 /** Fallback gas estimate in ETH for L2 chains when ETH estimation fails */
 const FALLBACK_GAS_ESTIMATE_ETH = '0.00005';
 
-/** Error messages that indicate insufficient funds */
-const INSUFFICIENT_FUNDS_ERRORS = [
+/**
+ * Bundler markers for "the account can't cover the gas prefund" — the one failure a
+ * fee-token switch actually fixes.
+ *
+ * Deliberately not a bare `'insufficient'`. These are substring matches, and that word
+ * also appears in the transaction's OWN reverts (`INSUFFICIENT_OUTPUT_AMOUNT`,
+ * `insufficient allowance`, `InsufficientCollateral`), which no fee token can fix.
+ * Matching those here would re-route the fee and clear the error instead of reporting
+ * the revert.
+ */
+const PREFUND_ERRORS = [
   'AA21',
   "didn't pay prefund",
-  'insufficient',
+  'insufficient funds for gas', // geth/bundler wording for a genuine prefund shortfall
   'AA50', // PostOp reverted (e.g., paymaster insufficient balance)
   'paymasterValidationGasLimit is required', // ERC-20 paymaster can't validate with 0 balance
 ];
@@ -80,11 +90,17 @@ const INSUFFICIENT_FUNDS_ERRORS = [
 // ============================================================================
 
 /**
- * Check if an error indicates insufficient funds
+ * Whether the account couldn't cover the gas prefund — i.e. switching fee token may help.
+ *
+ * Specificity is the whole mechanism: every marker names gas payment or paymaster
+ * validation, so a call-level revert can't match one and gets reported instead of
+ * silently re-routed. Note `classifyRevert` cannot be used to pre-filter here — geth's
+ * prefund message begins with "insufficient funds", which it (correctly, for its own
+ * purpose) reads as a balance shortfall.
  */
-function isInsufficientFundsError(error: unknown): boolean {
+function isPrefundError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  return INSUFFICIENT_FUNDS_ERRORS.some((msg) => error.message.toLowerCase().includes(msg.toLowerCase()));
+  return PREFUND_ERRORS.some((msg) => error.message.toLowerCase().includes(msg.toLowerCase()));
 }
 
 /**
@@ -151,12 +167,34 @@ export function useGasEstimation({
   // Track estimation version to handle race conditions
   const estimationVersionRef = useRef<number>(0);
 
+  // Latest displayed fee, read inside estimateGas without making it a dependency.
+  const gasFeeRef = useRef<string>('');
+  gasFeeRef.current = gasFee;
+
   // Use refs for values that shouldn't trigger re-estimation
   const feeTokensRef = useRef(feeTokens);
   feeTokensRef.current = feeTokens;
 
   const onFeeTokensUpdateRef = useRef(onFeeTokensUpdate);
   onFeeTokensUpdateRef.current = onFeeTokensUpdate;
+
+  // The ETH estimate depends on the calls, the account and the endpoint, never on the fee-token
+  // list. Keyed separately so the list arriving later doesn't force a second identical bundler
+  // round-trip. `apiKey` and `isSponsored` are inputs too: a fee measured before the key arrived
+  // (or while sponsored) must not be reused as if it were measured for the current setup.
+  const ethInputsKey = useMemo(
+    () =>
+      JSON.stringify([
+        chainId,
+        permissionId ?? null,
+        address ?? null,
+        apiKey ?? null,
+        isSponsored,
+        transactionCalls.map((c) => [c.to, c.value?.toString() ?? null, c.data ?? null]),
+      ]),
+    [chainId, permissionId, address, apiKey, isSponsored, transactionCalls]
+  );
+  const ethEstimatedForRef = useRef<string>('');
 
   // Track ERC-20 token addresses to re-run estimation when new tokens are added
   // This is stable when only gasCostFormatted/isSelectable change (preventing infinite loops)
@@ -224,8 +262,12 @@ export function useGasEstimation({
     // Increment version to track this estimation
     const currentVersion = ++estimationVersionRef.current;
 
-    // Start loading
-    setGasFeeLoading(true);
+    // Re-estimating with unchanged inputs (the ERC-20 token list arrived) must not blank a fee
+    // that's already on screen — the row would fall back to "Estimating..." after having shown a
+    // value. But a changed key means the fee on screen was measured for a *different* userOp: the
+    // permission dialogs' first pass runs against a dummy call before the real one is built, and
+    // that number must read as loading rather than pass as final.
+    if (ethEstimatedForRef.current !== ethInputsKey) setGasFeeLoading(true);
     setEstimatingTokenCosts(true);
     setGasEstimationError('');
 
@@ -248,10 +290,18 @@ export function useGasEstimation({
       // Resolve the correct smart account for estimation (handles address override)
       const resolvedSmartAccount = await account.getSmartAccountFor(address);
 
-      // Run ETH and ERC-20 estimation in parallel
+      // Run ETH and ERC-20 estimation in parallel. The ETH leg is skipped when nothing it
+      // depends on has changed — re-running it just to pick up the fee-token list would repeat
+      // a bundler round-trip for a result we already have.
+      // Only a real measured fee is reusable — never the 'sponsored' sentinel, and only when
+      // the inputs it was measured for are unchanged.
+      const reuseEthEstimate =
+        ethEstimatedForRef.current === ethInputsKey && !!gasFeeRef.current && gasFeeRef.current !== 'sponsored';
       const [ethResult, erc20Result] = await Promise.allSettled([
         // ETH gas estimation
-        account.calculateGasCost(effectiveCalls, permissionId || address ? { permissionId, address } : undefined),
+        reuseEthEstimate
+          ? Promise.resolve(gasFeeRef.current)
+          : account.calculateGasCost(effectiveCalls, permissionId || address ? { permissionId, address } : undefined),
         // ERC-20 gas estimation (only for tokens with balance > 0)
         // Tokens with 0 balance will be marked as not selectable below
         erc20TokensWithBalance.length > 0
@@ -315,7 +365,7 @@ export function useGasEstimation({
         onFeeTokensUpdateRef.current?.(updatedFeeTokens);
       } else if (erc20Result.status === 'rejected') {
         // Check if this is an insufficient balance error (expected case, not a real error)
-        const isInsufficientBalance = isInsufficientFundsError(erc20Result.reason);
+        const isInsufficientBalance = isPrefundError(erc20Result.reason);
 
         if (isInsufficientBalance) {
           // This is an expected case - user doesn't have enough ERC-20 tokens
@@ -378,20 +428,26 @@ export function useGasEstimation({
 
       // Process ETH result
       const ethSuccess = ethResult.status === 'fulfilled';
-      const ethInsufficientFunds = ethResult.status === 'rejected' && isInsufficientFundsError(ethResult.reason);
+      const ethInsufficientFunds = ethResult.status === 'rejected' && isPrefundError(ethResult.reason);
 
       if (ethSuccess) {
+        ethEstimatedForRef.current = ethInputsKey;
         handleEthSuccess(ethResult.value, updatedFeeTokens);
       } else if (ethInsufficientFunds) {
+        // Defensive: this branch only runs when the ETH leg was actually measured, so the key is
+        // already stale — but a fallback fee must never become reusable if that ever changes.
+        ethEstimatedForRef.current = '';
         handleEthInsufficientFunds(updatedFeeTokens);
       } else {
-        handleEstimationError(ethResult.status === 'rejected' ? ethResult.reason : null);
+        ethEstimatedForRef.current = '';
+        handleEstimationError(ethResult.status === 'rejected' ? ethResult.reason : null, updatedFeeTokens);
       }
     } catch (error) {
       // Check if this estimation is still current
       if (currentVersion !== estimationVersionRef.current) {
         return;
       }
+      ethEstimatedForRef.current = '';
       handleEstimationError(error);
     } finally {
       // Only update loading states if this is still the current estimation
@@ -402,7 +458,23 @@ export function useGasEstimation({
     }
     // Note: feeTokens and onFeeTokensUpdate accessed via refs to prevent infinite loops
     // erc20TokenAddresses triggers re-estimation when new ERC-20 tokens are added (but not when estimates update)
-  }, [account, transactionCalls, chainId, apiKey, isSponsored, permissionId, address, erc20TokenAddresses]);
+  }, [
+    account,
+    transactionCalls,
+    chainId,
+    apiKey,
+    isSponsored,
+    permissionId,
+    address,
+    erc20TokenAddresses,
+    ethInputsKey,
+  ]);
+
+  /** Explicit refetch discards the reuse key so the ETH leg is genuinely re-measured. */
+  const forceRefetch = useCallback(() => {
+    ethEstimatedForRef.current = '';
+    void estimateGas();
+  }, [estimateGas]);
 
   // -------------------------------------------------------------------------
   // Result Handlers
@@ -411,21 +483,15 @@ export function useGasEstimation({
   /**
    * Handle successful ETH gas estimation
    */
-  const handleEthSuccess = useCallback(
-    (gasPrice: string, updatedFeeTokens: FeeTokenOption[]) => {
-      setGasFee(gasPrice);
-      setGasEstimationError('');
+  const handleEthSuccess = useCallback((gasPrice: string, updatedFeeTokens: FeeTokenOption[]) => {
+    setGasFee(gasPrice);
+    setGasEstimationError('');
 
-      // Auto-select native token if not already selected
-      if (!selectedFeeToken) {
-        const nativeToken = updatedFeeTokens.find((t) => t.isNative && t.isSelectable);
-        if (nativeToken) {
-          setSelectedFeeToken(nativeToken);
-        }
-      }
-    },
-    [selectedFeeToken]
-  );
+    // Auto-select native only when nothing is selected — decided inside the updater, because
+    // `estimateGas` holds the callback from when the estimation started: a closure read would
+    // see the stale null and overwrite a token the user picked while it was in flight.
+    setSelectedFeeToken((prev) => prev ?? updatedFeeTokens.find((t) => t.isNative && t.isSelectable) ?? prev);
+  }, []);
 
   /**
    * Handle ETH insufficient funds - try to fallback to ERC-20
@@ -434,22 +500,59 @@ export function useGasEstimation({
     const selectableErc20 = updatedFeeTokens.find((t) => !t.isNative && t.isSelectable);
 
     if (selectableErc20) {
-      // Auto-select first selectable ERC-20 token
-      setSelectedFeeToken(selectableErc20);
+      // Auto-select an ERC-20, keeping the user's own choice when it can still pay.
+      setSelectedFeeToken((prev) => {
+        const prevUpdated =
+          prev && !prev.isNative
+            ? updatedFeeTokens.find((t) => t.address.toLowerCase() === prev.address.toLowerCase())
+            : undefined;
+        return prevUpdated?.isSelectable ? prevUpdated : selectableErc20;
+      });
       setGasFee(FALLBACK_GAS_ESTIMATE_ETH);
       setGasEstimationError('');
     } else {
       // No selectable payment options (neither ETH nor ERC-20 have sufficient balance)
       setGasFee('');
-      setGasEstimationError('Insufficient funds');
+      setGasEstimationError(INSUFFICIENT_FUNDS_ERROR);
     }
   }, []);
 
   /**
-   * Handle estimation error (not insufficient funds)
+   * A bundler error usually carries the execution revert reason, so a balance shortfall is
+   * detectable here too and reported with the same string — never re-routed to a fee token,
+   * the wrong remedy when gas is affordable and only the transfer isn't.
+   *
+   * Any other failure falls back to an ERC-20 that carries a priced ceiling: the ceiling only
+   * exists when the paymaster userOp — same calls, same bundler — estimated successfully, so
+   * the failure was specific to paying in ETH and the switch provably fixes it. A call revert
+   * fails both estimations alike (tokens end up unselectable), so it can't be masked here; the
+   * asset preview warns about reverts independently. `isSelectable` alone isn't proof — before
+   * estimates land it's a balance heuristic from the fee-token producer, and a token without a
+   * ceiling can't be confirmed anyway. `updatedFeeTokens` is empty on the outer-catch path,
+   * where nothing has been proven.
    */
-  const handleEstimationError = useCallback((error: unknown) => {
+  const handleEstimationError = useCallback((error: unknown, updatedFeeTokens: FeeTokenOption[] = []) => {
     console.error('[useGasEstimation] Error:', error);
+    if (classifyRevert(error) === 'balance') {
+      setGasFee('');
+      setGasEstimationError(INSUFFICIENT_FUNDS_ERROR);
+      return;
+    }
+    const provenErc20 = (t: FeeTokenOption) => !t.isNative && t.isSelectable && !!t.gasCostMaxFormatted;
+    const selectableErc20 = updatedFeeTokens.find(provenErc20);
+    if (selectableErc20) {
+      // Keep the user's own choice when it is itself proven; otherwise take the first that is.
+      setSelectedFeeToken((prev) => {
+        const prevUpdated =
+          prev && !prev.isNative
+            ? updatedFeeTokens.find((t) => t.address.toLowerCase() === prev.address.toLowerCase())
+            : undefined;
+        return prevUpdated && provenErc20(prevUpdated) ? prevUpdated : selectableErc20;
+      });
+      setGasFee(FALLBACK_GAS_ESTIMATE_ETH);
+      setGasEstimationError('');
+      return;
+    }
     setGasFee('');
     setGasEstimationError('Failed to estimate gas');
   }, []);
@@ -476,6 +579,6 @@ export function useGasEstimation({
     selectedFeeToken,
     setSelectedFeeToken,
     isPayingWithErc20,
-    refetch: estimateGas,
+    refetch: forceRefetch,
   };
 }

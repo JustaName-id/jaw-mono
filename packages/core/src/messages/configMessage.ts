@@ -14,11 +14,27 @@ export type ConfigEvent =
     /** keys -> SDK: user or visibility guard requests escaping the iframe to a popup */
     | 'SwitchTransport'
     /** keys -> SDK: connected account hint, persisted dApp-side to survive partitioned/ephemeral iframe storage */
-    | 'AccountHint';
+    | 'AccountHint'
+    /** SDK -> keys: embedded dialog shown/hidden; drives the keys app's enter animation (mobile bottom sheet) */
+    | 'DialogVisibility';
 
 /** Payload of a DialogClose config message. */
 export type DialogCloseData = {
     reason: 'completed' | 'cancelled';
+};
+
+/**
+ * Payload of a DialogVisibility config message (SDK -> keys).
+ *
+ * The SDK reveals/hides the embedded iframe with a plain visibility flip the
+ * keys app cannot observe from inside the frame. This event mirrors those
+ * flips so the keys UI can animate its entrance (slide the mobile bottom
+ * sheet up) at the moment the user actually sees it. Purely presentational:
+ * the keys app must default to "visible" so an older SDK that never sends
+ * the event still shows the UI (statically, without the animation).
+ */
+export type DialogVisibilityData = {
+    visible: boolean;
 };
 
 /** Payload of a SwitchTransport config message. */
