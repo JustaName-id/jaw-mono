@@ -282,9 +282,16 @@ describe('SessionBridge paymaster token', () => {
   // Engaging the ERC-20 paymaster without a token to name guarantees a failed
   // userOp, which is strictly worse than the unsponsored path.
   it('leaves the paymaster unset on a chain the registry does not cover', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 999999 });
+
     expect(optionsOf(bridge).paymasterUrl).toBeUndefined();
     expect(optionsOf(bridge).paymasterContext).toBeUndefined();
+    // Falling back quietly leaves the user with a later failure about native
+    // funds that names none of this.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('999999'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('native balance'));
+    warn.mockRestore();
   });
 
   // A user bringing their own paymaster owns its context; we must not inject USDC.

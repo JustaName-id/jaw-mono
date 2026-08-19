@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createPublicClient, encodeFunctionData, erc20Abi } from 'viem';
 import { Account } from './Account.js';
+import { JAW_PAYMASTER_URL, ERC20_PAYMASTER_ADDRESS } from '../constants.js';
 
 // Mock dependencies
 vi.mock('../passkey-manager/index.js', async (importOriginal) => {
@@ -22,11 +24,21 @@ vi.mock('../passkey-manager/index.js', async (importOriginal) => {
     };
 });
 
+vi.mock('./erc20Paymaster.js', () => ({
+    fetchTokenQuotes: vi.fn(),
+    calculateTokenCostFromGas: vi.fn(),
+}));
+
 vi.mock('./smartAccount.js', () => ({
     createSmartAccount: vi.fn(),
     sendTransaction: vi.fn(),
     sendCalls: vi.fn(),
     sendCallsWithPermission: vi.fn(),
+    buildPermissionManagerCall: vi.fn().mockReturnValue({
+        to: '0x0000000000000000000000000000000000009999',
+        value: 0n,
+        data: '0xbeefbeef',
+    }),
     estimateUserOpGas: vi.fn(),
     calculateGas: vi.fn(),
     getBundlerClient: vi.fn().mockReturnValue({
@@ -43,6 +55,7 @@ vi.mock('../rpc/permissions.js', () => ({
     grantPermissions: vi.fn(),
     revokePermission: vi.fn(),
     getPermissionFromRelay: vi.fn(),
+    relayPermissionToPermission: vi.fn().mockReturnValue({ permissionId: '0xperm' }),
 }));
 
 vi.mock('../rpc/wallet_sendCalls.js', () => ({
@@ -640,7 +653,10 @@ describe('Account', () => {
                 undefined,
                 undefined,
                 undefined,
-                undefined
+                undefined,
+                // The permission-manager call, built up here so the paymaster
+                // approval is sized over the shape that actually goes out.
+                { to: '0x0000000000000000000000000000000000009999', value: 0n, data: '0xbeefbeef' }
             );
             expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 1, 'test-api-key');
             expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, 1, 'test-api-key');
@@ -1307,5 +1323,175 @@ describe('Account — paymaster context from config', () => {
         const call = vi.mocked(sendCallsWithPermission).mock.calls[0];
         expect(call[5]).toBeUndefined();
         expect(call[6]).toBeUndefined();
+    });
+});
+
+// The approval half of "the approval matches the send" was pinned nowhere. Every
+// case above deliberately picks a non-JAW paymaster url to stay offline, which
+// short-circuits `createErc20ApprovalCall` before it builds anything — so
+// dropping the prepend, or making the builder return null outright, left the
+// suite green. These reach the JAW ERC-20 paymaster with its two network reads
+// (the token quote and the allowance) mocked, and assert on what the send
+// receives.
+describe('Account — ERC-20 paymaster approval', () => {
+    const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+    const PAYMASTER_URL = `${JAW_PAYMASTER_URL}?chainId=1&api-key=test`;
+    const PERMISSION_ID = '0xabc123def456789012345678901234567890123456789012345678901234567890' as `0x${string}`;
+    const RECIPIENT = '0x1234567890123456789012345678901234567890' as `0x${string}`;
+    // What `buildPermissionManagerCall` is mocked to return: the wrapper the
+    // permission send actually executes.
+    const PERMISSION_CALL = {
+        to: '0x0000000000000000000000000000000000009999' as `0x${string}`,
+        value: 0n,
+        data: '0xbeefbeef' as `0x${string}`,
+    };
+    // `calculateTokenCostFromGas` is mocked to this, so the approve is assertable.
+    const CEILING = 1_500_000n;
+
+    const expectedApproval = () => ({
+        to: USDC,
+        value: 0n,
+        data: encodeFunctionData({
+            abi: erc20Abi,
+            functionName: 'approve',
+            args: [ERC20_PAYMASTER_ADDRESS as `0x${string}`, CEILING],
+        }),
+    });
+
+    let prepareUserOperation: ReturnType<typeof vi.fn>;
+
+    async function makeAccount() {
+        const { createSmartAccount } = await import('./smartAccount.js');
+        vi.mocked(createSmartAccount).mockResolvedValue({
+            address: '0x1234567890123456789012345678901234567890',
+            getAddress: vi.fn().mockResolvedValue('0x1234567890123456789012345678901234567890'),
+        } as never);
+
+        return await Account.fromLocalAccount(
+            {
+                chainId: 1,
+                apiKey: 'test',
+                paymasterUrl: PAYMASTER_URL,
+                paymasterContext: { token: USDC },
+            } as never,
+            {
+                address: '0xabcdef1234567890abcdef1234567890abcdef12',
+                type: 'local',
+                publicKey: '0x04abc123',
+                sign: vi.fn(),
+                signMessage: vi.fn(),
+                signTypedData: vi.fn(),
+                signTransaction: vi.fn(),
+                source: 'privateKey',
+            } as never
+        );
+    }
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        const { fetchTokenQuotes, calculateTokenCostFromGas } = await import('./erc20Paymaster.js');
+        const { getBundlerClient, sendCalls, sendCallsWithPermission, buildPermissionManagerCall } = await import(
+            './smartAccount.js'
+        );
+        const { relayPermissionToPermission } = await import('../rpc/permissions.js');
+
+        // Nothing approved yet — the fresh-session case the approval exists for.
+        vi.mocked(createPublicClient).mockReturnValue({ readContract: vi.fn().mockResolvedValue(0n) } as never);
+
+        prepareUserOperation = vi.fn().mockResolvedValue({
+            preVerificationGas: 50_000n,
+            verificationGasLimit: 100_000n,
+            callGasLimit: 200_000n,
+            paymasterVerificationGasLimit: 30_000n,
+            paymasterPostOpGasLimit: 40_000n,
+            maxFeePerGas: 2_000_000_000n,
+            maxPriorityFeePerGas: 1_000_000_000n,
+        });
+        vi.mocked(getBundlerClient).mockReturnValue({ prepareUserOperation } as never);
+
+        vi.mocked(fetchTokenQuotes).mockResolvedValue([
+            {
+                tokenAddress: USDC,
+                paymasterAddress: ERC20_PAYMASTER_ADDRESS,
+                exchangeRate: 1_000_000_000_000_000_000n,
+                postOpGas: 40_000n,
+            },
+        ] as never);
+        vi.mocked(calculateTokenCostFromGas).mockReturnValue(CEILING);
+
+        vi.mocked(relayPermissionToPermission).mockReturnValue({ permissionId: '0xperm' } as never);
+        vi.mocked(buildPermissionManagerCall).mockReturnValue(PERMISSION_CALL);
+        vi.mocked(sendCalls).mockResolvedValue({ id: '0xdeadbeef', chainId: 1 });
+        vi.mocked(sendCallsWithPermission).mockResolvedValue({ id: '0xdeadbeef', chainId: 1 });
+    });
+
+    it('prepends the approve to the calls a plain send puts on the wire', async () => {
+        const { sendCalls } = await import('./smartAccount.js');
+        const account = await makeAccount();
+
+        await account.sendCalls([{ to: RECIPIENT }]);
+
+        // Arg 1 is the call array. Without the prepend it is just the user's call.
+        expect(vi.mocked(sendCalls).mock.calls[0][1]).toEqual([
+            expectedApproval(),
+            { to: RECIPIENT, value: undefined, data: undefined },
+        ]);
+    });
+
+    it('hands the approve to a permission send at the spender level', async () => {
+        const { sendCallsWithPermission } = await import('./smartAccount.js');
+        const account = await makeAccount();
+
+        await account.sendCalls([{ to: RECIPIENT }], { permissionId: PERMISSION_ID });
+
+        // Arg 8 is the spender-level approval: it cannot go inside the permission
+        // batch, whose selector check would reject `approve`.
+        expect(vi.mocked(sendCallsWithPermission).mock.calls[0][8]).toEqual(expectedApproval());
+    });
+
+    it('sizes a permission send over the permission-manager call, not the raw calls', async () => {
+        const account = await makeAccount();
+
+        await account.sendCalls([{ to: RECIPIENT }], { permissionId: PERMISSION_ID });
+
+        // The userOp the ceiling is drawn from has to be the one that goes out.
+        // Estimating over the raw call missed the wrapper's signature verification
+        // and spend accounting, so the approved ceiling could land under what the
+        // paymaster then charges.
+        const estimated = prepareUserOperation.mock.calls[0][0].calls;
+        expect(estimated).toHaveLength(2);
+        expect(estimated[1]).toEqual(PERMISSION_CALL);
+        expect(estimated).not.toContainEqual(expect.objectContaining({ to: RECIPIENT }));
+    });
+
+    it('throws rather than sending unapproved when the fee cannot be priced', async () => {
+        const { fetchTokenQuotes } = await import('./erc20Paymaster.js');
+        const { sendCalls } = await import('./smartAccount.js');
+        vi.mocked(fetchTokenQuotes).mockRejectedValue(new Error('quote endpoint down'));
+
+        const account = await makeAccount();
+
+        // Swallowing this used to let the userOp reach the ERC-20 paymaster with
+        // no allowance behind it, which it cannot settle — the same generic
+        // on-chain refusal the whole fix exists to remove.
+        await expect(account.sendCalls([{ to: RECIPIENT }])).rejects.toThrow(
+            /Could not size the ERC-20 paymaster approval/
+        );
+        expect(sendCalls).not.toHaveBeenCalled();
+    });
+
+    it('does not carry the configured context to a paymaster named by override', async () => {
+        const { sendCalls } = await import('./smartAccount.js');
+        const account = await makeAccount();
+
+        // A url-only override names a different paymaster. Its context is the
+        // caller's business; the configured `{ token: USDC }` belongs to the one
+        // it was written for and must not ride along.
+        await account.sendCalls([{ to: RECIPIENT }], undefined, 'https://sponsor.example/rpc');
+
+        const call = vi.mocked(sendCalls).mock.calls[0];
+        expect(call[3]).toBe('https://sponsor.example/rpc');
+        expect(call[4]).toBeUndefined();
     });
 });

@@ -7,6 +7,7 @@ import {
     sendTransaction as sendSmartAccountTransaction,
     sendCalls as sendSmartAccountCalls,
     sendCallsWithPermission as sendSmartAccountCallsWithPermission,
+    buildPermissionManagerCall,
     estimateUserOpGas,
     estimateUserOpGasWithPermission,
     calculateGas,
@@ -35,6 +36,7 @@ import {
     grantPermissions as grantSmartAccountPermissions,
     revokePermission as revokeSmartAccountPermission,
     getPermissionFromRelay,
+    relayPermissionToPermission,
     buildGrantPermissionCall,
     buildRevokePermissionCall,
     type PermissionsDetail,
@@ -847,14 +849,7 @@ export class Account {
             data: call.data,
         }));
 
-        // If using JAW ERC-20 paymaster, create approval call if needed
         const paymaster = this.resolveEffectivePaymaster(paymasterUrlOverride, paymasterContextOverride);
-        const approvalCall = await this.createErc20ApprovalCall(
-            paymaster.url,
-            paymaster.context,
-            formattedCalls,
-            smartAccount
-        );
 
         // Don't pass localAccount when overriding address — target is a standard smart account, not EIP-7702
         const localAccount = isOverride ? undefined : (this._localAccount ?? undefined);
@@ -863,10 +858,30 @@ export class Account {
 
         if (options?.permissionId) {
             // Execute through permission manager.
+            //
+            // The permission-manager call is built here rather than downstream so
+            // the ERC-20 approval can be sized over it. What goes out is the
+            // wrapper, not the raw calls, and its signature verification and spend
+            // accounting cost gas the raw calls do not — sizing over the raw calls
+            // approves a ceiling under what the paymaster then charges. It is
+            // handed down so the permission is still fetched once and the sized
+            // userOp is the sent one.
+            const permission = relayPermissionToPermission(
+                await getPermissionFromRelay(options.permissionId, this._apiKey)
+            );
+            const permissionCall = buildPermissionManagerCall(permission, formattedCalls);
+
             // The approval call must be placed at the spender level (alongside the
             // permission manager call), not inside the permission batch — the
             // permission manager validates each call's selector and would reject
             // the approve selector.
+            const approvalCall = await this.createErc20ApprovalCall(
+                paymaster.url,
+                paymaster.context,
+                [permissionCall],
+                smartAccount
+            );
+
             result = await sendSmartAccountCallsWithPermission(
                 smartAccount,
                 formattedCalls,
@@ -876,10 +891,17 @@ export class Account {
                 paymaster.url,
                 paymaster.context,
                 localAccount,
-                approvalCall ?? undefined
+                approvalCall ?? undefined,
+                permissionCall
             );
         } else {
             // Standard execution (EIP-7702 handled inside sendSmartAccountCalls)
+            const approvalCall = await this.createErc20ApprovalCall(
+                paymaster.url,
+                paymaster.context,
+                formattedCalls,
+                smartAccount
+            );
             const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
             result = await sendSmartAccountCalls(
                 smartAccount,
@@ -1307,13 +1329,19 @@ export class Account {
      * Resolve the paymaster a userOp will actually be sent to: an explicit
      * override first, then the chain config this Account was built with.
      *
-     * Mirrors `getBundlerClient`'s own precedence, `||` included, because the two
-     * must never disagree. They did: the approval decision read only the
-     * override while the userOp's paymaster was resolved from the chain, so a
-     * caller that configured the ERC-20 paymaster through `AccountConfig` got a
-     * userOp sent to it with no token in context and no approval behind it —
-     * which the paymaster cannot settle, since it has no allowance to draw its
-     * fee from.
+     * Mirrors `getBundlerClient`'s own precedence, because the two must never
+     * disagree. They did: the approval decision read only the override while the
+     * userOp's paymaster was resolved from the chain, so a caller that configured
+     * the ERC-20 paymaster through `AccountConfig` got a userOp sent to it with
+     * no token in context and no approval behind it — which the paymaster cannot
+     * settle, since it has no allowance to draw its fee from.
+     *
+     * The url decides for the pair, rather than each falling back on its own. A
+     * caller passing only a url override, on an account configured with a
+     * `paymasterContext`, would otherwise send that context to the other
+     * paymaster; a context belongs to the paymaster it was written for. The same
+     * pairing is applied in `getBundlerClient`, since leaving it here alone would
+     * let a `context: undefined` passed downstream fall back to the chain again.
      *
      * `gas` is deliberately left on the returned context: it sizes the approval.
      * `createPaymasterFunctions` strips it before anything goes on the wire.
@@ -1323,8 +1351,9 @@ export class Account {
         paymasterUrlOverride?: string,
         paymasterContextOverride?: Record<string, unknown>
     ): { url?: string; context?: Record<string, unknown> } {
-        const url = paymasterUrlOverride || this._chain.paymaster?.url;
-        const context = paymasterContextOverride || this._chain.paymaster?.context;
+        const fromOverride = Boolean(paymasterUrlOverride);
+        const url = fromOverride ? paymasterUrlOverride : this._chain.paymaster?.url;
+        const context = fromOverride ? paymasterContextOverride : this._chain.paymaster?.context;
         return {
             url,
             // An empty context is the same as none; normalising here keeps the
@@ -1417,9 +1446,19 @@ export class Account {
                     gasAmount = tokenCost;
                 }
             } catch (error) {
-                console.warn('Failed to estimate gas amount for ERC-20 paymaster:', error);
-                // If estimation fails, return null (no approval call)
-                return null;
+                // Returning null here would leave the userOp on its way to the
+                // ERC-20 paymaster with no approval behind it — the exact failure
+                // this path exists to prevent, and one that resurfaces as a
+                // generic on-chain refusal naming none of this. Only the JAW
+                // ERC-20 paymaster reaches here, and it cannot settle without an
+                // allowance, so there is no send worth attempting.
+                throw new Error(
+                    `Could not size the ERC-20 paymaster approval for token ${tokenAddress} on chain ${this._chain.id}: ` +
+                        `${error instanceof Error ? error.message : String(error)}. ` +
+                        'Pass `gas` in the paymaster context to size the approval yourself, ' +
+                        'or send without the ERC-20 paymaster.',
+                    { cause: error }
+                );
             }
         }
 

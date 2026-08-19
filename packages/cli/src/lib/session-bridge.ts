@@ -48,7 +48,17 @@ function resolvePaymaster(
   // A chain the registry does not cover has no token to name, so fall back to
   // the unsponsored path rather than engaging a paymaster that must fail.
   const asset = usdcForNetwork(`eip155:${options.chainId}`);
-  if (!asset) return {};
+  if (!asset) {
+    // Say so rather than falling through quietly: the userOp goes out
+    // unsponsored, and the failure the user eventually sees is about native
+    // funds and mentions none of this. stderr, so stdio MCP framing is untouched.
+    console.warn(
+      `[jaw] No USDC in the x402 asset registry for chain ${options.chainId}, so no ERC-20 paymaster ` +
+        'can be engaged. Gas will come out of the account\u2019s native balance. ' +
+        'Set `paymasters` in your config to sponsor this chain.'
+    );
+    return {};
+  }
 
   const url = new URL(JAW_ERC20_PAYMASTER_URL);
   url.searchParams.set('chainId', String(options.chainId));
