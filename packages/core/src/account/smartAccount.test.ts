@@ -74,8 +74,12 @@ vi.mock('viem/account-abstraction', () => ({
 }));
 
 import { getCode, readContract } from 'viem/actions';
+import { http } from 'viem';
+import { createBundlerClient, createPaymasterClient } from 'viem/account-abstraction';
 import { toJustanAccount } from './toJustanAccount.js';
-import { createSmartAccountForAddress } from './smartAccount.js';
+import { createPaymasterFunctions } from './paymaster.js';
+import { getPermissionFromRelay, encodeExecuteBatchWithPermission } from '../rpc/permissions.js';
+import { createSmartAccountForAddress, getBundlerClient, sendCallsWithPermission } from './smartAccount.js';
 
 const MOCK_TARGET_ADDRESS = '0x1234567890123456789012345678901234567890' as Address;
 const MOCK_PUBLIC_KEY =
@@ -198,5 +202,111 @@ describe('createSmartAccountForAddress', () => {
         await expect(
             createSmartAccountForAddress(MOCK_TARGET_ADDRESS, MOCK_LOCAL_ACCOUNT, MOCK_BUNDLER_CLIENT)
         ).rejects.toThrow(`Signer is not an owner on account ${MOCK_TARGET_ADDRESS}`);
+    });
+});
+
+// The url and the context used to resolve through two independent `||`, so they
+// could come from different sources: a caller overriding only the url, on a chain
+// configured with a context, sent that context to the other paymaster. Pairing
+// this in `Account` alone would not hold — a `context: undefined` passed down
+// here fell back to the chain's again.
+describe('getBundlerClient — paymaster resolution', () => {
+    const CHAIN = {
+        id: 1,
+        rpcUrl: 'https://rpc.example',
+        paymaster: { url: 'https://configured.example', context: { token: '0xUSDC' } },
+    } as never;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(createBundlerClient).mockReturnValue({} as never);
+        vi.mocked(createPaymasterClient).mockReturnValue({} as never);
+    });
+
+    // The context is the 4th argument to createPaymasterFunctions.
+    const contextSentToPaymaster = () => vi.mocked(createPaymasterFunctions).mock.calls[0][3];
+
+    it('takes both halves from the chain when no override is given', () => {
+        getBundlerClient(CHAIN);
+
+        expect(http).toHaveBeenCalledWith('https://configured.example');
+        expect(contextSentToPaymaster()).toEqual({ token: '0xUSDC' });
+    });
+
+    it('takes both halves from the override when one is given', () => {
+        getBundlerClient(CHAIN, 'https://override.example', { sponsorshipPolicyId: 'sp_1' });
+
+        expect(http).toHaveBeenCalledWith('https://override.example');
+        expect(contextSentToPaymaster()).toEqual({ sponsorshipPolicyId: 'sp_1' });
+    });
+
+    it('does not carry the chain context to a paymaster named by override', () => {
+        getBundlerClient(CHAIN, 'https://override.example');
+
+        expect(http).toHaveBeenCalledWith('https://override.example');
+        expect(contextSentToPaymaster()).toBeUndefined();
+    });
+
+    it('reads an empty url override as no paymaster, not as no override', () => {
+        getBundlerClient(CHAIN, '');
+
+        expect(createPaymasterClient).not.toHaveBeenCalled();
+    });
+});
+
+// The ERC-20 approval is sized over the permission-manager call the caller builds
+// with `buildPermissionManagerCall`. That only means anything if the call it sized
+// is the one that goes out, rather than one re-encoded here.
+describe('sendCallsWithPermission — the sized call is the sent one', () => {
+    const CHAIN = { id: 1, rpcUrl: 'https://rpc.example' } as never;
+    const PERMISSION_ID = '0xabc123' as Hex;
+    const CALLS = [{ to: '0x1234567890123456789012345678901234567890' as Address }];
+    const APPROVAL = {
+        to: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as Address,
+        value: 0n,
+        data: '0xapprove' as Hex,
+    };
+    const PERMISSION_CALL = {
+        to: '0x0000000000000000000000000000000000009999' as Address,
+        value: 0n,
+        data: '0xbeefbeef' as Hex,
+    };
+
+    let sendUserOperation: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        sendUserOperation = vi.fn().mockResolvedValue('0xuserophash');
+        vi.mocked(createBundlerClient).mockReturnValue({ sendUserOperation } as never);
+        vi.mocked(encodeExecuteBatchWithPermission).mockReturnValue('0xencodedhere' as Hex);
+    });
+
+    it('sends the caller-built permission call, without fetching the permission twice', async () => {
+        await sendCallsWithPermission(
+            {} as never,
+            CALLS,
+            CHAIN,
+            PERMISSION_ID,
+            'test-key',
+            undefined,
+            undefined,
+            undefined,
+            APPROVAL,
+            PERMISSION_CALL
+        );
+
+        expect(getPermissionFromRelay).not.toHaveBeenCalled();
+        // Approval first, at the spender level: the permission manager checks each
+        // call in its batch against the permission and would reject `approve`.
+        expect(sendUserOperation.mock.calls[0][0].calls).toEqual([APPROVAL, PERMISSION_CALL]);
+    });
+
+    it('builds the permission call itself when the caller passed none', async () => {
+        await sendCallsWithPermission({} as never, CALLS, CHAIN, PERMISSION_ID, 'test-key');
+
+        expect(getPermissionFromRelay).toHaveBeenCalledWith(PERMISSION_ID, 'test-key');
+        expect(sendUserOperation.mock.calls[0][0].calls).toEqual([
+            { to: '0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8', value: 0n, data: '0xencodedhere' },
+        ]);
     });
 });

@@ -23,6 +23,7 @@ export interface WSBridgeConfig {
   chainId: number;
   ens?: string;
   paymasterUrl?: string;
+  paymasterContext?: Record<string, unknown>;
 }
 
 export interface WSBridgeOptions {
@@ -36,6 +37,28 @@ export interface WSBridgeOptions {
   publicKeyHex: string;
   /** Browser's ECDH public key (hex). Null if new session (key exchange needed). */
   peerPublicKeyHex: string | null;
+}
+
+/**
+ * The `init` payload the CLI hands the browser once the shared secret exists.
+ *
+ * A function rather than an object literal inside the handshake so what crosses
+ * the bridge can be asserted without standing up a relay and a socket.
+ *
+ * `paymasterContext` travels with its url or not at all. The two name one
+ * paymaster between them, and the browser resolves a url of its own when none
+ * arrives — a context sent alone would be applied to whichever paymaster that
+ * turns out to be, which is the divergence the SDK-side resolution just closed.
+ */
+export function buildInitPayload(config: WSBridgeConfig): Record<string, unknown> {
+  return {
+    type: 'init',
+    apiKey: config.apiKey,
+    chainId: config.chainId,
+    ens: config.ens,
+    paymasterUrl: config.paymasterUrl,
+    ...(config.paymasterUrl && config.paymasterContext ? { paymasterContext: config.paymasterContext } : {}),
+  };
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -135,13 +158,7 @@ export class WSBridge {
 
       const sendEncryptedInit = async () => {
         if (!this.sharedSecret) return;
-        const envelope = await encryptMessage(this.sharedSecret, {
-          type: 'init',
-          apiKey: this.config.apiKey,
-          chainId: this.config.chainId,
-          ens: this.config.ens,
-          paymasterUrl: this.config.paymasterUrl,
-        });
+        const envelope = await encryptMessage(this.sharedSecret, buildInitPayload(this.config));
         this.sendRaw(ws, JSON.stringify({ type: 'encrypted', ...envelope }));
       };
 

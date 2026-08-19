@@ -39,8 +39,6 @@ export default class SessionRevoke extends BaseCommand {
     // Active session — revoke on-chain
     const config = loadConfig();
     const apiKey = this.resolveApiKey(flags);
-    const pm = config.paymasters?.[sessionConfig.chainId];
-
     if (!flags.quiet) {
       this.log('Opening browser to revoke permission...');
     }
@@ -50,7 +48,6 @@ export default class SessionRevoke extends BaseCommand {
       apiKey,
       chainId: sessionConfig.chainId,
       ens: config.ens,
-      paymasterUrl: pm?.url,
     });
 
     try {

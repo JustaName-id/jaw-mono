@@ -78,13 +78,11 @@ export default class RpcCall extends BaseCommand {
         this.log(`Sending ${method} (session mode)...`);
       }
     } else {
-      const pm = config.paymasters?.[chainId];
       bridge = await getBridge({
         keysUrl: config.keysUrl,
         apiKey,
         chainId,
         ens: config.ens,
-        paymasterUrl: pm?.url,
         timeout: flags.timeout * 1000,
       });
 

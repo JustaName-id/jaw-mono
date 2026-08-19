@@ -236,3 +236,71 @@ describe('SessionBridge paymaster resolution', () => {
     );
   });
 });
+
+// The url alone was never enough. An ERC-20 paymaster has to be told which token
+// it is paid in: the SDK sizes and emits the `approve` from that address, and
+// without it the userOp arrives with no allowance behind it and cannot settle.
+// These follow the token into the SDK call rather than stopping at the resolved
+// options, which is where the earlier cases stopped and why this went unnoticed.
+describe('SessionBridge paymaster token', () => {
+  const USDC_BASE_SEPOLIA = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+
+  type Resolved = { paymasterUrl?: string; paymasterContext?: Record<string, unknown> };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const optionsOf = (b: SessionBridge) => (b as any).options as Resolved;
+
+  beforeEach(async () => {
+    // The mock session state is module-level and mutable, so a describe that
+    // reaches the SDK has to restore it — the address-mismatch case above
+    // otherwise leaves the derived account pointing somewhere else.
+    mockAccountAddress = '0xSession';
+    mockExpiry = FUTURE_EXPIRY;
+    mockMode = undefined;
+    vi.clearAllMocks();
+    const { loadConfig } = await import('./config.js');
+    vi.mocked(loadConfig).mockReturnValue({});
+  });
+
+  it('names USDC on the default paymaster so core can size the approval', () => {
+    const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 84532 });
+    expect(optionsOf(bridge).paymasterContext?.token).toBe(USDC_BASE_SEPOLIA);
+  });
+
+  it('hands the token to the SDK, not just to its own options', async () => {
+    const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 84532 });
+    await bridge.request('eth_requestAccounts');
+
+    expect(Account.fromLocalAccount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paymasterContext: { token: USDC_BASE_SEPOLIA },
+      }),
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  // Engaging the ERC-20 paymaster without a token to name guarantees a failed
+  // userOp, which is strictly worse than the unsponsored path.
+  it('leaves the paymaster unset on a chain the registry does not cover', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 999999 });
+
+    expect(optionsOf(bridge).paymasterUrl).toBeUndefined();
+    expect(optionsOf(bridge).paymasterContext).toBeUndefined();
+    // Falling back quietly leaves the user with a later failure about native
+    // funds that names none of this.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('999999'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('native balance'));
+    warn.mockRestore();
+  });
+
+  // A user bringing their own paymaster owns its context; we must not inject USDC.
+  it('does not inject a token into a configured paymaster', async () => {
+    const { loadConfig } = await import('./config.js');
+    vi.mocked(loadConfig).mockReturnValue({
+      paymasters: { 84532: { url: 'https://api.pimlico.io/v2/84532/rpc?apikey=x', context: { mode: 'SPONSORED' } } },
+    });
+    const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 84532 });
+    expect(optionsOf(bridge).paymasterContext).toEqual({ mode: 'SPONSORED' });
+  });
+});
