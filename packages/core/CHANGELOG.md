@@ -1,3 +1,13 @@
+## 1.2.2 (2026-08-19)
+
+### 🩹 Fixes
+
+- **ui:** measure asset preview with viem's traceAssetChanges ([#270](https://github.com/JustaName-id/jaw-mono/pull/270))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 1.2.1 (2026-08-19)
 
 ### 🩹 Fixes
