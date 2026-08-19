@@ -162,7 +162,7 @@ export const getBundlerClient = (
     // come from different sources: a caller passing only a url override, on an
     // account configured with `paymasterContext`, would send that context to the
     // other paymaster. A context belongs to the paymaster it was written for.
-    const fromOverride = Boolean(paymasterUrlOverride);
+    const fromOverride = paymasterUrlOverride !== undefined;
     const effectivePaymasterUrl = fromOverride ? paymasterUrlOverride : chain.paymaster?.url;
     const effectivePaymasterContext = fromOverride ? paymasterContextOverride : chain.paymaster?.context;
 
@@ -279,7 +279,7 @@ async function prepareEip7702Calls(
  * Formats raw calls and applies EIP-7702 preparation when a localAccount is present.
  * For non-7702 accounts (no localAccount), just formats the calls.
  */
-async function prepareCallsForExecution(
+export async function prepareCallsForExecution(
     smartAccount: SmartAccount,
     calls: Array<{ to: Address; value?: bigint; data?: Hex }>,
     chain: Chain,

@@ -34,6 +34,9 @@ vi.mock('./smartAccount.js', () => ({
     sendTransaction: vi.fn(),
     sendCalls: vi.fn(),
     sendCallsWithPermission: vi.fn(),
+    // Passthrough: the 7702 prep adds nothing on a plain account, and what the
+    // estimate is built over is what the assertions below read.
+    prepareCallsForExecution: vi.fn(async (_account: unknown, calls: unknown) => ({ calls })),
     buildPermissionManagerCall: vi.fn().mockReturnValue({
         to: '0x0000000000000000000000000000000000009999',
         value: 0n,
@@ -1479,6 +1482,80 @@ describe('Account — ERC-20 paymaster approval', () => {
             /Could not size the ERC-20 paymaster approval/
         );
         expect(sendCalls).not.toHaveBeenCalled();
+    });
+
+    it('throws rather than sending unapproved when the paymaster quotes no price', async () => {
+        const { fetchTokenQuotes } = await import('./erc20Paymaster.js');
+        const { sendCalls } = await import('./smartAccount.js');
+        // An empty list sizes nothing, same as a thrown request does.
+        vi.mocked(fetchTokenQuotes).mockResolvedValue([]);
+
+        const account = await makeAccount();
+
+        await expect(account.sendCalls([{ to: RECIPIENT }])).rejects.toThrow(
+            /Could not size the ERC-20 paymaster approval/
+        );
+        expect(sendCalls).not.toHaveBeenCalled();
+    });
+
+    it('approves the spender the quote names', async () => {
+        const OTHER_PAYMASTER = '0x00000000000000000000000000000000000000aa' as `0x${string}`;
+        const { fetchTokenQuotes } = await import('./erc20Paymaster.js');
+        const { sendCalls } = await import('./smartAccount.js');
+        vi.mocked(fetchTokenQuotes).mockResolvedValue([
+            {
+                tokenAddress: USDC,
+                paymasterAddress: OTHER_PAYMASTER,
+                exchangeRate: 1_000_000_000_000_000_000n,
+                postOpGas: 40_000n,
+            },
+        ] as never);
+
+        const account = await makeAccount();
+        await account.sendCalls([{ to: RECIPIENT }]);
+
+        // Approving one address while another one charges leaves the paymaster
+        // unable to settle, which is the failure the approval exists to prevent.
+        expect(vi.mocked(sendCalls).mock.calls[0][1][0]).toEqual({
+            to: USDC,
+            value: 0n,
+            data: encodeFunctionData({
+                abi: erc20Abi,
+                functionName: 'approve',
+                args: [OTHER_PAYMASTER, CEILING],
+            }),
+        });
+    });
+
+    it('sizes over what the send prepares, owner setup included', async () => {
+        const { prepareCallsForExecution } = await import('./smartAccount.js');
+        const OWNER_SETUP = { to: RECIPIENT, value: 0n, data: '0xaddowner' as `0x${string}` };
+        // What a 7702 account not yet owning the permission manager gets prepended
+        // at send time; its gas belongs in the ceiling too.
+        // Once, so the passthrough the other cases rely on is not left replaced:
+        // vitest is not configured to reset implementations between tests.
+        vi.mocked(prepareCallsForExecution).mockImplementationOnce(
+            async (_account: unknown, calls: unknown) => ({ calls: [OWNER_SETUP, ...(calls as unknown[])] }) as never
+        );
+
+        const account = await makeAccount();
+        await account.sendCalls([{ to: RECIPIENT }]);
+
+        expect(prepareUserOperation.mock.calls[0][0].calls[0]).toEqual(OWNER_SETUP);
+    });
+
+    it('refuses to revoke under the ERC-20 paymaster when the permission cannot be fetched', async () => {
+        const { getPermissionFromRelay, revokePermission } = await import('../rpc/permissions.js');
+        // No permission means no call to size the approval over, and an empty
+        // list walks past the estimation rather than failing it.
+        vi.mocked(getPermissionFromRelay).mockRejectedValue(new Error('relay down'));
+
+        const account = await makeAccount();
+
+        await expect(account.revokePermission(PERMISSION_ID)).rejects.toThrow(
+            /Could not fetch permission .* to size the ERC-20 paymaster approval/
+        );
+        expect(revokePermission).not.toHaveBeenCalled();
     });
 
     it('does not carry the configured context to a paymaster named by override', async () => {

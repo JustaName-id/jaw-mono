@@ -246,6 +246,12 @@ describe('getBundlerClient — paymaster resolution', () => {
         expect(http).toHaveBeenCalledWith('https://override.example');
         expect(contextSentToPaymaster()).toBeUndefined();
     });
+
+    it('reads an empty url override as no paymaster, not as no override', () => {
+        getBundlerClient(CHAIN, '');
+
+        expect(createPaymasterClient).not.toHaveBeenCalled();
+    });
 });
 
 // The ERC-20 approval is sized over the permission-manager call the caller builds
