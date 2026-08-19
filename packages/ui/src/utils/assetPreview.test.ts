@@ -150,6 +150,9 @@ type Outcome = Hex | 'revert';
 const ok = (returnData: Hex) => ({ status: '0x1', returnData, gasUsed: '0x0' });
 const failed = (returnData: Hex = '0x') => ({ status: '0x0', returnData, gasUsed: '0x0' });
 const outcome = (o: Outcome) => (o === 'revert' ? failed() : ok(o));
+/** A revert carrying an `Error(string)` reason, the shape `classifyRevert` reads. */
+const revertWith = (reason: string) =>
+  failed(concat(['0x08c379a0', encodeAbiParameters([{ type: 'string' }], [reason])]));
 
 interface Probe {
   to: Address;
@@ -489,19 +492,11 @@ function stubNode({ batchReverts = false } = {}) {
 
         if (simulations === 2) {
           const batch = batchReverts
-            ? [
-                failed(
-                  concat([
-                    '0x08c379a0',
-                    encodeAbiParameters([{ type: 'string' }], ['ERC20: transfer amount exceeds balance']),
-                  ])
-                ),
-                ok('0x'),
-              ]
+            ? [revertWith('ERC20: transfer amount exceeds balance'), ok('0x')]
             : [ok('0x'), ok('0x')];
           return [
             { number: block, calls: batch },
-            { number: block, calls: [ok(ETH_BALANCE)] }, // ETH post — unchanged, so no ETH row
+            { number: block, calls: [ok(ETH_BALANCE)] }, // ETH post, unchanged, so no ETH row
             { number: block, calls: [ok(word(1))] }, // NFT count post: 0 -> 1
             { number: block, calls: [failed()] }, // decimals() reverts
             { number: block, calls: [ok(str('ipfs://1'))] }, // ...but tokenURI answers
@@ -562,6 +557,147 @@ describe('simulateAssetChanges', () => {
 
     expect(result).toMatchObject({ willRevert: true, deltas: [], revertCause: 'balance' });
     expect(node.simulations()).toBe(2);
+  });
+});
+
+const ROUTER = '0x2626664c2603336e57b271c5c0b26f421741e481';
+const APPROVE = '0x095ea7b3' as Hex;
+const SWAP = '0x5ae401dc' as Hex;
+// `Approval(address,address,uint256)`. Emitted by the approve leg and ignored by discovery:
+// only a `Transfer` naming the account makes a token a candidate.
+const APPROVAL_TOPIC = '0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925';
+
+/** The token a `query(address,bytes)` probe names, read out of the first word of its calldata. */
+const staticTarget = (data: Hex) => `0x${data.slice(34, 74)}`.toLowerCase();
+
+const SWAP_TOKENS: Record<string, { post: Outcome; decimals: Outcome; tokenURI: Outcome; symbol: Outcome }> = {
+  [USDC.toLowerCase()]: { post: word(0), decimals: word(6), tokenURI: 'revert', symbol: str('USDC') },
+  // `decimals()` answers 0 and `tokenURI` reverts, so viem's `tokenURI_ || decimals_` guard
+  // reads the `0n` as falsy and reports `undefined`, so the row vanishes unless it is recovered.
+  [ZERO_DEC]: { post: word(42), decimals: word(0), tokenURI: 'revert', symbol: str('ZERO') },
+};
+const SWAP_PRE: Record<string, Hex> = { [USDC.toLowerCase()]: word(100_000_000), [ZERO_DEC]: word(0) };
+
+/**
+ * The batch this change exists for: an `approve` and a swap that only clears *because* of it.
+ * Before viem 2.55.16 discovery probed each call on its own against current state, so the swap
+ * reverted at the allowance check, which lost the token it pays out and took the preview with it.
+ *
+ * Three candidates come out of it: USDC (spent, and readable, so nothing probes it), a 0-decimal
+ * ERC-20 (received, and the shape viem reports as `decimals: undefined`), and the router, which
+ * viem adds for being a call target and which has to fall out for having no `balanceOf`.
+ *
+ * Answers are keyed off the token each probe names rather than its slot in viem's candidate list,
+ * so the fixture does not quietly freeze an ordering upstream is free to change. `sims` records
+ * the calldata of every block of every request, which is what makes "both calls got through"
+ * assertable at each of the three places the batch is handed over.
+ */
+function stubSwapNode({ swapReverts = false } = {}) {
+  const sims: (Hex | undefined)[][][] = [];
+  const client = createPublicClient({
+    chain: base,
+    transport: custom({
+      async request({ method, params }: { method: string; params: readonly unknown[] }) {
+        if (method === 'eth_blockNumber') return BLOCK_HEX;
+        if (method === 'eth_call') {
+          const [request] = params as [{ to?: Address; data: Hex }];
+          if (request.to === undefined) return ETH_BALANCE;
+          // The router has no `balanceOf`; empty data is not a balance, so it never becomes a row.
+          return SWAP_PRE[staticTarget(request.data)] ?? '0x';
+        }
+        if (method !== 'eth_simulateV1') throw new Error(`unexpected ${method}`);
+        const [{ blockStateCalls }, block] = params as [{ blockStateCalls: { calls: { data?: Hex }[] }[] }, string];
+        sims.push(blockStateCalls.map((b) => b.calls.map((c) => c.data)));
+        const probes = (calls: { data?: Hex }[], field: 'post' | 'decimals' | 'tokenURI' | 'symbol') =>
+          calls.map((c) => outcome(SWAP_TOKENS[staticTarget(c.data as Hex)]?.[field] ?? 'revert'));
+
+        if (sims.length === 1)
+          return [
+            {
+              number: block,
+              calls: [
+                {
+                  ...ok('0x'),
+                  logs: [{ address: USDC, topics: [APPROVAL_TOPIC, pad(ACCOUNT), pad(ROUTER)], data: word(0) }],
+                },
+                {
+                  ...ok('0x'),
+                  logs: [
+                    { address: USDC, topics: [TRANSFER_TOPIC, pad(ACCOUNT), pad(ROUTER)], data: word(100_000_000) },
+                    { address: ZERO_DEC, topics: [TRANSFER_TOPIC, pad(ROUTER), pad(ACCOUNT)], data: word(42) },
+                  ],
+                },
+              ],
+            },
+          ];
+
+        if (sims.length === 2)
+          return [
+            // The batch, plus the sentinel call viem appends and slices back off.
+            { number: block, calls: [ok('0x'), swapReverts ? revertWith('Too little received') : ok('0x'), ok('0x')] },
+            { number: block, calls: [ok(ETH_BALANCE)] }, // ETH post, unchanged, so no ETH row
+            { number: block, calls: probes(blockStateCalls[2].calls, 'post') },
+            { number: block, calls: probes(blockStateCalls[3].calls, 'decimals') },
+            { number: block, calls: probes(blockStateCalls[4].calls, 'tokenURI') },
+            { number: block, calls: probes(blockStateCalls[5].calls, 'symbol') },
+          ];
+
+        // Ours: [batch replay, metadata probes]. Only the 0-decimal token is a suspect.
+        return blockStateCalls.map((b, i) => ({
+          number: block,
+          calls: b.calls.map((c) => (i === 0 ? ok('0x') : c.data === ERC721_QUERY ? failed() : ok(word(0)))),
+        }));
+      },
+    }),
+  });
+  publicClient.current = client;
+  return { sims };
+}
+
+describe('simulateAssetChanges — dependent batch', () => {
+  const calls = [
+    { to: USDC as Address, data: APPROVE },
+    { to: ROUTER as Address, data: SWAP },
+  ];
+
+  it('reports both legs of an approve-then-swap, and drops the router', async () => {
+    stubSwapNode();
+
+    const result = await simulateAssetChanges({ chainId: base.id, account: ACCOUNT, calls });
+
+    expect(result.willRevert).toBe(false);
+    expect(result.deltas).toEqual([
+      expect.objectContaining({ symbol: 'USDC', decimals: 6, direction: 'out', amountFormatted: '100' }),
+      // Recovered: viem reported this one as `decimals: undefined`, which drops the row outright.
+      expect.objectContaining({ symbol: 'ZERO', decimals: 0, direction: 'in', amountFormatted: '42' }),
+    ]);
+    // The router emitted a log and is a call target, so viem measures it, but it answers no
+    // `balanceOf`, and a candidate without a balance must not reach the screen as a row.
+    expect(result.deltas.map((d) => d.address.toLowerCase())).not.toContain(ROUTER);
+  });
+
+  it('hands the whole batch to every simulation, not just its first call', async () => {
+    const node = stubSwapNode();
+
+    await simulateAssetChanges({ chainId: base.id, account: ACCOUNT, calls });
+
+    const [discovery, measurement, metadata] = node.sims;
+    expect(discovery[0]).toEqual([APPROVE, SWAP]);
+    expect(measurement[0]).toEqual([APPROVE, SWAP, undefined]);
+    // The replay is the reason the probes see post-batch state; a partial replay is a different
+    // chain state than the one the amounts were measured against.
+    expect(metadata[0]).toEqual([APPROVE, SWAP]);
+  });
+
+  it('reports a revert in a later call, not only in the first', async () => {
+    const node = stubSwapNode({ swapReverts: true });
+
+    const result = await simulateAssetChanges({ chainId: base.id, account: ACCOUNT, calls });
+
+    // The approve succeeds; reading only the first result would call this batch healthy and
+    // hand the user an asset list for a transaction that cannot land.
+    expect(result).toMatchObject({ willRevert: true, deltas: [], revertCause: 'other' });
+    expect(node.sims).toHaveLength(2);
   });
 });
 
