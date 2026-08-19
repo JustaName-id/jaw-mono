@@ -577,6 +577,41 @@ export async function createSmartAccount(
     });
 }
 
+/**
+ * Scan the owner slots of an account for `publicKey`, lowest index first.
+ *
+ * Bounded by `nextOwnerIndex`, not by `ownerCount`. `MultiOwnable` derives the
+ * count as `nextOwnerIndex - removedOwnersCount` and never reuses or compacts a
+ * removed slot, so after any removal the highest owners sit past the count.
+ * Removed slots read back empty and simply do not match.
+ *
+ * @returns the index of the owner, or undefined if it holds none.
+ */
+async function scanOwnerIndex({ address, client, publicKey }: FindOwnerIndexParams): Promise<number | undefined> {
+    const nextOwnerIndex = await readContract(client, {
+        address,
+        abi,
+        functionName: 'nextOwnerIndex',
+    });
+
+    const formatted = formatPublicKey(publicKey);
+
+    for (let i = 0; i < Number(nextOwnerIndex); i++) {
+        const owner = await readContract(client, {
+            address,
+            abi,
+            functionName: 'ownerAtIndex',
+            args: [BigInt(i)],
+        });
+
+        if (owner.toLowerCase() === formatted.toLowerCase()) {
+            return i;
+        }
+    }
+
+    return undefined;
+}
+
 export async function findOwnerIndex({ address, client, publicKey }: FindOwnerIndexParams): Promise<number> {
     const code = await getCode(client, {
         address,
@@ -588,34 +623,12 @@ export async function findOwnerIndex({ address, client, publicKey }: FindOwnerIn
     }
 
     try {
-        const ownerCount = await readContract(client, {
-            address,
-            abi,
-            functionName: 'ownerCount',
-        });
-
-        // Iterate from lowest index up and return early when found
-        for (let i = 0; i < Number(ownerCount); i++) {
-            const owner = await readContract(client, {
-                address,
-                abi,
-                functionName: 'ownerAtIndex',
-                args: [BigInt(i)],
-            });
-
-            const formatted = formatPublicKey(publicKey);
-            if (owner.toLowerCase() === formatted.toLowerCase()) {
-                return i;
-            }
-        }
+        return (await scanOwnerIndex({ address, client, publicKey })) ?? 0;
     } catch (error) {
         // If reading contract fails, return 0
         console.warn('Failed to read owner information:', error);
         return 0;
     }
-
-    // Owner not found, return 0
-    return 0;
 }
 
 /**
@@ -646,33 +659,22 @@ export async function createSmartAccountForAddress(
         throw standardErrors.rpc.invalidParams(`Account ${targetAddress} is not deployed`);
     }
 
-    const ownerCount = await readContract(bundlerClient, {
+    const ownerIndex = await scanOwnerIndex({
         address: targetAddress,
-        abi,
-        functionName: 'ownerCount',
+        client: bundlerClient,
+        publicKey: ownerBytes,
     });
 
-    const formatted = formatPublicKey(ownerBytes);
-
-    for (let i = 0; i < Number(ownerCount); i++) {
-        const owner = await readContract(bundlerClient, {
-            address: targetAddress,
-            abi,
-            functionName: 'ownerAtIndex',
-            args: [BigInt(i)],
-        });
-
-        if ((owner as string).toLowerCase() === formatted.toLowerCase()) {
-            return await toJustanAccount({
-                client: bundlerClient,
-                owners: [account, PERMISSIONS_MANAGER_ADDRESS],
-                ownerIndex: i,
-                address: targetAddress,
-            });
-        }
+    if (ownerIndex === undefined) {
+        throw standardErrors.rpc.invalidParams(`Signer is not an owner on account ${targetAddress}`);
     }
 
-    throw standardErrors.rpc.invalidParams(`Signer is not an owner on account ${targetAddress}`);
+    return await toJustanAccount({
+        client: bundlerClient,
+        owners: [account, PERMISSIONS_MANAGER_ADDRESS],
+        ownerIndex,
+        address: targetAddress,
+    });
 }
 
 export async function createSmartAccountEip7702(
