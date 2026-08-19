@@ -18,6 +18,7 @@ import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { EmbeddedShell } from '../components/EmbeddedShell';
 import { CryptoHandler } from '../lib/crypto-handler';
 import { applyAccountHint } from '../lib/account-hint';
+import { iframeBlocksPasskeyCreation } from '../lib/embedded-ui';
 import { isSilentContinueAsConnect } from '../lib/continue-as-connect';
 import { sendSessionHandoff, registerSessionHandoffListener } from '../lib/session-handoff';
 import type { SessionAuthState } from '../lib/session-manager';
@@ -25,7 +26,7 @@ import type { RPCRequestMessage, RPCResponseMessage, MessageID } from '@jaw.id/c
 import { RECONNECT_REQUIRED } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
-import { isSiweMessage, parseSiweMessage, getSiweOriginWarning } from '@jaw.id/ui';
+import { isSiweMessage, getSiweOriginWarning, getSiweOriginWarningFromMessage, OnboardingSkeleton } from '@jaw.id/ui';
 import { applyDappTheme } from '../lib/apply-dapp-theme';
 import { createSiweMessage } from 'viem/siwe';
 import { ChainId } from '@justaname.id/sdk';
@@ -55,6 +56,14 @@ type PopupState =
 // comfortable headroom.
 const CLOSE_DELAY_MS = 300;
 
+// After a signature is delivered, hold the "Signed ✓" confirmation on screen this
+// long before the dialog closes. This delays ONLY the close — the signature is
+// already posted to the dApp via `await onApprove(...)` before the hold — so the
+// dApp never waits on the animation. The hold rides on the cancelable close timer
+// rather than an awaited sleep, so a new request arriving mid-tick simply cancels
+// it (see finishDeliveredFlow).
+const SIGNED_TICK_MS = 850;
+
 export default function KeysJawIdApp() {
   // Single communicator instance, shared by the embedded shell (presentation
   // + iframe escape hatches) and the app content (message flow).
@@ -83,6 +92,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   const [state, setState] = useState<PopupState>('initializing');
   const [config, setConfig] = useState<PopupConfig | null>(null);
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
+  // Parent-owned so the "Signed ✓" tick appears only AFTER onApprove confirms delivery,
+  // never before. Reset per request (below) so a prior tick can't bleed into the next.
+  const [signDelivered, setSignDelivered] = useState(false);
   const [currentAccount, setCurrentAccount] = useState<PasskeyAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ensConfig, setEnsConfig] = useState<string | undefined>(undefined);
@@ -99,7 +111,20 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   // switch it can otherwise never see. UI pointer only — auth state still
   // comes exclusively from the passkey ceremony.
   const [hintedCredentialId, setHintedCredentialId] = useState<string | null>(null);
+  // This popup was opened by the SDK because the embedded iframe couldn't run
+  // WebAuthn create() (the reason WE sent rides back on the URL) — the user
+  // was creating an account, so open on the create view.
+  const [startInCreate] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('switch-reason') === 'webauthn-unsupported'
+  );
   const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
+
+  // Reset the tick on each new request so a prior success can't bleed into the next.
+  useEffect(() => {
+    setSignDelivered(false);
+  }, [pendingRequest]);
 
   const configRef = useRef<PopupConfig | null>(null);
   // Mirrors `state` so the (once-registered) message listener can read the
@@ -109,6 +134,11 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   // Holds the pending success→close timer so a new flow can cancel a previous
   // flow's auto-close (the embedded iframe stays mounted across flows).
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True once this flow's response has been delivered — the flow is finished even
+  // though its modal lingers to show the delivered tick. `state` cannot express
+  // this: 'success' is the terminal marker AND what unmounts the modal, so setting
+  // it would cut the tick short. Cleared when the next request takes over.
+  const flowDoneRef = useRef(false);
 
   /**
    * Schedule the dialog close after a flow completes. Cancelable: starting a new
@@ -126,10 +156,35 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     [communicator]
   );
 
+  /**
+   * Close out a flow whose response has already been delivered, holding the tick on
+   * screen first.
+   *
+   * Marks the flow done SYNCHRONOUSLY and lets the (cancelable) close timer carry the
+   * delay. Nothing is awaited, so there is no continuation that could outlive the flow
+   * and write over a newer request's screen — and if a new request does arrive during
+   * the hold, the listener cancels this timer and resets, which is exactly right.
+   */
+  const finishDeliveredFlow = useCallback(() => {
+    setSignDelivered(true);
+    flowDoneRef.current = true;
+    scheduleClose(SIGNED_TICK_MS + CLOSE_DELAY_MS);
+  }, [scheduleClose]);
+
   // Latest auth refetch for the (once-registered) handoff listener below —
   // same stale-closure guard as stateRef.
   const refetchAuthRef = useRef(authQuery.refetch);
   refetchAuthRef.current = authQuery.refetch;
+
+  // Safari cannot CREATE passkeys inside the cross-origin iframe (get() works,
+  // so "Continue as" stays embedded). The create action must escape to the
+  // popup synchronously within the user's click — an attempt-then-switch loses
+  // the transient activation and Safari blocks the popup window.
+  const createEscapesToPopup = communicator.isEmbedded() && iframeBlocksPasskeyCreation();
+  const switchToPopupForCreate = useCallback(
+    () => communicator.requestSwitchToPopup('webauthn-unsupported'),
+    [communicator]
+  );
 
   /**
    * Popup context only: after the user approves a connection, hand the
@@ -170,6 +225,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           username: authState.username,
           credentialId: authState.credentialId,
           publicKey: authState.publicKey,
+          address: authState.address,
           creationDate: new Date().toISOString(),
           isImported: false,
         }),
@@ -293,13 +349,13 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           clearTimeout(closeTimerRef.current);
           closeTimerRef.current = null;
         }
-        // Terminal-only reset is sufficient: the SDK serializes requests (it
-        // awaits each response), and keys sets the terminal state synchronously
-        // right after sending the response — before the SDK can round-trip and
-        // dispatch the next request. So by the time a new request arrives, the
-        // prior flow is always already terminal. (A non-terminal in-progress
-        // flow, e.g. a cold connect's passkey screen, must NOT be reset.)
-        if (stateRef.current === 'success' || stateRef.current === 'error') {
+        // Reset only a FINISHED flow — an in-progress one (e.g. a cold connect's
+        // passkey screen) must survive. Finished means either a terminal `state`, or
+        // `flowDoneRef` for a flow that delivered its response and is only still on
+        // screen to show the tick. The SDK does not serialize requests, so a new one
+        // can genuinely arrive mid-tick; that is the case flowDoneRef covers.
+        if (stateRef.current === 'success' || stateRef.current === 'error' || flowDoneRef.current) {
+          flowDoneRef.current = false;
           setError(null);
           setPendingRequest(null);
           setState('processing');
@@ -684,11 +740,19 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       }
 
       return (
+        // Keyed by request: the embedded iframe stays mounted across flows, so an
+        // unkeyed modal is the SAME React instance for the next request and keeps
+        // internal state (isProcessing, status) from the previous flow — which
+        // opened request #2 directly on the processing screen. The key forces a
+        // fresh mount per request, like the popup's fresh page used to guarantee.
         <TransactionModal
+          key={pendingRequest.requestId}
           transactionRequest={txData}
           chain={pendingRequest.chain as chain}
           apiKey={apiKey}
           origin={currentOrigin || undefined}
+          appName={pendingRequest.metadata?.appName}
+          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
           onSuccess={async (result: TransactionResult) => {
             setState('processing');
             try {
@@ -767,13 +831,13 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
       // Render SiweModal for SIWE messages, SignatureModal for regular messages
       if (isSiwe) {
-        const parsedSiwe = parseSiweMessage(messageToSign);
-        const siweWarning = getSiweOriginWarning(pendingRequest.origin, {
-          domain: parsedSiwe?.domain,
-          uri: parsedSiwe?.uri,
-        });
+        // Deliberately not gated on a successful parse: this warning carries the mandatory
+        // acknowledgement checkbox, and a message can detect as SIWE while failing to parse.
+        const siweWarning = getSiweOriginWarningFromMessage(pendingRequest.origin, messageToSign);
         return (
+          // Keyed by request — see TransactionModal above.
           <SiweModal
+            key={pendingRequest.requestId}
             origin={pendingRequest.origin}
             message={messageToSign}
             address={address}
@@ -782,13 +846,14 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             appName={pendingRequest.metadata?.appName || 'dApp'}
             appLogoUrl={pendingRequest.metadata?.appLogoUrl}
             warningMessage={siweWarning}
-            onSuccess={async (signature, message) => {
+            isSuccess={signDelivered}
+            onSuccess={async (signature) => {
               setState('processing');
               try {
                 await pendingRequest.onApprove(signature);
                 debugLog('✅ SIWE signature sent successfully');
-                setState('success');
-                scheduleClose(CLOSE_DELAY_MS);
+                // Delivery confirmed — show the tick, then close.
+                finishDeliveredFlow();
               } catch (err) {
                 console.error('❌ Failed to send SIWE signature:', err);
                 setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -813,7 +878,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       }
 
       return (
+        // Keyed by request — see TransactionModal above.
         <SignatureModal
+          key={pendingRequest.requestId}
           origin={pendingRequest.origin}
           // open={true}
           // onOpenChange={() => { }}
@@ -821,13 +888,16 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           address={address}
           chain={pendingRequest.chain as chain}
           apiKey={apiKey}
-          onSuccess={async (signature, message) => {
+          appName={pendingRequest.metadata?.appName}
+          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
+          isSuccess={signDelivered}
+          onSuccess={async (signature) => {
             setState('processing');
             try {
               await pendingRequest.onApprove(signature);
               debugLog('✅ Signature sent successfully');
-              setState('success');
-              scheduleClose(CLOSE_DELAY_MS);
+              // Delivery confirmed — show the tick, then close.
+              finishDeliveredFlow();
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -886,19 +956,26 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       }
 
       return (
+        // Keyed by request — see TransactionModal above. Eip712Modal's isProcessing
+        // never resets on the success path, so instance reuse showed the next
+        // request a permanent "Signing..." screen.
         <Eip712Modal
+          key={pendingRequest.requestId}
           origin={pendingRequest.origin}
           typedDataJson={typedDataJson}
           address={address}
           chain={pendingRequest.chain as chain}
           apiKey={apiKey}
+          appName={pendingRequest.metadata?.appName}
+          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
+          isSuccess={signDelivered}
           onSuccess={async (signature) => {
             setState('processing');
             try {
               await pendingRequest.onApprove(signature);
               debugLog('✅ Typed data signature sent successfully');
-              setState('success');
-              scheduleClose(CLOSE_DELAY_MS);
+              // Delivery confirmed — show the tick, then close.
+              finishDeliveredFlow();
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -935,11 +1012,15 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       };
 
       return (
+        // Keyed by request — see TransactionModal above.
         <PermissionModal
+          key={pendingRequest.requestId}
           permissionRequest={permissionRequestData}
           chain={pendingRequest.chain as chain}
           apiKey={apiKey || ''}
           origin={pendingRequest.origin}
+          appName={pendingRequest.metadata?.appName}
+          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
           onSuccess={async (result) => {
             setState('processing');
             try {
@@ -983,11 +1064,15 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       };
 
       return (
+        // Keyed by request — see TransactionModal above.
         <PermissionModal
+          key={pendingRequest.requestId}
           permissionRequest={permissionRequestData}
           chain={pendingRequest.chain as chain}
           apiKey={apiKey || ''}
           origin={pendingRequest.origin}
+          appName={pendingRequest.metadata?.appName}
+          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
           onSuccess={async (result) => {
             setState('processing');
             try {
@@ -1021,7 +1106,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     // Show unsupported method modal
     if (!!pendingRequest && pendingRequest?.type === SDKRequestType.UNSUPPORTED_METHOD) {
       return (
+        // Keyed by request — see TransactionModal above.
         <UnsupportedMethodModal
+          key={pendingRequest.requestId}
           origin={pendingRequest.origin}
           method={pendingRequest.method}
           appName={pendingRequest.metadata?.appName}
@@ -1040,17 +1127,19 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       );
     }
 
-    // Show loading while initializing or checking passkeys
+    // Pre-first-screen window: the transport handshake has acked (which is what
+    // reveals the embedded dialog) but we don't yet know whether this resolves
+    // to "Continue as" or account creation — that needs the handshake account
+    // hint resolved against the backend registry, a real roundtrip on a wiped
+    // storage partition. Render the shape of the card that follows rather than
+    // a captioned spinner: a distinct "Connecting to dApp… / SDK v1.1"
+    // interstitial used to flash here whenever a request beat the SDK's
+    // prewarm, and it both read as a separate screen and leaked the version.
     if (state === 'initializing' || state === 'passkey-check') {
       return (
-        <div className="flex min-h-screen items-center justify-center">
-          <div className="text-center">
-            <div className="border-primary mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2"></div>
-            <p className="text-muted-foreground">
-              {state === 'initializing' && 'Connecting to dApp...'}
-              {state === 'passkey-check' && 'Checking for passkeys...'}
-            </p>
-            {config && <p className="text-muted-foreground mt-2 text-sm">SDK v{config.version}</p>}
+        <div className="flex min-h-screen items-center justify-center p-4">
+          <div className="w-full max-w-md">
+            <OnboardingSkeleton />
           </div>
         </div>
       );
@@ -1130,6 +1219,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         <div className="flex min-h-screen items-center justify-center p-4">
           <div className="w-full max-w-md">
             <SignInScreen
+              // The same call the EmbeddedShell overlay tap makes — the SDK rejects the pending
+              // request; in a popup it closes the window. The X is a visible twin, not a new path.
+              onClose={() => communicator.requestClose('cancelled')}
               ensConfig={ensConfig}
               chainId={effectiveChainId}
               apiKey={apiKey}
@@ -1137,6 +1229,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
               origin={currentOrigin || undefined}
               preferredCredentialId={hintedCredentialId ?? undefined}
+              onCreateNewAccount={createEscapesToPopup ? switchToPopupForCreate : undefined}
+              startInCreate={startInCreate}
               onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
                   // Set the current account from the passed data
@@ -1197,6 +1291,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         <div className="flex min-h-screen items-center justify-center p-4">
           <div className="w-full max-w-md">
             <SignInScreen
+              // The same call the EmbeddedShell overlay tap makes — the SDK rejects the pending
+              // request; in a popup it closes the window. The X is a visible twin, not a new path.
+              onClose={() => communicator.requestClose('cancelled')}
               ensConfig={ensConfig}
               chainId={effectiveChainId}
               apiKey={apiKey}
@@ -1204,6 +1301,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
               origin={currentOrigin || undefined}
               preferredCredentialId={hintedCredentialId ?? undefined}
+              onCreateNewAccount={createEscapesToPopup ? switchToPopupForCreate : undefined}
+              startInCreate={startInCreate}
               onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
                   // Set the current account from the passed data
@@ -1345,7 +1444,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         });
 
         return (
+          // Keyed by request — see TransactionModal above.
           <SiweModal
+            key={pendingRequest.requestId}
             origin={pendingRequest.origin}
             message={siweMessage}
             address={walletAddress}
@@ -1353,8 +1454,10 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             appName={pendingRequest.metadata?.appName}
             appLogoUrl={pendingRequest.metadata?.appLogoUrl}
             warningMessage={siweWarning}
+            isSuccess={signDelivered}
             onSuccess={async (signature: string, message: string) => {
-              setState('processing');
+              // Connect owns its own post-delivery continuation below, so — unlike the
+              // standalone signing handlers — we intentionally don't switch to 'processing'.
               try {
                 debugLog('✅ User signed SIWE message');
 
@@ -1375,6 +1478,14 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
                 debugLog('✅ SIWE response:', response);
                 await pendingRequest.onApprove(response);
+                // Delivery confirmed — show the tick (held through the handoff + beat).
+                setSignDelivered(true);
+                // Marked here, NOT left to the finishDeliveredFlow() below: the handoff is awaited
+                // in between, and across that await the listener's reset guard sees neither a
+                // terminal state nor flowDoneRef, so a request arriving in the gap is not cleared.
+                // The continuation would then land on the new request's screen and close the popup
+                // with it unanswered.
+                flowDoneRef.current = true;
                 // Only after approval (never on mere authentication, which the
                 // user may still cancel): let the SDK persist the account hint
                 // dApp-side, so the next embedded visit can show "Continue as"
@@ -1385,8 +1496,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                 // Popup only: hand the session to the embedded iframe so the
                 // next embedded action skips the second passkey ceremony.
                 await handOffSessionToEmbedded(pendingRequest.origin);
-                setState('success');
-                scheduleClose(CLOSE_DELAY_MS);
+                // Response already delivered — hold the "Signed in" tick, then close.
+                finishDeliveredFlow();
               } catch (err) {
                 console.error('❌ Failed to approve connection with SIWE:', err);
                 setError(err instanceof Error ? err.message : 'Failed to approve connection');
@@ -1412,7 +1523,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
       // No SIWE capability - show regular ConnectModal
       return (
+        // Keyed by request — see TransactionModal above.
         <ConnectModal
+          key={pendingRequest.requestId}
           origin={pendingRequest.origin}
           appName={pendingRequest.metadata?.appName || 'dApp'}
           appLogoUrl={pendingRequest.metadata?.appLogoUrl}
@@ -1434,6 +1547,10 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               };
 
               await pendingRequest.onApprove(response);
+              // Same reason as the SIWE path above: the response is delivered, so mark the flow
+              // done before the awaited handoff rather than leaving it to the setState('success')
+              // that only runs after it.
+              flowDoneRef.current = true;
               // Only after approval (never on mere authentication, which the
               // user may still cancel): let the SDK persist the account hint
               // dApp-side, so the next embedded visit can show "Continue as"

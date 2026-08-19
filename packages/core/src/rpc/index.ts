@@ -44,7 +44,12 @@ export {
     type WalletGetAssetsResponse,
 } from './wallet_getAssets.js';
 
-export { handleGetCapabilitiesRequest, type ChainMetadataCapability } from './capabilities.js';
+export {
+    handleGetCapabilitiesRequest,
+    clearCapabilitiesCache,
+    type CapabilitiesResult,
+    type ChainMetadataCapability,
+} from './capabilities.js';
 
 export {
     type Permission,
@@ -71,4 +76,6 @@ export {
     ANY_TARGET,
     ANY_FN_SEL,
     EMPTY_CALLDATA_FN_SEL,
+    normalizeRevokePermissionsParams,
+    type NormalizedRevokePermissionsParams,
 } from './permissions.js';

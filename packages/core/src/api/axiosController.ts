@@ -43,7 +43,9 @@ export const controlledAxiosPromise = <T>(promise: ControlledAxiosPromise<T>): P
             if (err?.response) {
                 if (err?.response?.data?.result) {
                     if (err?.response?.data?.result?.error) {
-                        throw new Error(err.response.data.result.error);
+                        throw Object.assign(new Error(err.response.data.result.error), {
+                            status: err.response.status,
+                        });
                     }
                 }
             }

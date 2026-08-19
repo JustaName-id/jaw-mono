@@ -46,11 +46,18 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
     // blocks, adding up to 4s of dead time after the userOp is already included.
     // Carry over the real blockTime when viem knows the chain; unknown chains
     // keep viem's default. blockTime has no other effect on these clients.
-    const blockTime = SUPPORTED_CHAINS.find((c) => c.id === chain.id)?.blockTime;
+    //
+    // `contracts` is carried over for the same reason: it holds the Multicall3
+    // address that the client's `batch.multicall` needs to fold concurrent
+    // eth_calls into one request. Without it viem silently falls back to one
+    // request per call (see the batch option below).
+    const known = SUPPORTED_CHAINS.find((c) => c.id === chain.id);
+    const blockTime = known?.blockTime;
 
     const viemchain = defineChain({
         id: chain.id,
         ...(blockTime !== undefined && { blockTime }),
+        ...(known?.contracts !== undefined && { contracts: known.contracts }),
         rpcUrls: {
             default: {
                 http: [chain.rpcUrl],
@@ -67,6 +74,22 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
     const client = createPublicClient({
         chain: viemchain,
         transport: http(chain.rpcUrl),
+        // Fold eth_calls issued in the same tick into a single Multicall3
+        // aggregate3 — callers that fan out over N tokens (balances, decimals,
+        // symbols) pay one round-trip instead of N. aggregate3 sets
+        // allowFailure, so a reverting call still rejects only its own caller,
+        // and every call in the group reads the same block.
+        //
+        // Deliberately NOT `http(url, { batch: true })`: viem's HTTP batch
+        // scheduler is a module-global map keyed by URL, so it would merge
+        // requests across unrelated clients sharing this rpcUrl and run the
+        // whole batch under whichever client opened the window — silently
+        // overriding the tuned timeout/retry budget in erc20Paymaster's
+        // eth_simulateV1 client. The multicall scheduler is keyed by client.uid.
+        //
+        // Chains whose viem definition carries no Multicall3 address fall back
+        // to one request per call; viem swallows the lookup error internally.
+        batch: { multicall: true },
     });
 
     // If no paymaster URL, return bundler client without paymaster

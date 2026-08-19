@@ -15,6 +15,7 @@ import { standardErrors } from '../errors/errors.js';
 import { restCall } from '../api/index.js';
 import { buildHandleJawRpcUrl, fetchRPCRequest } from '../utils/index.js';
 import type { RequestArguments } from '../provider/index.js';
+import { optionalHexAddress, requireHexBytes32, requireParamsObject } from './paramUtils.js';
 
 /**
  * ERC-7528 native token address convention
@@ -286,6 +287,36 @@ export type WalletRevokePermissionsRequest = {
         },
     ];
 };
+
+const REVOKE_METHOD = 'wallet_revokePermissions';
+
+/** A wallet_revokePermissions request after validation: the id is guaranteed present. */
+export interface NormalizedRevokePermissionsParams {
+    /** The permission hash to revoke. */
+    id: `0x${string}`;
+    /** Account to revoke on; the signer's own when the dapp leaves it out. */
+    address?: Address;
+    capabilities?: RequestCapabilities;
+}
+
+/**
+ * Validates wallet_revokePermissions params.
+ *
+ * The revocation is built entirely from the stored permission, so without a
+ * usable id there is nothing to sign. Both signers used to guard this with
+ * `if (permissionId)`, which skipped the check for the one input that most
+ * needs it — an empty id then reached the UI, which rendered an empty
+ * permission and offered to sign it. Refusing here means the dapp gets
+ * `-32602` before any popup or dialog opens.
+ */
+export function normalizeRevokePermissionsParams(params: unknown): NormalizedRevokePermissionsParams {
+    const envelope = requireParamsObject(params, REVOKE_METHOD);
+    return {
+        id: requireHexBytes32(envelope.id, REVOKE_METHOD, 'id'),
+        address: optionalHexAddress(envelope.address, REVOKE_METHOD, 'address'),
+        capabilities: envelope.capabilities as RequestCapabilities | undefined,
+    };
+}
 
 /**
  * Grant permissions by approving on-chain, then storing in relay

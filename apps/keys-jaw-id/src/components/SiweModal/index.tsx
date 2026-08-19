@@ -17,6 +17,7 @@ export interface SiweModalProps {
   appName?: string;
   appLogoUrl?: string;
   warningMessage?: string;
+  isSuccess?: boolean;
   onSuccess: (signature: string, message: string) => void;
   onError: (error: Error, errorCode?: number) => void;
 }
@@ -30,11 +31,16 @@ export const SiweModal = ({
   appName,
   appLogoUrl,
   warningMessage,
+  isSuccess,
   onSuccess,
   onError,
 }: SiweModalProps) => {
   // Single hook handles session lookup + account restoration
-  const { account, isLoading: isAccountLoading } = useSessionAccount({
+  const {
+    account,
+    walletAddress,
+    isLoading: isAccountLoading,
+  } = useSessionAccount({
     origin,
     chain,
     apiKey,
@@ -42,7 +48,6 @@ export const SiweModal = ({
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [siweStatus, setSiweStatus] = useState<string>('');
-  const [timestamp] = useState(() => new Date());
 
   // Extract API key for other uses (chain icon, mainnet RPC)
   const effectiveApiKey = useMemo(() => {
@@ -80,7 +85,6 @@ export const SiweModal = ({
 
       setSiweStatus('Sign in successful!');
 
-      // Call onSuccess immediately - parent will handle closing
       onSuccess(signature, messageToSign);
     } catch (error) {
       console.error('Error signing SIWE message:', error);
@@ -114,10 +118,9 @@ export const SiweModal = ({
       }}
       message={messageToSign}
       origin={origin}
-      timestamp={timestamp}
       appName={appName || 'dApp'}
       appLogoUrl={appLogoUrl}
-      accountAddress={address}
+      accountAddress={address || walletAddress || undefined}
       chainName={chainName}
       chainIcon={chainIcon}
       chainId={chain.id}
@@ -125,6 +128,7 @@ export const SiweModal = ({
       onSign={signMessage}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       siweStatus={siweStatus}
       canSign={canSign}
       warningMessage={warningMessage}

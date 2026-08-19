@@ -1,3 +1,33 @@
+## 1.2.2 (2026-08-19)
+
+### 🩹 Fixes
+
+- **ui:** measure asset preview with viem's traceAssetChanges ([#270](https://github.com/JustaName-id/jaw-mono/pull/270))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 1.2.1 (2026-08-19)
+
+### 🩹 Fixes
+
+- theme configuration across screens ([#286](https://github.com/JustaName-id/jaw-mono/pull/286))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 1.2.0 (2026-08-17)
+
+### 🚀 Features
+
+- keys ui revamp ([#248](https://github.com/JustaName-id/jaw-mono/pull/248))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 1.1.4 (2026-08-05)
 
 ### 🩹 Fixes

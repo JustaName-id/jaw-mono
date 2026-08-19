@@ -1,13 +1,20 @@
 import { ReactElement } from 'react';
 import { FeeTokenOption } from '../FeeTokenSelector';
+import type { RevocationProblem } from '../../utils/permissionExecution';
 
 export interface SpendPermission {
+  /** Scaled by the token's decimals, or raw base units when `decimalsUnknown`. */
   amount: string;
   amountUsd?: string;
   token: string;
   tokenAddress: string;
   duration: string;
   limit: string;
+  /**
+   * The token's `decimals()` couldn't be read, so `amount` is unscaled. The row must say so —
+   * a guessed 18 would render a 100 USDC cap as "0.0000000001".
+   */
+  decimalsUnknown?: boolean;
 }
 
 export interface CallPermission {
@@ -25,15 +32,31 @@ export interface PermissionDialogProps {
 
   // Permission details
   permissionId?: string; // Only for revoke mode
+  /**
+   * Revoke only: a named reason this revocation would revert or achieve nothing, resolved from the
+   * fetched permission. The mirror of the transaction screen's `permissionProblem`.
+   */
+  revocationProblem?: RevocationProblem | null;
   spenderAddress: string;
+  /** The granting account — shown as "From", and seeds the processing screen's avatar. */
+  accountAddress?: string;
   origin: string; // Requesting dApp origin
+  appName?: string;
+  appLogoUrl?: string | null;
 
   // Arrays of permissions
   spends?: SpendPermission[];
   calls?: CallPermission[];
+  /**
+   * Symbol/decimals for token addresses appearing in spends or call targets. `decimals: null`
+   * means the read failed — only `symbol` is consumed here, but the shape matches the resolver's.
+   */
+  tokenMeta?: Record<string, { symbol: string; decimals?: number | null }>;
 
   // Period and expiry
   expiryDate: string; // Formatted expiry date
+  /** Formatted grant date (revoke only) — the stored permission's `start`. */
+  grantedDate?: string;
 
   // Network info
   networkName: string;
@@ -49,12 +72,6 @@ export interface PermissionDialogProps {
   isProcessing: boolean;
   status?: string;
   isLoadingTokenInfo?: boolean;
-
-  // Timestamp
-  timestamp?: Date;
-
-  // Custom warning message for grant mode
-  warningMessage?: string;
 
   // Gas estimation props
   gasFee?: string;

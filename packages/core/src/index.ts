@@ -7,6 +7,7 @@ export {
     JAW_WALLET_NAME,
     JAW_WALLET_ID,
     JAW_WALLET_RDNS,
+    PERMISSIONS_MANAGER_ADDRESS,
 } from './constants.js';
 
 /**  SDK Info **/
@@ -46,6 +47,7 @@ export {
     type WalletRevokePermissionsRequest,
     type RevokePermissionApiResponse,
     // Permission utilities for UI (fetching permission details without Account instance)
+    type StorePermissionApiResponse,
     getPermissionFromRelay,
     // Permission call builders (for gas estimation)
     buildGrantPermissionCall,
@@ -55,6 +57,8 @@ export {
     handleGetCallsHistoryRequest,
     handleGetPermissionsRequest,
     handleGetCapabilitiesRequest,
+    clearCapabilitiesCache,
+    type CapabilitiesResult,
     type ChainMetadataCapability,
     // Permission selector constants
     ANY_TARGET,
@@ -159,7 +163,7 @@ export type {
 export { UIError, UIErrorCode } from './ui/interface.js';
 
 /** Theme types **/
-export type { JawTheme, JawThemeMode, JawBorderRadius, JawFontStack } from './ui/theme.js';
+export type { JawTheme, JawThemeColors, JawThemeMode, JawBorderRadius, JawFontStack } from './ui/theme.js';
 
 /** Method policy (silent vs interactive RPC classification) **/
 export { SILENT_METHODS, INTERACTIVE_METHODS, isSilentMethod, requiresInteraction } from './method-policy.js';

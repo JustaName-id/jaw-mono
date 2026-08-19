@@ -8,9 +8,10 @@ import {
   isNativeToken,
   useGasEstimation,
   useAssetPreview,
+  usePermissionExecution,
 } from '@jaw.id/ui';
 import { debugLog } from '../../lib/debug-log';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Address, Hash, Hex, formatUnits } from 'viem';
 import { getChainNameFromId } from '../../lib/chain-handlers';
 import { useSessionAccount } from '../../hooks';
@@ -63,6 +64,8 @@ export interface TransactionModalProps {
   chain?: Chain; // Chain info with RPC and paymaster URLs
   apiKey?: string;
   origin?: string; // Origin for per-origin auth session
+  appName?: string;
+  appLogoUrl?: string;
   onSuccess?: (result: TransactionResult) => void;
   onError?: (error: Error, errorCode?: number) => void;
 }
@@ -74,6 +77,8 @@ export const TransactionModal = ({
   chain,
   apiKey,
   origin,
+  appName,
+  appLogoUrl,
   onSuccess,
   onError,
 }: TransactionModalProps) => {
@@ -88,8 +93,10 @@ export const TransactionModal = ({
     apiKey,
   });
 
-  const [transactionStatus, setTransactionStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  // Synchronous re-entry guard: isProcessing disables the button only after a
+  // re-render, which is too soft a gate for a call that moves funds.
+  const submittingRef = useRef(false);
 
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
@@ -148,7 +155,6 @@ export const TransactionModal = ({
   }, [normalizedTransactions, chain]);
 
   const resetModalState = useCallback(() => {
-    setTransactionStatus('');
     setIsProcessing(false);
   }, []);
 
@@ -188,6 +194,23 @@ export const TransactionModal = ({
   // Permission ID for permission-based execution
   const permissionId = transactionRequest?.permissionId as Hex | undefined;
 
+  // `from` is optional in wallet_sendCalls, so the dialog falls back to the connected account for
+  // the From row. The permission check must read the same address, or a spender mismatch goes
+  // unreported while the row still shows who is signing.
+  const signerAddress = (transactionRequest?.from ?? walletAddress) as Address | undefined;
+
+  const {
+    onBehalfOf,
+    loading: onBehalfOfLoading,
+    problem: permissionProblem,
+  } = usePermissionExecution({
+    permissionId,
+    apiKey: effectiveApiKey,
+    chainId: chain?.id,
+    from: signerAddress,
+    calls: transactionCalls,
+  });
+
   // Use gas estimation hook for parallel ETH and ERC-20 estimation
   const {
     gasFee,
@@ -214,8 +237,12 @@ export const TransactionModal = ({
     assetsIn,
     error: assetPreviewError,
     willRevert: assetPreviewWillRevert,
+    revertCause: assetPreviewRevertCause,
   } = useAssetPreview({
-    account: (transactionRequest?.from ?? walletAddress) as Address | undefined,
+    // Under a permission the calls execute as the granter, so the balance changes are theirs.
+    // Left undefined until the granter resolves: simulating from the spender would preview the
+    // wrong account, and a shortfall there would briefly read as "Insufficient funds".
+    account: permissionId ? onBehalfOf : signerAddress,
     calls: transactionCalls,
     chainId: chain?.id ?? 1,
     apiKey: effectiveApiKey,
@@ -294,7 +321,7 @@ export const TransactionModal = ({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl, chain.id);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -351,9 +378,10 @@ export const TransactionModal = ({
   // Note: Gas estimation is handled by useGasEstimation hook
 
   const handleConfirm = useCallback(async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     try {
       setIsProcessing(true);
-      setTransactionStatus('Preparing transaction...');
 
       if (!account) {
         throw new Error('Account not initialized. Please try again.');
@@ -362,8 +390,6 @@ export const TransactionModal = ({
       if (!chain) {
         throw new Error('Chain information is required.');
       }
-
-      setTransactionStatus('Sending transaction...');
 
       // Convert normalized transactions to TransactionCall format
       const transactionCalls: TransactionCall[] = normalizedTransactions.map((tx) => ({
@@ -406,14 +432,11 @@ export const TransactionModal = ({
         };
       }
 
-      setTransactionStatus('Transaction confirmed!');
-
       // Call onSuccess immediately - parent will handle closing
       onSuccess?.(result);
     } catch (error) {
       console.error('Error in transaction:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      setTransactionStatus(`Error: ${errorMessage}`);
       const errorObj = error instanceof Error ? error : new Error(errorMessage);
       // Determine error code based on error type
       let errorCode: number;
@@ -434,6 +457,7 @@ export const TransactionModal = ({
         errorCode = standardErrorCodes.rpc.internal;
       }
       onError?.(errorObj, errorCode);
+      submittingRef.current = false;
       setIsProcessing(false);
     }
   }, [
@@ -448,11 +472,13 @@ export const TransactionModal = ({
   ]);
 
   const handleCancel = useCallback(() => {
+    // isProcessing commits a render late; a same-tick cancel must not report
+    // "rejected" while the signed submission proceeds and lands on chain.
+    if (submittingRef.current) return;
     if (!isProcessing) {
       debugLog('❌ User cancelled transaction request');
       // User rejected request (EIP-1193 code 4001)
       onError?.(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
-      setTransactionStatus('');
       // Reset fee token state
       setFeeTokens([]);
       setSelectedFeeToken(null);
@@ -466,14 +492,14 @@ export const TransactionModal = ({
 
   return (
     <TransactionDialog
-      // open={open}
-      // onOpenChange={handleCancel}
+      // Mounting is controlled by the page (keyed per request), so the dialog is
+      // always open while this component exists; dismissal routes through cancel.
       open={true}
-      onOpenChange={() => {
-        debugLog('onOpenChange');
+      onOpenChange={(o) => {
+        if (!o) handleCancel();
       }}
       transactions={normalizedTransactions}
-      walletAddress={transactionRequest?.from ?? walletAddress ?? ''}
+      walletAddress={signerAddress ?? ''}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading || isAccountLoading}
       gasEstimationError={gasEstimationError}
@@ -482,10 +508,15 @@ export const TransactionModal = ({
       assetsIn={assetsIn}
       assetPreviewError={assetPreviewError}
       assetPreviewWillRevert={assetPreviewWillRevert}
+      assetPreviewRevertCause={assetPreviewRevertCause}
+      onBehalfOf={onBehalfOf}
+      onBehalfOfLoading={onBehalfOfLoading}
+      permissionProblem={permissionProblem}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
-      transactionStatus={transactionStatus}
       networkName={networkName ?? 'Ethereum'}
       apiKey={effectiveApiKey}
       mainnetRpcUrl={mainnetRpcUrl}

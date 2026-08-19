@@ -5,187 +5,118 @@
 @layer base {
   :root {
     /* Primary theme variables (--jaw-* prefixed for isolation) */
-    --jaw-color-background: oklch(1 0 0);
-    --jaw-color-foreground: oklch(0.145 0 0);
-    --jaw-color-card: oklch(1 0 0);
-    --jaw-color-card-foreground: oklch(0.145 0 0);
-    --jaw-color-popover: oklch(1 0 0);
-    --jaw-color-popover-foreground: oklch(0.145 0 0);
-    --jaw-color-primary: oklch(0.205 0 0);
-    --jaw-color-primary-foreground: oklch(0.985 0 0);
-    --jaw-color-secondary: oklch(0.97 0 0);
-    --jaw-color-secondary-foreground: oklch(0.205 0 0);
-    --jaw-color-muted: oklch(0.97 0 0);
-    --jaw-color-muted-foreground: oklch(0.556 0 0);
-    --jaw-color-accent: oklch(0.97 0 0);
-    --jaw-color-accent-foreground: oklch(0.205 0 0);
-    --jaw-color-destructive: oklch(0.577 0.245 27.325);
-    --jaw-color-destructive-foreground: oklch(0.985 0 0);
-    --jaw-color-border: oklch(0.922 0 0);
-    --jaw-color-input: oklch(0.922 0 0);
-    --jaw-color-ring: oklch(0.708 0 0);
-    --jaw-color-success: oklch(0.627 0.194 145.071);
-    --jaw-color-success-foreground: oklch(0.985 0 0);
-    --jaw-color-warning: oklch(0.769 0.188 70.08);
-    --jaw-color-warning-foreground: oklch(0.205 0 0);
-    --jaw-color-info: oklch(0.623 0.214 259.815);
-    --jaw-color-info-foreground: oklch(0.985 0 0);
+    --jaw-color-background: 1 0 0;
+    --jaw-color-foreground: 0.1363 0.0364 259.201;
+    --jaw-color-card: 1 0 0;
+    --jaw-color-card-foreground: 0.1363 0.0364 259.201;
+    --jaw-color-popover: 1 0 0;
+    --jaw-color-popover-foreground: 0.1363 0.0364 259.201;
+    --jaw-color-primary: 0.2077 0.0398 265.755;
+    --jaw-color-primary-foreground: 0.9842 0.0034 247.858;
+    --jaw-color-secondary: 0.9683 0.0069 247.896;
+    --jaw-color-secondary-foreground: 0.2077 0.0398 265.755;
+    --jaw-color-muted: 0.9683 0.0069 247.896;
+    --jaw-color-muted-foreground: 0.5544 0.0407 257.417;
+    --jaw-color-accent: 0.9683 0.0069 247.896;
+    --jaw-color-accent-foreground: 0.2077 0.0398 265.755;
+    --jaw-color-destructive: 0.6368 0.2078 25.331;
+    --jaw-color-destructive-hover: 0.5 0.235 27.325;
+    --jaw-color-destructive-foreground: 0.9842 0.0034 247.858;
+    --jaw-color-border: 0.9288 0.0126 255.508;
+    --jaw-color-input: 0.9288 0.0126 255.508;
+    --jaw-color-ring: 0.1363 0.0364 259.201;
+    --jaw-color-success: 0.7223 0.1932 149.478;
+    --jaw-color-success-foreground: 0.985 0 0;
+    --jaw-color-warning: 0.769 0.188 70.08;
+    --jaw-color-warning-foreground: 0.205 0 0;
+    --jaw-color-info: 0.623 0.214 259.815;
+    --jaw-color-info-foreground: 0.985 0 0;
+    /* New tokens pinned to the exact literals they replaced, so the stock look is unchanged. */
+    --jaw-color-positive: 0.8003 0.1821 151.711;
+    --jaw-color-negative: 0.7106 0.1661 22.216;
+    --jaw-color-scrim: 0 0 0;
+    --jaw-color-halo: 0.9608 0.0058 264.532;
+    --jaw-color-identicon-tile: 0.9666 0.0026 106.449;
+    --jaw-color-identicon-ring: 0.2077 0.0398 265.755;
+    --jaw-color-shadow: 0 0 0;
     --jaw-radius: 0.625rem;
     --jaw-font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
       Arial, sans-serif;
 
-    /* Backwards-compat aliases (Tailwind utilities use these via @theme inline) */
-    --background: var(--jaw-color-background);
-    --foreground: var(--jaw-color-foreground);
-    --card: var(--jaw-color-card);
-    --card-foreground: var(--jaw-color-card-foreground);
-    --popover: var(--jaw-color-popover);
-    --popover-foreground: var(--jaw-color-popover-foreground);
-    --primary: var(--jaw-color-primary);
-    --primary-foreground: var(--jaw-color-primary-foreground);
-    --secondary: var(--jaw-color-secondary);
-    --secondary-foreground: var(--jaw-color-secondary-foreground);
-    --muted: var(--jaw-color-muted);
-    --muted-foreground: var(--jaw-color-muted-foreground);
-    --accent: var(--jaw-color-accent);
-    --accent-foreground: var(--jaw-color-accent-foreground);
-    --destructive: var(--jaw-color-destructive);
-    --destructive-foreground: var(--jaw-color-destructive-foreground);
-    --border: var(--jaw-color-border);
-    --input: var(--jaw-color-input);
-    --ring: var(--jaw-color-ring);
-    --success: var(--jaw-color-success);
-    --success-foreground: var(--jaw-color-success-foreground);
-    --warning: var(--jaw-color-warning);
-    --warning-foreground: var(--jaw-color-warning-foreground);
-    --info: var(--jaw-color-info);
-    --info-foreground: var(--jaw-color-info-foreground);
-    --radius: var(--jaw-radius);
-
     /* Chart colors */
-    --chart-1: oklch(0.646 0.222 41.116);
-    --chart-2: oklch(0.6 0.118 184.704);
-    --chart-3: oklch(0.398 0.07 227.392);
-    --chart-4: oklch(0.828 0.189 84.429);
-    --chart-5: oklch(0.769 0.188 70.08);
-
-    /* Sidebar */
-    --sidebar-background: #fafafa;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: #e5e7eb;
-    --sidebar-ring: #a1a1aa;
+    --jaw-color-chart-1: 0.646 0.222 41.116;
+    --jaw-color-chart-2: 0.6 0.118 184.704;
+    --jaw-color-chart-3: 0.398 0.07 227.392;
+    --jaw-color-chart-4: 0.828 0.189 84.429;
+    --jaw-color-chart-5: 0.769 0.188 70.08;
 
     /* Misc */
-    --font-inter: 'Inter', sans-serif;
+    --jaw-font-inter: 'Inter', sans-serif;
     --vh: 1vh;
     --vh-mobile: 1vh;
   }
 
   .dark {
     /* Primary theme variables (dark mode) */
-    --jaw-color-background: oklch(0.178 0 0);
-    --jaw-color-foreground: oklch(0.985 0 0);
-    --jaw-color-card: oklch(0.215 0 0);
-    --jaw-color-card-foreground: oklch(0.985 0 0);
-    --jaw-color-popover: oklch(0.215 0 0);
-    --jaw-color-popover-foreground: oklch(0.985 0 0);
-    --jaw-color-primary: oklch(0.985 0 0);
-    --jaw-color-primary-foreground: oklch(0.145 0 0);
-    --jaw-color-secondary: oklch(0.269 0 0);
-    --jaw-color-secondary-foreground: oklch(0.985 0 0);
-    --jaw-color-muted: oklch(0.269 0 0);
-    --jaw-color-muted-foreground: oklch(0.708 0 0);
-    --jaw-color-accent: oklch(0.269 0 0);
-    --jaw-color-accent-foreground: oklch(0.985 0 0);
-    --jaw-color-destructive: oklch(0.396 0.141 25.723);
-    --jaw-color-destructive-foreground: oklch(0.637 0.237 25.331);
-    --jaw-color-border: oklch(0.3 0 0);
-    --jaw-color-input: oklch(0.3 0 0);
-    --jaw-color-ring: oklch(0.439 0 0);
-    --jaw-color-success: oklch(0.627 0.194 145.071);
-    --jaw-color-success-foreground: oklch(0.985 0 0);
-    --jaw-color-warning: oklch(0.769 0.188 70.08);
-    --jaw-color-warning-foreground: oklch(0.92 0.15 80);
-    --jaw-color-info: oklch(0.623 0.214 259.815);
-    --jaw-color-info-foreground: oklch(0.985 0 0);
+    --jaw-color-background: 0.1363 0.0364 259.201;
+    --jaw-color-foreground: 0.9842 0.0034 247.858;
+    --jaw-color-card: 0.1363 0.0364 259.201;
+    --jaw-color-card-foreground: 0.9842 0.0034 247.858;
+    --jaw-color-popover: 0.1363 0.0364 259.201;
+    --jaw-color-popover-foreground: 0.9842 0.0034 247.858;
+    --jaw-color-primary: 0.9842 0.0034 247.858;
+    --jaw-color-primary-foreground: 0.2077 0.0398 265.755;
+    --jaw-color-secondary: 0.2795 0.0368 260.031;
+    --jaw-color-secondary-foreground: 0.9842 0.0034 247.858;
+    --jaw-color-muted: 0.2795 0.0368 260.031;
+    --jaw-color-muted-foreground: 0.7107 0.0351 256.788;
+    --jaw-color-accent: 0.2795 0.0368 260.031;
+    --jaw-color-accent-foreground: 0.9842 0.0034 247.858;
+    --jaw-color-destructive: 0.3958 0.1331 25.723;
+    --jaw-color-destructive-hover: 0.31 0.12 25.723;
+    --jaw-color-destructive-foreground: 0.9842 0.0034 247.858;
+    --jaw-color-border: 0.2795 0.0368 260.031;
+    --jaw-color-input: 0.2795 0.0368 260.031;
+    --jaw-color-ring: 0.869 0.0198 252.894;
+    --jaw-color-success: 0.7064 0.1825 150.038;
+    --jaw-color-success-foreground: 0.985 0 0;
+    --jaw-color-warning: 0.769 0.188 70.08;
+    --jaw-color-warning-foreground: 0.205 0 0;
+    --jaw-color-info: 0.623 0.214 259.815;
+    --jaw-color-info-foreground: 0.985 0 0;
+    /* New tokens pinned to the exact literals they replaced (same in both modes). */
+    --jaw-color-positive: 0.8003 0.1821 151.711;
+    --jaw-color-negative: 0.7106 0.1661 22.216;
+    --jaw-color-scrim: 0 0 0;
+    --jaw-color-halo: 0.9608 0.0058 264.532;
+    --jaw-color-identicon-tile: 0.9666 0.0026 106.449;
+    --jaw-color-identicon-ring: 0.2077 0.0398 265.755;
+    --jaw-color-shadow: 0 0 0;
 
     /* Chart colors (dark) */
-    --chart-1: oklch(0.488 0.243 264.376);
-    --chart-2: oklch(0.696 0.17 162.48);
-    --chart-3: oklch(0.769 0.188 70.08);
-    --chart-4: oklch(0.627 0.265 303.9);
-    --chart-5: oklch(0.645 0.246 16.439);
+    --jaw-color-chart-1: 0.488 0.243 264.376;
+    --jaw-color-chart-2: 0.696 0.17 162.48;
+    --jaw-color-chart-3: 0.769 0.188 70.08;
+    --jaw-color-chart-4: 0.627 0.265 303.9;
+    --jaw-color-chart-5: 0.645 0.246 16.439;
 
     /* Sidebar (dark) */
-    --sidebar-background: #111111;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 0 0% 98%;
-    --sidebar-primary-foreground: 240 5.9% 10%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: #e5e7eb;
-    --sidebar-ring: #a1a1aa;
-    --font-inter: 'Inter', sans-serif;
+    --jaw-font-inter: 'Inter', sans-serif;
   }
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-success: var(--success);
-  --color-success-foreground: var(--success-foreground);
-  --color-warning: var(--warning);
-  --color-warning-foreground: var(--warning-foreground);
-  --color-info: var(--info);
-  --color-info-foreground: var(--info-foreground);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --radius-sm: max(0px, calc(var(--radius) - 4px));
-  --radius-md: max(0px, calc(var(--radius) - 2px));
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-background: var(--sidebar-background);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --font-inter: 'Inter', sans-serif;
 }
 
 @layer base {
-  * {
+  /* Scoped by hand: Tailwind's `important` selector only rewrites *utilities*, so anything in the
+     base layer ships global. Unscoped, `* { border-color }` reset every border on a consuming app's
+     page — the opposite of what scoping the package is for.
+     
+     No background here. This used to paint `body`, which was harmless in a standalone page but
+     wrong once scoped: the element carrying the attribute is a full-screen, deliberately
+     transparent overlay in the embedded host, so painting it blacked out the dApp behind the
+     modal. Every surface that needs a background sets its own (`bg-popover` on the cards), and
+     text colour is inherited from the container's own `--jaw-color-foreground`. */
+  [data-jaw-ui] * {
     @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
   }
 }
 
@@ -219,7 +150,7 @@
   word-break: normal;
   overflow-wrap: normal;
   direction: ltr;
-  color: var(--jaw-color-foreground);
+  color: oklch(var(--jaw-color-foreground));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
@@ -237,7 +168,7 @@
   box-sizing: border-box;
   border-width: 0;
   border-style: solid;
-  border-color: var(--jaw-color-border);
+  border-color: oklch(var(--jaw-color-border));
 }
 
 @layer utilities {
@@ -267,7 +198,7 @@
 .sliderInput {
   width: 100%;
   height: 0.5rem;
-  background-color: var(--jaw-color-primary);
+  background-color: oklch(var(--jaw-color-primary));
   opacity: 0.2;
   border-radius: 0.5rem;
   appearance: none;
@@ -283,7 +214,7 @@
   appearance: none;
   width: 1rem;
   height: 1rem;
-  background-color: var(--jaw-color-primary);
+  background-color: oklch(var(--jaw-color-primary));
   border-radius: 50%;
   cursor: pointer;
   margin-top: -0.25rem;
@@ -292,7 +223,7 @@
 .sliderInput::-moz-range-thumb {
   width: 1rem;
   height: 1rem;
-  background-color: var(--jaw-color-primary);
+  background-color: oklch(var(--jaw-color-primary));
   border: none;
   border-radius: 50%;
   cursor: pointer;
@@ -301,7 +232,7 @@
 .sliderInput::-ms-thumb {
   width: 1rem;
   height: 1rem;
-  background-color: var(--jaw-color-primary);
+  background-color: oklch(var(--jaw-color-primary));
   border: none;
   border-radius: 50%;
   cursor: pointer;
@@ -317,6 +248,129 @@
   display: none;
 }
 
+/* Thin, theme-blended scrollbar. Applied via the `jaw-scroll` class directly on
+   every scroll container in the dialog stack, so it hits the exact scrolling
+   element regardless of ancestry. `currentColor` inherits the card's text color,
+   so the thumb reads on light or dark hosts; the track stays invisible. */
+.jaw-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, currentColor 38%, transparent) color-mix(in srgb, currentColor 9%, transparent);
+}
+.jaw-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.jaw-scroll::-webkit-scrollbar-track {
+  background: color-mix(in srgb, currentColor 9%, transparent);
+  border-radius: 999px;
+  margin: 4px 0;
+}
+.jaw-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, currentColor 38%, transparent);
+  border-radius: 999px;
+}
+.jaw-scroll::-webkit-scrollbar-thumb:hover {
+  /* Color only — never change width on hover (that read as the bar "growing"). */
+  background: color-mix(in srgb, currentColor 55%, transparent);
+}
+
+/* DialogShell halo — rotating conic ring lighting the card edge */
+@keyframes jaw-ring-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes jaw-ring-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes jaw-flow-dot {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(0.65);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.jaw-halo-ring {
+  background: conic-gradient(
+    from 135deg,
+    oklch(var(--jaw-color-halo) / 0.9) 0deg,
+    oklch(var(--jaw-color-halo) / 0.12) 100deg,
+    oklch(var(--jaw-color-halo) / 0.45) 195deg,
+    oklch(var(--jaw-color-halo) / 0.14) 275deg,
+    oklch(var(--jaw-color-halo) / 0.9) 360deg
+  );
+  filter: blur(2px);
+  opacity: 0.12;
+  animation:
+    jaw-ring-pulse 9s ease-in-out infinite,
+    jaw-ring-rotate 14s linear infinite;
+}
+
+.jaw-flow-dot {
+  animation: jaw-flow-dot 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jaw-halo-ring,
+  .jaw-flow-dot {
+    animation: none;
+  }
+}
+
+/* Success checkmark: circle pops in, then the tick strokes on */
+@keyframes jaw-check-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes jaw-check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.jaw-check-pop {
+  animation: jaw-check-pop 0.32s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+.jaw-check-draw {
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  animation: jaw-check-draw 0.3s ease-out 0.18s forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jaw-check-pop {
+    animation: none;
+  }
+  .jaw-check-draw {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
 dialog[data-jaw-modal-container]::backdrop {
   background: transparent;
 }

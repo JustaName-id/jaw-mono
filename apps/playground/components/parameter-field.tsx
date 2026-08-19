@@ -94,6 +94,26 @@ export function ParameterField({ param, value, onChange, context }: ParameterFie
   // This allows empty strings to be entered for testing
   const inputValue = value !== undefined ? displayValue : param.defaultValue || '';
 
+  // Multi-line string (e.g. a SIWE message that needs real newlines).
+  if (param.multiline) {
+    return (
+      <div className="space-y-2">
+        <Label htmlFor={param.name}>
+          {param.label}
+          {param.required && <span className="text-destructive ml-1">*</span>}
+        </Label>
+        <textarea
+          id={param.name}
+          value={inputValue}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={param.description}
+          className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[120px] w-full rounded-md border px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        />
+        {param.description && <p className="text-muted-foreground text-xs">{param.description}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
       <Label htmlFor={param.name}>

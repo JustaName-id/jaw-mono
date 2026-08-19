@@ -4,6 +4,7 @@ import { Signer } from './interface.js';
 
 import {
     assertParamsChainId,
+    assertSignableTypedData,
     getCachedWalletConnectResponse,
     injectRequestCapabilities,
     isSessionExpired,
@@ -11,6 +12,7 @@ import {
 import { storeCallStatus, waitForReceiptInBackground } from '../rpc/wallet_sendCalls.js';
 import { normalizeSendCallsParams, type NormalizedSendCallsParams } from '../rpc/sendCallsParams.js';
 import { normalizeSendTransactionParams, type NormalizedSendTransactionParams } from '../rpc/sendTransactionParams.js';
+import { normalizeRevokePermissionsParams, type NormalizedRevokePermissionsParams } from '../rpc/permissions.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
 import { handleGetCallsHistoryRequest } from '../rpc/wallet_getCallsHistory.js';
@@ -47,7 +49,8 @@ type ConstructorOptions = {
  */
 export type NormalizedSigningParams =
     | { method: 'wallet_sendCalls'; params: NormalizedSendCallsParams }
-    | { method: 'eth_sendTransaction'; params: NormalizedSendTransactionParams };
+    | { method: 'eth_sendTransaction'; params: NormalizedSendTransactionParams }
+    | { method: 'wallet_revokePermissions'; params: NormalizedRevokePermissionsParams };
 
 /**
  * Abstract base class for all JAW signers.
@@ -112,20 +115,7 @@ export abstract class JAWSigner implements Signer {
      * never affects the signing flow.
      */
     private async dispatchSigningRequest(request: RequestArguments): Promise<unknown> {
-        // Validate transaction params here, before any signer opens a popup or a
-        // dialog: a malformed request gets a standards-compliant error it can
-        // act on instead of a dead UI. For wallet_sendCalls both envelope
-        // versions (v1.0 and viem's default v2.0.0) pass.
-        let normalized: NormalizedSigningParams | undefined;
-        if (request.method === 'wallet_sendCalls') {
-            normalized = { method: 'wallet_sendCalls', params: normalizeSendCallsParams(request.params) };
-        } else if (request.method === 'eth_sendTransaction') {
-            normalized = { method: 'eth_sendTransaction', params: normalizeSendTransactionParams(request.params) };
-        }
-
-        // Pass the normalized params down rather than validating and discarding
-        // them: the signer needs the hex-normalized chainId to resolve the chain
-        // the dapp actually asked for.
+        const normalized = this.validateSigningRequest(request);
         const result = await this.handleSigningRequest(request, normalized);
         try {
             this.reportSignature(request);
@@ -133,6 +123,41 @@ export abstract class JAWSigner implements Signer {
             // Reporting must never affect the signing flow
         }
         return result;
+    }
+
+    private validateSigningRequest(request: RequestArguments): NormalizedSigningParams | undefined {
+        switch (request.method) {
+            case 'eth_signTypedData_v4':
+                assertSignableTypedData((request.params as unknown[] | undefined)?.[1]);
+                return undefined;
+
+            // ERC-7871 wallet_sign reaches the same EIP-712 dialog when its
+            // request type is 0x01 (0x45 carries a personal_sign message), so
+            // its payload gets the same guard.
+            case 'wallet_sign': {
+                const inner = (request.params as [{ request?: { type?: string; data?: unknown } }] | undefined)?.[0]
+                    ?.request;
+                if (inner?.type === '0x01') assertSignableTypedData(inner.data);
+                return undefined;
+            }
+
+            case 'wallet_sendCalls':
+                return { method: 'wallet_sendCalls', params: normalizeSendCallsParams(request.params) };
+
+            case 'eth_sendTransaction':
+                return { method: 'eth_sendTransaction', params: normalizeSendTransactionParams(request.params) };
+
+            // Runs before handleSigningRequest, so a missing or malformed permission id is
+            // refused with -32602 instead of opening a window over an empty permission.
+            case 'wallet_revokePermissions':
+                return {
+                    method: 'wallet_revokePermissions',
+                    params: normalizeRevokePermissionsParams(request.params),
+                };
+
+            default:
+                return undefined;
+        }
     }
 
     private static readonly TRACKED_SIGN_METHODS: ReadonlySet<string> = new Set([

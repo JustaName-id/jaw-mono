@@ -7,8 +7,10 @@ import { Button } from '../ui/button';
 import { Spinner } from '../ui/spinner';
 import { EthIcon, UsdcIcon, UsdtIcon, GenericTokenIcon } from '../../icons';
 import { cn } from '../../lib/utils';
+import { subscriptDecimal } from '../../utils/displayFormat';
 import { ChevronDown, X } from 'lucide-react';
 import { TokenIcon } from '../TokenIcon';
+import { SubText } from '../SubText';
 
 export interface FeeTokenOption {
   uid: string;
@@ -74,7 +76,7 @@ const getTokenIcon = (token: FeeTokenOption, chainId?: number, className?: strin
 const formatBalance = (balance: string, symbol: string) => {
   const num = parseFloat(balance);
   if (num === 0) return '0';
-  if (num < 0.0001) return '<0.0001';
+  if (num < 0.0001) return subscriptDecimal(num);
   // For stablecoins, show 2 decimals; for native tokens (ETH, FLR, etc.), show more
   const stablecoins = ['USDC', 'USDT', 'DAI'];
   const decimals = stablecoins.includes(symbol.toUpperCase()) ? 2 : 6;
@@ -240,8 +242,9 @@ export const FeeTokenSelector = ({
           <div className="flex items-center gap-1">
             <span className={cn('text-xs font-semibold', isSelected && 'text-foreground')}>{token.symbol}</span>
           </div>
-          <div className="text-muted-foreground truncate text-[10px]">
-            Bal: {balanceUsd || `${formatBalance(token.balanceFormatted, token.symbol)} ${token.symbol}`}
+          <div className="text-muted-foreground text-body-xs truncate">
+            Bal:{' '}
+            <SubText>{balanceUsd || `${formatBalance(token.balanceFormatted, token.symbol)} ${token.symbol}`}</SubText>
           </div>
         </div>
 
@@ -251,15 +254,17 @@ export const FeeTokenSelector = ({
             gasCost.usd ? (
               <>
                 <div className="text-xs font-semibold">{gasCost.usd}</div>
-                <div className="text-muted-foreground text-[10px]">
-                  Up to {gasCost.maxFormatted ?? gasCost.formatted}
+                <div className="text-muted-foreground text-body-xs">
+                  Up to <SubText>{gasCost.maxFormatted ?? gasCost.formatted}</SubText>
                 </div>
               </>
             ) : (
-              <div className="text-xs font-semibold">{gasCost.formatted}</div>
+              <div className="text-xs font-semibold">
+                <SubText>{gasCost.formatted}</SubText>
+              </div>
             )
           ) : !token.isSelectable ? (
-            <span className="text-destructive text-[10px]">{token.balance === 0n ? '0' : 'Insufficient'}</span>
+            <span className="text-destructive text-body-xs">{token.balance === 0n ? '0' : 'Insufficient'}</span>
           ) : null}
         </div>
       </button>
@@ -283,32 +288,19 @@ export const FeeTokenSelector = ({
       </PopoverTrigger>
       <PopoverContent className="w-64 p-0" align="end" sideOffset={4}>
         {/* Header */}
-        <div className="flex items-center justify-between border-b px-3 py-2.5">
-          <h3 className="text-sm font-semibold">Select a token</h3>
-          <button onClick={() => setOpen(false)} className="hover:bg-muted rounded-full p-0.5 transition-colors">
+        <div className="flex items-center justify-between border-b p-3">
+          <h3 className="text-sm font-semibold">Pay with</h3>
+          <button onClick={() => setOpen(false)} className="hover:bg-muted rounded-full p-1 transition-colors">
             <X className="size-4" />
           </button>
         </div>
 
-        {/* Token List */}
+        {/* Token List — native first, then ERC-20s (no section headers). */}
         <div className="max-h-64 overflow-y-auto p-1.5">
-          {/* Native Token Section */}
-          {nativeToken && (
-            <div className="mb-1">
-              <p className="text-muted-foreground px-2 py-1 text-[10px] font-medium">Pay with {nativeToken.symbol}</p>
-              <TokenRow token={nativeToken} />
-            </div>
-          )}
-
-          {/* ERC-20 Tokens Section */}
-          {erc20Tokens.length > 0 && (
-            <div>
-              <p className="text-muted-foreground px-2 py-1 text-[10px] font-medium">Pay with other tokens</p>
-              {erc20Tokens.map((token) => (
-                <TokenRow key={token.address} token={token} showGasCost={true} />
-              ))}
-            </div>
-          )}
+          {nativeToken && <TokenRow token={nativeToken} />}
+          {erc20Tokens.map((token) => (
+            <TokenRow key={token.address} token={token} showGasCost={true} />
+          ))}
         </div>
       </PopoverContent>
     </Popover>

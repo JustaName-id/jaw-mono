@@ -75,11 +75,18 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
   const [sdk, setSdk] = useState(() => buildSdk(mode, uiHandlerRef.current, undefined, theme, transportMode));
   const [pmConfig, setPmConfig] = useState<PaymasterApplyConfig | undefined>();
 
-  // Theme changes update the handler in-place — no SDK recreation, no disconnect
-  const handleThemeChange = useCallback((newTheme: JawTheme) => {
-    setTheme(newTheme);
-    uiHandlerRef.current.setTheme(newTheme);
-  }, []);
+  // Theme changes update the handler and provider in-place — no SDK
+  // recreation, no disconnect. provider.setTheme covers both modes: it pushes
+  // to the live keys dialog (CrossPlatform) and stores the theme for
+  // AppSpecific's next request.
+  const handleThemeChange = useCallback(
+    (newTheme: JawTheme) => {
+      setTheme(newTheme);
+      uiHandlerRef.current.setTheme(newTheme);
+      sdk.provider.setTheme(newTheme);
+    },
+    [sdk]
+  );
 
   const handlePaymasterApply = useCallback(
     (config: PaymasterApplyConfig | null) => {
@@ -346,8 +353,9 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
           </Card>
         )}
 
-        {/* Theme Picker (only for AppSpecific mode which uses ReactUIHandler) */}
-        {mode === Mode.AppSpecific && <ThemePicker theme={theme} onThemeChange={handleThemeChange} />}
+        {/* Theme Picker: AppSpecific applies via ReactUIHandler, CrossPlatform
+            via provider.setTheme pushing to the keys dialog. */}
+        <ThemePicker theme={theme} onThemeChange={handleThemeChange} />
 
         {/* Connection Status */}
         <Card className="p-4">
