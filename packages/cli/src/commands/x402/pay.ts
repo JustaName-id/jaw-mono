@@ -108,6 +108,7 @@ export default class X402Pay extends BaseCommand {
             floatTarget,
             maxTopUp,
             sessionChainId: session.chainId,
+            gasAccount: session.sessionAddress as `0x${string}`,
           });
       }
 

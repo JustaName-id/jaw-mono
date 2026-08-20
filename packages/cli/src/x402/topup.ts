@@ -2,6 +2,7 @@ import { encodeFunctionData, erc20Abi } from 'viem';
 import { usdcForNetwork } from './asset-registry.js';
 import { usdcBalance, type BalanceReader } from './balance.js';
 import { parseBigInt } from './amount.js';
+import { gasReserve } from './gas-reserve.js';
 import { errorMessage } from '../lib/errors.js';
 import type { X402PaymentRequirement } from './types.js';
 
@@ -11,10 +12,16 @@ import type { X402PaymentRequirement } from './types.js';
  * permission, then let the normal EIP-3009 payment run.
  *
  * The transfer executes as the session smart account via
- * `wallet_sendCalls(permissionId)` — `JustaPermissionManager` enforces the
- * per-token, per-period cap on-chain and the paymaster covers gas, so the
- * user's keys and wallet are never involved: the agent only ever receives
- * what the permission releases.
+ * `wallet_sendCalls(permissionId)`. `JustaPermissionManager` enforces the
+ * per-token, per-period cap on-chain, so the user's keys and wallet are never
+ * involved: the agent only ever receives what the permission releases.
+ *
+ * Gas for that transfer is charged by the ERC-20 paymaster to whoever sends the
+ * userOp, which is the permission's spender. When that is the payer itself
+ * (eip7702 sessions) the refill carries `gasReserve` on top of what the payment
+ * needs, so the fee has something to come out of. When it is the separate
+ * counterfactual account it holds no USDC at all and those refills go out
+ * sponsored instead, which `SessionBridge` decides.
  */
 
 /** The slice of the session auto-mode bridge the funder needs. */
@@ -45,6 +52,12 @@ export interface TopUpOptions {
    * near-exhausted period never turns an affordable price into a refusal.
    */
   maxTopUp?: bigint;
+  /**
+   * The account that sends the top-up userOp, which is the permission's
+   * spender. Only its own address matters here: when it is the payer, the
+   * refill has to carry the fee the ERC-20 paymaster will charge it.
+   */
+  gasAccount?: `0x${string}`;
   /** Poll interval for the call status, ms. */
   pollMs?: number;
   /** Give up waiting for confirmation after this long, ms. */
@@ -133,7 +146,14 @@ export async function ensurePayerFunds(
 
   const shortfall = price - balance;
   const target = opts.floatTarget !== undefined && opts.floatTarget > price ? opts.floatTarget : price;
-  let amount = target - balance > shortfall ? target - balance : shortfall;
+  // When the payer is also the account the userOp is sent from, it is the one
+  // the ERC-20 paymaster charges, in postOp and right after this transfer
+  // lands. Pulling only what the payment costs leaves nothing for the fee, so
+  // the fee comes out of the payment and the payment itself lands short. The
+  // reserve rides along and stays behind, above the floor the fee takes it
+  // down to, so the next refill is charged rather than sponsored.
+  const paysOwnGas = opts.gasAccount?.toLowerCase() === payerAddress.toLowerCase();
+  let amount = (target - balance > shortfall ? target - balance : shortfall) + (paysOwnGas ? gasReserve(asset) : 0n);
   // Never pre-fund the payer past what the caps still allow, and never let that
   // clamp cut into the shortfall: pulling a float the permission would reject
   // turns an affordable payment into a refusal, so only the float excess goes.

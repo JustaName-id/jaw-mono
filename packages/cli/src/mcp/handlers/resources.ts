@@ -64,8 +64,8 @@ in the owner account. In the default (counterfactual) session mode payerAddress
 is NOT the smart-account (session) address; in eip7702 mode they are the same
 address. Neither account needs a native token. The payment itself is gasless for
 the payer: the facilitator pays that gas. A top-up is an on-chain transfer and
-its gas is real, but it goes through an ERC-20 paymaster that takes the fee in
-USDC from the owner account, so budget slightly more USDC there than the prices
+its gas is real, but it is either sponsored or taken in USDC from the account
+that sent it, so budget slightly more USDC in the owner account than the prices
 you plan to pay. If a payment fails with an insufficient-balance reason, the
 owner account is out of USDC (or the permission's remaining allowance is).
 

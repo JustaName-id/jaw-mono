@@ -1,7 +1,8 @@
 import { loadSessionKey } from './keystore.js';
 import { loadSessionConfig, type SessionConfig } from './session-config.js';
 import { loadConfig } from './config.js';
-import { usdcForNetwork } from '../x402/asset-registry.js';
+import { usdcForNetwork, type UsdcAsset } from '../x402/asset-registry.js';
+import { gasFloor } from '../x402/gas-reserve.js';
 
 // JAW's ERC-20 paymaster, mirrored from core's JAW_PAYMASTER_URL. Kept as a
 // local literal rather than an import because `@jaw.id/core` is lazy-loaded in
@@ -28,7 +29,7 @@ const JAW_ERC20_PAYMASTER_URL = 'https://api.justaname.id/proxy/v1/rpc/erc20-pay
  */
 function resolvePaymaster(
   options: SessionBridgeOptions
-): Pick<SessionBridgeOptions, 'paymasterUrl' | 'paymasterContext'> {
+): Pick<SessionBridgeOptions, 'paymasterUrl' | 'paymasterContext'> & { gasToken?: UsdcAsset } {
   if (options.paymasterUrl) {
     return { paymasterUrl: options.paymasterUrl, paymasterContext: options.paymasterContext };
   }
@@ -63,7 +64,10 @@ function resolvePaymaster(
   const url = new URL(JAW_ERC20_PAYMASTER_URL);
   url.searchParams.set('chainId', String(options.chainId));
   url.searchParams.set('api-key', options.apiKey);
-  return { paymasterUrl: url.toString(), paymasterContext: { token: asset.address } };
+  // `gasToken` marks this as our own fallback, the only case where the bridge
+  // may drop the token and ask for sponsorship instead. A paymaster the caller
+  // configured is theirs, mode included.
+  return { paymasterUrl: url.toString(), paymasterContext: { token: asset.address }, gasToken: asset };
 }
 
 export interface SessionBridgeOptions {
@@ -87,10 +91,13 @@ interface InitializedSession {
 
 export class SessionBridge {
   private readonly options: SessionBridgeOptions;
+  private readonly gasToken: UsdcAsset | null;
   private session: InitializedSession | null = null;
 
   constructor(options: SessionBridgeOptions) {
-    this.options = { ...options, ...resolvePaymaster(options) };
+    const { gasToken, ...paymaster } = resolvePaymaster(options);
+    this.options = { ...options, ...paymaster };
+    this.gasToken = gasToken ?? null;
   }
 
   private async getSession(): Promise<InitializedSession> {
@@ -146,6 +153,27 @@ export class SessionBridge {
     return this.session;
   }
 
+  /**
+   * Whether the sending account holds less USDC than the ERC-20 paymaster would
+   * need to charge it. Only asked on our own fallback paymaster.
+   *
+   * A read that fails answers no: the send then goes out exactly as it would
+   * have without this check, rather than turning an RPC hiccup into a silent
+   * change of who pays.
+   */
+  private async cannotCoverGas(sender: `0x${string}`): Promise<boolean> {
+    if (!this.gasToken) return false;
+    try {
+      // Imported here, not at module scope, for the same reason as the rest of
+      // this file: `balance.js` pulls viem, and the CLI keeps it off startup.
+      const { usdcBalance } = await import('../x402/balance.js');
+      const { raw } = await usdcBalance(this.gasToken.wireNetwork, sender);
+      return BigInt(raw) < gasFloor(this.gasToken);
+    } catch {
+      return false;
+    }
+  }
+
   private checkExpiry(config: SessionConfig): void {
     if (config.expiry <= Date.now() / 1000) {
       const expiryDate = new Date(config.expiry * 1000).toISOString();
@@ -166,9 +194,21 @@ export class SessionBridge {
         const { calls } = payload as {
           calls: Array<{ to: string; value?: string; data?: string }>;
         };
-        return account.sendCalls(calls, {
-          permissionId: config.permissionId as `0x${string}`,
-        });
+        const sendOptions = { permissionId: config.permissionId as `0x${string}` };
+
+        // The ERC-20 paymaster charges the account the userOp is sent from,
+        // and an account with no USDC cannot be charged. That is the first
+        // refill of an eip7702 session, where this account is the payer and
+        // the refill is what funds it, and it is every refill of a default
+        // session, where the spender is a separate account that holds nothing
+        // by design. Sending without the token in context asks the same
+        // paymaster to sponsor instead, which is how this path behaved before
+        // the context reached the SDK.
+        if (await this.cannotCoverGas(config.sessionAddress as `0x${string}`)) {
+          return account.sendCalls(calls, sendOptions, this.options.paymasterUrl, undefined);
+        }
+
+        return account.sendCalls(calls, sendOptions);
       }
 
       case 'wallet_getCallsStatus': {
