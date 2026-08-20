@@ -2,7 +2,7 @@
   "name": "@jaw.id/core",
   "description": "Core SDK - EIP-1193 provider, smart account operations, passkey management",
   "version": "1.2.2",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/cjs/index.cjs",
   "module": "./dist/index.js",
@@ -27,6 +27,8 @@
   },
   "files": [
     "dist",
+    "LICENSE",
+    "NOTICE",
     "!**/*.tsbuildinfo"
   ],
   "scripts": {
