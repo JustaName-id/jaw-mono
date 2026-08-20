@@ -65,6 +65,46 @@ export function sendSwapBatch(provider: JawProvider, recipient: string) {
   });
 }
 
+// The demo "agent" the Agens screen delegates to.
+const AGENT = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';
+// Native ETH sentinel used by the permissions contract.
+const NATIVE_ETH = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+// 25 USDC (6 decimals) / 0.01 ETH (18 decimals)
+const USDC_DAILY_CAP = '0x17d7840';
+const ETH_MONTHLY_CAP = '0x2386f26fc10000';
+
+/**
+ * Agens "Delegate to agent": ERC-7715 grant — the agent may spend up to
+ * 25 USDC per DAY and 0.01 ETH per MONTH, and the whole permission expires
+ * in 30 days. Enforced onchain by the permission manager, revocable anytime.
+ */
+export function sendAgentGrant(provider: JawProvider) {
+  const expiry = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+  return provider.request({
+    method: 'wallet_grantPermissions',
+    params: [
+      {
+        expiry,
+        spender: AGENT,
+        chainId: BASE_SEPOLIA_HEX,
+        permissions: {
+          // Allowed call targets: the USDC token contract and the Uniswap
+          // SwapRouter02 — recognizable contracts whose names the dialog can
+          // surface next to the raw addresses.
+          calls: [
+            { target: USDC, selector: '0xa9059cbb' }, // USDC.transfer
+            { target: SWAP_ROUTER, selector: '0x04e45aaf' }, // exactInputSingle
+          ],
+          spends: [
+            { token: USDC, allowance: USDC_DAILY_CAP, unit: 'day', multiplier: 1 },
+            { token: NATIVE_ETH, allowance: ETH_MONTHLY_CAP, unit: 'month', multiplier: 1 },
+          ],
+        },
+      },
+    ],
+  });
+}
+
 // Hand-rolled ERC-20 transfer(address,uint256) calldata — selector a9059cbb —
 // so the demo needs no ABI library.
 function erc20Transfer(to: string, amount: bigint): `0x${string}` {

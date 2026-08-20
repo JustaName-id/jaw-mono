@@ -44,7 +44,7 @@ export const FEATS: Feat[] = [
     appLabel: 'Social app',
     accent: 'rgb(8,81,255)',
     title: 'Sign in / Sign up',
-    teaser: 'Face ID or fingerprint. No seed phrase.',
+    teaser: 'A passkey. Face ID or fingerprint, no seed phrase.',
     theme: {
       mode: 'light',
       colors: {
@@ -58,7 +58,7 @@ export const FEATS: Feat[] = [
         key: 'happy',
         label: 'Happy path',
         C: CreateHappy,
-        desc: 'One button for new and returning users. A Face ID prompt creates a self-custodial smart account with a gasless name and profile, so people are known by a name instead of a 0x address and keys never leave the device.',
+        desc: 'One button for new and returning users. People are known by a name instead of an 0x address, keys never leave the device, and a Face ID prompt sets it all up with a gasless name and profile.',
       },
       {
         key: 'adversarial',
@@ -71,10 +71,10 @@ export const FEATS: Feat[] = [
   {
     id: 2,
     app: 'splits',
-    appLabel: 'Bill splitter',
+    appLabel: 'Splitos',
     accent: '#C29A34',
     title: 'Send',
-    teaser: 'One tap, name resolved, no gas token.',
+    teaser: 'Amount and fee in one token, no gas token to top up.',
     // Unlike sign-in's single accent swap, splits dresses the dialog like the
     // app's own Settle Up sheet: cream drawer surface (popover is what the
     // sheet is painted with), white inner cards, navy type, gold actions.
@@ -131,22 +131,22 @@ export const FEATS: Feat[] = [
     theme: {
       mode: 'dark',
       colors: {
-        background: '#131313',
+        background: '#0D0E12',
         foreground: '#F5F5F5',
-        card: '#1B1B1B',
+        card: '#20242E',
         cardForeground: '#F5F5F5',
-        popover: '#131313',
+        popover: '#0D0E12',
         popoverForeground: '#F5F5F5',
         primary: '#F43FA6',
         primaryForeground: '#FFFFFF',
         secondary: '#4A2138',
         secondaryForeground: '#FF8ACD',
-        muted: '#242424',
-        mutedForeground: '#9B9B9B',
+        muted: '#20242E',
+        mutedForeground: '#85888F',
         accent: '#4A2138',
         accentForeground: '#FF8ACD',
-        border: '#2E2E2E',
-        input: '#3A3A3A',
+        border: '#2B303C',
+        input: '#3A4353',
         ring: '#F43FA6',
         scrim: '#000000',
       },
@@ -185,9 +185,36 @@ export const FEATS: Feat[] = [
     id: 4,
     app: 'agens',
     appLabel: 'AI agent',
-    accent: '#0F172A',
+    accent: '#5FE0A0',
     title: 'Agent delegation',
     teaser: 'Scoped limits on amount and duration.',
+    // The copy-edit design paints Agens deep green ("ox"): the dialog follows
+    // with green chat surfaces and the emerald primary.
+    theme: {
+      mode: 'dark',
+      colors: {
+        background: '#10312A',
+        foreground: '#EAF7F1',
+        card: '#18443B',
+        cardForeground: '#EAF7F1',
+        popover: '#10312A',
+        popoverForeground: '#EAF7F1',
+        primary: '#10B981',
+        primaryForeground: '#04110C',
+        secondary: '#1B4A40',
+        secondaryForeground: '#A9F0D7',
+        muted: '#18443B',
+        mutedForeground: '#9DB8AE',
+        accent: '#1B4A40',
+        accentForeground: '#6EE7B7',
+        border: '#2A574C',
+        input: '#336357',
+        ring: '#10B981',
+        success: '#10B981',
+        positive: '#34D399',
+        scrim: '#04110C',
+      },
+    },
     variants: [
       {
         key: 'happy',

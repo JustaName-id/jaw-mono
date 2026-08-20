@@ -16,6 +16,7 @@ function Row({
   c1,
   c2,
   ini,
+  photo,
   on = true,
 }: {
   name: string;
@@ -24,12 +25,13 @@ function Row({
   c1: string;
   c2: string;
   ini: string;
+  photo: string;
   on?: boolean;
 }) {
   return (
     <div
       className="flex items-center gap-2.5 rounded-xl bg-white px-[13px] py-2"
-      style={{ border: '1.5px solid ' + (on ? navy : 'rgba(22,35,63,.18)') }}
+      style={{ border: '1.5px solid rgba(22,35,63,.18)' }}
     >
       <span
         className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] text-white"
@@ -38,23 +40,22 @@ function Row({
         {on && <JdIcon.Check size={10} />}
       </span>
       <span
-        className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full text-[12.5px] font-semibold text-white"
-        style={{ background: `linear-gradient(135deg,${c1},${c2})`, opacity: on ? 1 : 0.5 }}
+        className="relative grid h-[34px] w-[34px] shrink-0 place-items-center overflow-hidden rounded-full text-[12.5px] font-semibold text-white"
+        style={{ background: `linear-gradient(135deg,${c1},${c2})` }}
       >
         {ini}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={photo} alt="" className="absolute inset-0 h-full w-full object-cover" />
       </span>
       <span className="min-w-0">
-        <span
-          className="block whitespace-nowrap text-[14px] font-[650] tracking-[-0.01em]"
-          style={{ color: on ? navy : '#6B7385' }}
-        >
+        <span className="block whitespace-nowrap text-[14px] font-[650] tracking-[-0.01em]" style={{ color: navy }}>
           {name}
         </span>
         <span className="block text-[11px] text-[#8A90A0]">{slips}</span>
       </span>
       <span
         className="font-display ml-auto shrink-0 whitespace-nowrap pl-1.5 text-[15px] font-bold"
-        style={{ color: on ? red : '#9AA0AE' }}
+        style={{ color: red }}
       >
         {amt}
       </span>
@@ -68,19 +69,34 @@ export function SplitsApp({ onCta }: { onCta: () => void }) {
     <div className="relative h-full overflow-hidden font-sans" style={{ background: cream, color: navy }}>
       <div className="absolute inset-x-0 top-0 px-[18px] pt-[52px] opacity-[.34]">
         <div className="flex items-center gap-3 border-b border-[rgba(22,35,63,.18)] pb-3">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke={navy}
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+          <span
+            className="relative grid h-[30px] w-[30px] shrink-0 place-items-center overflow-hidden rounded-full text-[11.5px] font-semibold text-white"
+            style={{ background: 'linear-gradient(135deg,#7FA3C9,#2F5D8C)' }}
           >
-            <path d="m15 18-6-6 6-6" />
-          </svg>
-          <span className="font-display text-[23px] font-bold tracking-[-0.01em]">Bill Splitter</span>
+            YB
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="https://randomuser.me/api/portraits/men/86.jpg"
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          </span>
+          <span className="font-display flex-1 text-center text-[23px] font-bold tracking-[-0.01em]">Splitos.eth</span>
+          <span className="grid h-[30px] w-[30px] shrink-0 place-items-center" style={{ color: navy }}>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+            >
+              <path d="M4 7h16" />
+              <path d="M4 12h16" />
+              <path d="M4 17h16" />
+            </svg>
+          </span>
         </div>
         <div className="mb-2 mt-[11px] grid grid-cols-2 gap-2.5">
           {(
@@ -179,9 +195,36 @@ export function SplitsApp({ onCta }: { onCta: () => void }) {
           <span className="h-px flex-1 bg-[rgba(22,35,63,.12)]" />
         </div>
         <div className="flex flex-col gap-[7px] px-[18px] pb-2.5">
-          <Row name="Karim Nasr" slips="1 slip" amt="$42.50" c1="#64748B" c2="#334155" ini="KN" on={false} />
-          <Row name="Samira K." slips="1 slip" amt="$18.00" c1="#E4677B" c2="#B91C3C" ini="SK" on={false} />
-          <Row name="Youssef Bahri" slips="2 slips" amt="$12.00" c1="#7FA3C9" c2="#2F5D8C" ini="YB" on={false} />
+          <Row
+            name="Karim Nasr"
+            slips="1 slip"
+            amt="$42.50"
+            c1="#64748B"
+            c2="#334155"
+            ini="KN"
+            photo="https://randomuser.me/api/portraits/men/32.jpg"
+            on={false}
+          />
+          <Row
+            name="Samira K."
+            slips="1 slip"
+            amt="$18.00"
+            c1="#E4677B"
+            c2="#B91C3C"
+            ini="SK"
+            photo="https://randomuser.me/api/portraits/women/44.jpg"
+            on={false}
+          />
+          <Row
+            name="Youssef Bahri"
+            slips="2 slips"
+            amt="$12.00"
+            c1="#7FA3C9"
+            c2="#2F5D8C"
+            ini="YB"
+            photo="https://randomuser.me/api/portraits/men/75.jpg"
+            on={false}
+          />
         </div>
         <div className="grid grid-cols-2 gap-2.5 border-t border-[rgba(22,35,63,.1)] px-[18px] pb-11 pt-3">
           <span

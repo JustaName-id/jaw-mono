@@ -7,7 +7,7 @@ import { IOS_BEZEL, IOSDevice } from '@/components/ios/device';
 import { btnGhost, btnPrimary, JdIcon } from '@/components/jaw/shared';
 import { SocialApp } from '@/components/phone-apps/social';
 import { getJaw, prewarmJaw, resetJaw } from '@/lib/jaw';
-import { sendSplitsBatch, sendSwapBatch } from '@/lib/requests';
+import { sendAgentGrant, sendSplitsBatch, sendSwapBatch } from '@/lib/requests';
 import { useEthQuote, type SwapQuote } from '@/lib/use-eth-quote';
 import { useDialogEmbed } from '@/lib/use-dialog-embed';
 import { SplitsApp } from '@/components/phone-apps/splits';
@@ -151,8 +151,9 @@ export function HeroDemoPage() {
     }
   };
   const Base = BASE_APPS[v.app || cur.app];
-  // The Swapr screens are dark — flip the fake status bar / home indicator too.
-  const darkScreen = (v.app || cur.app).startsWith('swapr');
+  // Swapr and Agens screens are dark — flip the status bar / home indicator.
+  const activeApp = v.app || cur.app;
+  const darkScreen = activeApp.startsWith('swapr') || activeApp === 'agens';
 
   // Every CTA opens the real keys.jaw.id dialog (contained in the phone).
   // v1 wires connect; per-feature requests (send/swap/delegate) come next.
@@ -181,6 +182,10 @@ export function HeroDemoPage() {
         // Per-feature real request (the dialog shows the actual review).
         if (cur.id === 2) {
           await sendSplitsBatch(jaw.provider);
+        }
+        if (cur.id === 4) {
+          // Real ERC-7715 delegation: 25 USDC/day + 0.01 ETH/month, 30 days.
+          await sendAgentGrant(jaw.provider);
         }
         if (cur.id === 3) {
           // Swap 0.2 USDC → WETH on Uniswap v3; the swap output goes back to
@@ -453,11 +458,11 @@ export function HeroDemoPage() {
       <main className="mx-auto grid w-full max-w-[1400px] flex-1 grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] items-start max-[1040px]:grid-cols-1 max-md:hidden">
         <div className="flex min-h-0 flex-col justify-start py-[26px] pb-10 pl-9 pr-16 max-[1040px]:px-6">
           <h1 className="mb-3 max-w-[24ch] text-balance text-[clamp(26px,2.4vw,34px)] font-semibold leading-[1.06] tracking-[-0.035em]">
-            Walk through exactly what <span className="text-jaw-blue">your users</span> do.
+            Experience <span className="text-jaw-blue">your user&apos;s</span> journey
           </h1>
           <p className="text-ink-2 mb-[26px] max-w-[600px] text-pretty text-[17px] leading-[1.55]">
-            The app builds its own screens. JAW makes the action possible and provides the components users decide on:
-            reviews, confirmations, signatures.
+            The app builds its own screens. JAW makes the action possible and supplies what users decide on: reviews,
+            confirmations, signatures.
           </p>
           <div className="relative mb-8 flex flex-col gap-2">
             {FEATS.map((f) => (

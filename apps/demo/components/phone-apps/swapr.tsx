@@ -8,10 +8,10 @@ import type { SwapQuote } from '@/lib/use-eth-quote';
 const pink = 'oklch(0.68 0.24 340)';
 
 // Uniswap-dark palette shared with this feature's dialog theme.
-const bg = '#131313';
-const tile = '#1B1B1B';
-const chip = '#2A2A2A';
-const line = '#333333';
+const bg = '#0D0E12';
+const tile = '#20242E';
+const chip = '#22242C';
+const line = '#2B303C';
 
 function UsdcLogo({ size = 22 }: { size?: number }) {
   return (
@@ -58,7 +58,7 @@ function Pill({ sym, icon }: { sym: string; icon: ReactNode }) {
         height="12"
         viewBox="0 0 24 24"
         fill="none"
-        stroke="#9B9B9B"
+        stroke="rgba(255,255,255,.5)"
         strokeWidth="2.4"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -85,7 +85,7 @@ export function SwaprApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?:
           height="19"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#9B9B9B"
+          stroke="rgba(255,255,255,.5)"
           strokeWidth="1.8"
           strokeLinecap="round"
         >
@@ -104,7 +104,7 @@ export function SwaprApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?:
               <span className="text-[29px] font-medium leading-[1.1] tracking-[-0.025em]">{quote.sell}</span>
               <Pill sym="USDC" icon={<UsdcLogo />} />
             </div>
-            <div className="mt-[9px] flex items-center justify-between gap-2 whitespace-nowrap text-[12px] text-[#9B9B9B]">
+            <div className="mt-[9px] flex items-center justify-between gap-2 whitespace-nowrap text-[12px] text-[rgba(255,255,255,.5)]">
               <span>{quote.usd}</span>
               <span>
                 Balance: 40.00{' '}
@@ -116,7 +116,7 @@ export function SwaprApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?:
           </div>
           <span
             className="absolute left-1/2 top-1/2 z-[2] grid h-[38px] w-[38px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-xl text-slate-300"
-            style={{ background: chip, border: `3px solid ${bg}`, boxShadow: '0 1px 3px rgba(0,0,0,.5)' }}
+            style={{ background: line, border: `3px solid ${bg}`, boxShadow: '0 1px 3px rgba(0,0,0,.5)' }}
           >
             <svg
               width="15"
@@ -139,7 +139,7 @@ export function SwaprApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?:
               <span className="text-[29px] font-medium leading-[1.1] tracking-[-0.025em]">{quote.receive}</span>
               <Pill sym="WETH" icon={<EthLogo />} />
             </div>
-            <div className="mt-[9px] flex justify-between gap-2 whitespace-nowrap text-[12px] text-[#9B9B9B]">
+            <div className="mt-[9px] flex justify-between gap-2 whitespace-nowrap text-[12px] text-[rgba(255,255,255,.5)]">
               <span>{quote.usd}</span>
               <span>Balance: 0.02</span>
             </div>
@@ -147,7 +147,7 @@ export function SwaprApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?:
         </div>
         <div
           className="mt-[5px] flex items-center gap-[9px] rounded-xl px-3 py-[9px]"
-          style={{ background: '#191919' }}
+          style={{ background: 'rgba(255,255,255,.075)' }}
         >
           <span
             className="grid h-[17px] w-[17px] shrink-0 place-items-center rounded-full text-[10px] font-bold text-slate-300"
@@ -156,7 +156,7 @@ export function SwaprApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?:
             i
           </span>
           <span className="text-[12.5px] font-semibold tracking-[-0.01em]">
-            {quote.rate} <span className="font-medium text-[#9B9B9B]">({quote.rateUsd})</span>
+            {quote.rate} <span className="font-medium text-[rgba(255,255,255,.5)]">({quote.rateUsd})</span>
           </span>
         </div>
       </div>
@@ -173,7 +173,7 @@ export function SwaprApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?:
                   height="20"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="#9B9B9B"
+                  stroke="rgba(255,255,255,.5)"
                   strokeWidth="1.8"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -188,7 +188,7 @@ export function SwaprApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?:
           ))}
         </div>
       ) : (
-        <div className="flex flex-1 flex-col gap-2 px-6 pt-3 text-[12.5px] text-[#9B9B9B]">
+        <div className="flex flex-1 flex-col gap-2 px-6 pt-3 text-[12.5px] text-[rgba(255,255,255,.5)]">
           <div className="flex justify-between">
             <span>Max slippage</span>
             <span className="font-mono text-[11.5px] text-slate-300">0.5%</span>
@@ -201,7 +201,7 @@ export function SwaprApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?:
             className="mt-1.5 rounded-2xl px-[15px] py-[13px]"
             style={{ background: tile, border: `1px solid ${line}` }}
           >
-            <div className="mb-[9px] flex items-center gap-[7px] text-[11.5px] text-[#9B9B9B]">
+            <div className="mb-[9px] flex items-center gap-[7px] text-[11.5px] text-[rgba(255,255,255,.5)]">
               <svg
                 width="13"
                 height="13"
