@@ -2,7 +2,7 @@
   "name": "@jaw.id/wagmi",
   "description": "Wagmi connector and React hooks for JAW.id.",
   "version": "1.0.18",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -27,6 +27,8 @@
   },
   "files": [
     "dist",
+    "LICENSE",
+    "NOTICE",
     "cjs-error.cjs",
     "!**/*.tsbuildinfo"
   ],
