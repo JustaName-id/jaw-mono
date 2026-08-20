@@ -1,0 +1,250 @@
+'use client';
+
+import { useState } from 'react';
+import { FEATS, type PhoneAppKey } from './feats';
+import { FeatRow } from './feat-row';
+import { IOSDevice } from '@/components/ios/device';
+import { btnGhost, btnPrimary, JdIcon } from '@/components/jaw/shared';
+import { SocialApp } from '@/components/phone-apps/social';
+import { SplitsApp } from '@/components/phone-apps/splits';
+import { SwaprApp } from '@/components/phone-apps/swapr';
+import { AgensApp } from '@/components/phone-apps/agens';
+
+const BASE_APPS: Record<PhoneAppKey, (props: { onCta: () => void }) => React.ReactElement> = {
+  social: ({ onCta }) => <SocialApp onCta={onCta} />,
+  splits: ({ onCta }) => <SplitsApp onCta={onCta} />,
+  swapr: ({ onCta }) => <SwaprApp onCta={onCta} />,
+  swaprsend: ({ onCta }) => <SwaprApp onCta={onCta} sendTo="ghadii.justaname.eth" />,
+  agens: ({ onCta }) => <AgensApp onCta={onCta} />,
+};
+
+const PW = 360;
+const PH = 700;
+const S = 0.72;
+
+// Staggered fade for the fin sheet's children.
+const finFade = 'animate-hd-fin-fade [animation-delay:220ms]';
+
+export function HeroDemoPage() {
+  const [id, setId] = useState(1);
+  const [vi, setVi] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [fin, setFin] = useState(false);
+
+  const cur = FEATS.find((f) => f.id === id) ?? FEATS[0];
+  const v = cur.variants[vi] ?? cur.variants[0];
+  const pick = (n: number) => {
+    setId(n);
+    setVi(0);
+    setOpen(false);
+    setFin(false);
+  };
+  const pickVariant = (i: number) => {
+    setVi(i);
+    setOpen(false);
+  };
+  const onDone = () => {
+    if (id === FEATS.length) {
+      setOpen(false);
+      setFin(true);
+    } else {
+      pick(id + 1);
+    }
+  };
+  const DialogC = v.C;
+  const Base = BASE_APPS[v.app || cur.app];
+
+  return (
+    <div className="flex min-h-screen flex-col">
+      <section className="mx-auto w-full max-w-[1400px] px-9 pt-[22px]">
+        <div className="flex items-center justify-between gap-6">
+          <div className="inline-flex items-center gap-3">
+            <span className="inline-flex items-center gap-2">
+              <JdIcon.Logo size={26} />
+              <span className="text-[18px] font-semibold tracking-[-0.015em]">
+                JAW<span className="text-ink-3">.id</span>
+              </span>
+            </span>
+            <span className="text-ink inline-flex items-center gap-2 font-mono text-[14px] uppercase tracking-[.12em]">
+              <span className="animate-hd-live bg-jaw-blue h-1.5 w-1.5 rounded-full" />
+              Interactive demo
+            </span>
+          </div>
+          <a
+            href="https://jaw.id"
+            className="border-line-2 text-ink-2 hover:border-line-2 hover:bg-raise hover:text-ink inline-flex items-center gap-[7px] whitespace-nowrap rounded-full border px-[13px] py-[7px] font-mono text-[10.5px] uppercase tracking-[.1em] no-underline transition-colors duration-200"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M19 12H5" />
+              <path d="m12 19-7-7 7-7" />
+            </svg>
+            Back to website
+          </a>
+        </div>
+      </section>
+
+      <main className="mx-auto grid w-full max-w-[1400px] flex-1 grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] items-start max-[1040px]:grid-cols-1">
+        <div className="flex min-h-0 flex-col justify-start py-[26px] pb-10 pl-9 pr-16">
+          <h1 className="mb-3 max-w-[24ch] text-balance text-[clamp(26px,2.4vw,34px)] font-semibold leading-[1.06] tracking-[-0.035em]">
+            Walk through exactly what <span className="text-jaw-blue">your users</span> do.
+          </h1>
+          <p className="text-ink-2 mb-[26px] max-w-[600px] text-pretty text-[17px] leading-[1.55]">
+            The app builds its own screens. JAW makes the action possible and provides the components users decide on:
+            reviews, confirmations, signatures.
+          </p>
+          <div className="relative mb-8 flex flex-col gap-2">
+            {FEATS.map((f) => (
+              <FeatRow
+                key={f.id}
+                f={f}
+                on={id === f.id}
+                past={f.id < id}
+                vi={id === f.id ? vi : 0}
+                setVi={pickVariant}
+                onPick={() => pick(f.id)}
+              />
+            ))}
+            <a
+              className="group relative z-[1] grid cursor-pointer grid-cols-[24px_1fr] items-start gap-[18px] text-inherit no-underline"
+              href="https://playground.jaw.id/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <div className="text-ink-4 group-hover:text-jaw-blue pt-[13px] font-mono text-[13px] transition-colors duration-[250ms]">
+                +
+              </div>
+              <div className="border-line group-hover:border-line-2 group-hover:bg-raise rounded-xl border px-4 py-[13px] transition-colors duration-200">
+                <div className="flex items-center gap-3">
+                  <span className="text-ink-3 group-hover:text-jaw-blue shrink-0 whitespace-nowrap text-[16px] font-medium leading-[1.3] transition-colors duration-[220ms]">
+                    Everything else
+                  </span>
+                  <span className="text-ink-3 group-hover:text-jaw-blue ml-auto inline-flex min-w-0 items-center gap-[5px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] uppercase tracking-[.1em] transition-colors duration-[220ms]">
+                    Playground <JdIcon.ArrowUR size={10} />
+                  </span>
+                </div>
+              </div>
+            </a>
+          </div>
+        </div>
+
+        <div className="sticky top-5 mb-7 mr-7 mt-[26px] flex flex-col gap-4 max-[1040px]:static max-[1040px]:mx-6 max-[1040px]:mb-6 max-[1040px]:mt-0">
+          <div
+            className="bg-raise flex flex-col items-center justify-center gap-4 rounded-[28px] px-8 py-9"
+            style={{
+              backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(15,23,42,.07) 1px, transparent 0)',
+              backgroundSize: '22px 22px',
+            }}
+          >
+            <div className="border-line text-ink-2 inline-flex items-center gap-2 rounded-full border bg-white px-3.5 py-[7px] font-mono text-[10px] uppercase tracking-[.1em]">
+              <span
+                className="animate-hd-live h-1.5 w-1.5 rounded-full"
+                style={{ background: v.accent || cur.accent }}
+              />
+              {fin ? 'Four of many flows' : open ? 'Real dialog, one tap to confirm' : 'Tap the button in the app'}
+            </div>
+            <div className="shrink-0" style={{ width: PW * S, height: PH * S }}>
+              <div className="origin-top-left" style={{ transform: `scale(${S})` }}>
+                <IOSDevice width={PW} height={PH}>
+                  <div className="animate-jd-fade relative h-full" key={`${id}-${v.key}`}>
+                    <div className="group/stage h-full" data-pulse={open || fin ? undefined : ''}>
+                      <Base onCta={() => setOpen(true)} />
+                    </div>
+                    {fin && (
+                      <div className="absolute inset-0 z-[60] flex items-end">
+                        <div className="animate-hd-fin-fade absolute inset-0 bg-[rgba(15,23,42,.4)] backdrop-blur-[3px]" />
+                        <div className="animate-hd-fin-up relative w-full rounded-t-[26px] bg-white px-6 pb-[34px] pt-[26px] text-center shadow-[0_-24px_60px_-24px_rgba(15,23,42,.5)]">
+                          <span className={`bg-line-2 mx-auto mb-5 block h-[5px] w-[38px] rounded-full ${finFade}`} />
+                          <span
+                            className={`text-jaw-blue mx-auto mb-4 grid h-[52px] w-[52px] place-items-center rounded-full bg-[#EEF3FF] ${finFade}`}
+                          >
+                            <JdIcon.Logo size={24} />
+                          </span>
+                          <div className={`mb-[7px] text-[20px] font-semibold tracking-[-0.025em] ${finFade}`}>
+                            One account, any app
+                          </div>
+                          <p
+                            className={`text-ink-2 mx-auto mb-[22px] max-w-[250px] text-[13.5px] leading-[1.55] ${finFade}`}
+                          >
+                            Four of the things a JAW account can do. The playground has many more, all on the same
+                            account.
+                          </p>
+                          <div className={`flex flex-col gap-[9px] ${finFade}`}>
+                            <a
+                              href="https://dashboard.jaw.id"
+                              className="bg-ink flex items-center justify-center gap-2 rounded-[14px] px-[18px] py-3.5 text-[15px] font-semibold tracking-[-0.01em] text-white no-underline transition-transform duration-150 hover:-translate-y-px"
+                            >
+                              Get Started <JdIcon.Arrow size={14} />
+                            </a>
+                            <a
+                              href="https://playground.jaw.id/"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="border-line-2 text-ink flex items-center justify-center gap-2 rounded-[14px] border px-[18px] py-3.5 text-[15px] font-semibold tracking-[-0.01em] no-underline transition-transform duration-150 hover:-translate-y-px"
+                            >
+                              See the playground <JdIcon.ArrowUR size={12} />
+                            </a>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => pick(1)}
+                            className={`text-ink-2 hover:bg-raise-2 hover:text-ink mt-3.5 flex w-full cursor-pointer items-center justify-center gap-[7px] rounded-xl px-3.5 py-2.5 text-[14px] font-medium transition-colors duration-[180ms] ${finFade}`}
+                          >
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                              <path d="M3 3v5h5" />
+                            </svg>
+                            Run the flows again
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {open && (
+                      <div className="animate-jd-fade absolute inset-0 z-40 flex items-end justify-center bg-[rgba(15,23,42,.35)] px-2.5 pb-4 backdrop-blur-[2px]">
+                        <div className="max-h-[92%] w-full overflow-y-auto rounded-[20px]">
+                          <DialogC onDone={onDone} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </IOSDevice>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {fin && (
+              <span className="animate-jd-fade text-ink-2 text-[14px]">
+                Still not convinced? The docs will change that.
+              </span>
+            )}
+            {!fin && (
+              <a href="https://dashboard.jaw.id" className={btnPrimary}>
+                Get Started <JdIcon.Arrow size={12} />
+              </a>
+            )}
+            <a href="https://docs.jaw.id" target="_blank" rel="noopener noreferrer" className={btnGhost}>
+              Docs <JdIcon.ArrowUR size={11} />
+            </a>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
