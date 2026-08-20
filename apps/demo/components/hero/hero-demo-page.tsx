@@ -7,17 +7,20 @@ import { IOS_BEZEL, IOSDevice } from '@/components/ios/device';
 import { btnGhost, btnPrimary, JdIcon } from '@/components/jaw/shared';
 import { SocialApp } from '@/components/phone-apps/social';
 import { getJaw, prewarmJaw, resetJaw } from '@/lib/jaw';
-import { sendSplitsBatch } from '@/lib/requests';
+import { sendSplitsBatch, sendSwapBatch } from '@/lib/requests';
+import { useEthQuote, type SwapQuote } from '@/lib/use-eth-quote';
 import { useDialogEmbed } from '@/lib/use-dialog-embed';
 import { SplitsApp } from '@/components/phone-apps/splits';
 import { SwaprApp } from '@/components/phone-apps/swapr';
 import { AgensApp } from '@/components/phone-apps/agens';
 
-const BASE_APPS: Record<PhoneAppKey, (props: { onCta: () => void }) => React.ReactElement> = {
+type BaseAppProps = { onCta: () => void; quote: SwapQuote };
+
+const BASE_APPS: Record<PhoneAppKey, (props: BaseAppProps) => React.ReactElement> = {
   social: ({ onCta }) => <SocialApp onCta={onCta} />,
   splits: ({ onCta }) => <SplitsApp onCta={onCta} />,
-  swapr: ({ onCta }) => <SwaprApp onCta={onCta} />,
-  swaprsend: ({ onCta }) => <SwaprApp onCta={onCta} sendTo="ghadii.justaname.eth" />,
+  swapr: ({ onCta, quote }) => <SwaprApp onCta={onCta} quote={quote} />,
+  swaprsend: ({ onCta, quote }) => <SwaprApp onCta={onCta} quote={quote} sendTo="ghadii.justaname.eth" />,
   agens: ({ onCta }) => <AgensApp onCta={onCta} />,
 };
 
@@ -87,6 +90,8 @@ export function HeroDemoPage() {
   const [menu, setMenu] = useState(false);
   const { areaRef, scale } = usePhoneScale();
   const isMobile = useIsMobile();
+  // Live 0.2 USDC → ETH quote for the Swapr screen.
+  const quote = useEthQuote(0.2);
   // Elements the real keys.jaw.id dialog gets pinned to: the phone screen on
   // desktop, the full-bleed demo area on mobile.
   const [mobileEl, setMobileEl] = useState<HTMLDivElement | null>(null);
@@ -146,6 +151,8 @@ export function HeroDemoPage() {
     }
   };
   const Base = BASE_APPS[v.app || cur.app];
+  // The Swapr screens are dark — flip the fake status bar / home indicator too.
+  const darkScreen = (v.app || cur.app).startsWith('swapr');
 
   // Every CTA opens the real keys.jaw.id dialog (contained in the phone).
   // v1 wires connect; per-feature requests (send/swap/delegate) come next.
@@ -175,6 +182,14 @@ export function HeroDemoPage() {
         if (cur.id === 2) {
           await sendSplitsBatch(jaw.provider);
         }
+        if (cur.id === 3) {
+          // Swap 0.2 USDC → WETH on Uniswap v3; the swap output goes back to
+          // the connected account, so fetch its address (post-connect too).
+          const addrs = (await jaw.provider.request({ method: 'eth_accounts' })) as string[];
+          if (addrs?.[0]) {
+            await sendSwapBatch(jaw.provider, addrs[0]);
+          }
+        }
       }
       onDone();
     } catch {
@@ -189,7 +204,7 @@ export function HeroDemoPage() {
   const demo = (
     <div className="animate-jd-fade relative h-full" key={`${id}-${v.key}`}>
       <div className="group/stage h-full" data-pulse={open || fin || menu ? undefined : ''}>
-        <Base onCta={onCta} />
+        <Base onCta={onCta} quote={quote} />
       </div>
 
       {/* mobile-only: feature switcher floats over the app */}
@@ -490,7 +505,7 @@ export function HeroDemoPage() {
             <div ref={areaRef} className="flex w-full justify-center">
               <div className="shrink-0" style={{ width: FRAME_W * scale, height: FRAME_H * scale }}>
                 <div className="origin-top-left" style={{ transform: `scale(${scale})` }}>
-                  <IOSDevice width={PW} height={PH} screenRef={setScreenEl}>
+                  <IOSDevice width={PW} height={PH} dark={darkScreen} screenRef={setScreenEl}>
                     {!isMobile && demo}
                   </IOSDevice>
                 </div>

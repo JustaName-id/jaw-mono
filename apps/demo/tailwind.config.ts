@@ -67,12 +67,18 @@ const config: Config = {
         'sw-blink': {
           '50%': { opacity: '0' },
         },
+        // Background-agnostic attention pulse: a wide two-tone ring (white +
+        // ink read on both light and dark screens) plus a brightness throb.
         'hd-pulse': {
           '0%, 100%': {
-            boxShadow: '0 12px 28px -12px rgba(15,23,42,.45), 0 0 0 0 rgba(8,81,255,.28)',
+            boxShadow:
+              '0 12px 28px -12px rgba(15,23,42,.45), 0 0 0 0 rgba(255,255,255,.45), 0 0 0 0 rgba(15,23,42,.22)',
+            filter: 'brightness(1)',
           },
           '50%': {
-            boxShadow: '0 12px 28px -12px rgba(15,23,42,.45), 0 0 0 8px rgba(8,81,255,0)',
+            boxShadow:
+              '0 12px 28px -12px rgba(15,23,42,.45), 0 0 0 6px rgba(255,255,255,0), 0 0 0 9px rgba(15,23,42,0)',
+            filter: 'brightness(1.09)',
           },
         },
         'hd-fin-up': {
@@ -90,7 +96,7 @@ const config: Config = {
         'jd-fade': 'jd-fade .35s ease both',
         'hd-live': 'hd-live 1.6s ease-in-out infinite',
         'sw-blink': 'sw-blink 1.1s step-end infinite',
-        'hd-pulse': 'hd-pulse 2.2s ease-out infinite',
+        'hd-pulse': 'hd-pulse 2.0s ease-out infinite',
         'hd-fin-up': 'hd-fin-up .52s cubic-bezier(.22,1,.36,1) both',
         'hd-fin-fade': 'hd-fin-fade .4s ease both',
       },

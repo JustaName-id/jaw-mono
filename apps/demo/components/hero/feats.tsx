@@ -126,6 +126,31 @@ export const FEATS: Feat[] = [
     accent: '#0F172A',
     title: 'Swap',
     teaser: 'Approve and swap in one signature.',
+    // Swapr goes graphite black (Uniswap-web dark) with the screen's pink
+    // CTA as primary.
+    theme: {
+      mode: 'dark',
+      colors: {
+        background: '#131313',
+        foreground: '#F5F5F5',
+        card: '#1B1B1B',
+        cardForeground: '#F5F5F5',
+        popover: '#131313',
+        popoverForeground: '#F5F5F5',
+        primary: '#F43FA6',
+        primaryForeground: '#FFFFFF',
+        secondary: '#4A2138',
+        secondaryForeground: '#FF8ACD',
+        muted: '#242424',
+        mutedForeground: '#9B9B9B',
+        accent: '#4A2138',
+        accentForeground: '#FF8ACD',
+        border: '#2E2E2E',
+        input: '#3A3A3A',
+        ring: '#F43FA6',
+        scrim: '#000000',
+      },
+    },
     variants: [
       {
         key: 'swap',
