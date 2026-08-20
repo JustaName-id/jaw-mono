@@ -6,7 +6,7 @@ import { FeatRow } from './feat-row';
 import { IOS_BEZEL, IOSDevice } from '@/components/ios/device';
 import { btnGhost, btnPrimary, JdIcon } from '@/components/jaw/shared';
 import { SocialApp } from '@/components/phone-apps/social';
-import { getJaw, prewarmJaw } from '@/lib/jaw';
+import { getJaw, prewarmJaw, resetJaw } from '@/lib/jaw';
 import { useDialogEmbed } from '@/lib/use-dialog-embed';
 import { SplitsApp } from '@/components/phone-apps/splits';
 import { SwaprApp } from '@/components/phone-apps/swapr';
@@ -74,6 +74,10 @@ function useIsMobile() {
 // Staggered fade for the fin sheet's children.
 const finFade = 'animate-hd-fin-fade [animation-delay:220ms]';
 
+// Features without a theme of their own reset the dialog to the SDK's light
+// defaults, so a themed feature never leaks its palette into the next screen.
+const DEFAULT_THEME = { mode: 'light' } as const;
+
 export function HeroDemoPage() {
   const [id, setId] = useState(1);
   const [vi, setVi] = useState(0);
@@ -87,11 +91,31 @@ export function HeroDemoPage() {
   const [mobileEl, setMobileEl] = useState<HTMLDivElement | null>(null);
   const [screenEl, setScreenEl] = useState<HTMLDivElement | null>(null);
   useDialogEmbed(isMobile ? mobileEl : screenEl, isMobile ? 0 : 47 * scale);
-  useEffect(() => {
-    prewarmJaw();
-  }, []);
-
   const cur = FEATS.find((f) => f.id === id) ?? FEATS[0];
+  useEffect(() => {
+    // Prewarm mounts the hidden keys iframe; the active feature's theme rides
+    // the handshake on first load and a live SetTheme push on every switch.
+    const provider = prewarmJaw();
+    provider?.setTheme(cur.theme ?? DEFAULT_THEME);
+  }, [cur]);
+
+  useEffect(() => {
+    // Sign in / Sign up always demos a fresh connect. Log out on ENTERING the
+    // screen (not on tap): disconnect tears the keys iframe down, and doing it
+    // here lets a fresh one prewarm in the background while the user reads the
+    // screen — so the tap itself opens the drawer with no teardown lag.
+    if (cur.id !== 1) return;
+    (async () => {
+      const jaw = getJaw();
+      if (!jaw) return;
+      const accounts = (await jaw.provider.request({ method: 'eth_accounts' })) as string[];
+      if (accounts && accounts.length > 0) {
+        await jaw.provider.disconnect();
+        resetJaw()?.provider.setTheme(cur.theme ?? DEFAULT_THEME);
+      }
+    })().catch(() => {});
+  }, [cur]);
+
   const v = cur.variants[vi] ?? cur.variants[0];
   const pick = (n: number) => {
     setId(n);
@@ -130,10 +154,19 @@ export function HeroDemoPage() {
     setOpen(true);
     try {
       // eth_accounts is silent + local: it reports the live session without
-      // opening the dialog. Only ask keys to connect when there is no session,
-      // so moving between screens never re-runs the account picker.
+      // opening the dialog.
       const accounts = (await jaw.provider.request({ method: 'eth_accounts' })) as string[];
-      if (!accounts || accounts.length === 0) {
+      const connected = Boolean(accounts && accounts.length > 0);
+      if (cur.id === 1) {
+        // Fresh-connect demo. The screen-entry effect normally logged out
+        // already; the disconnect here only covers taps that raced it.
+        if (connected) {
+          await jaw.provider.disconnect();
+          resetJaw()?.provider.setTheme(cur.theme ?? DEFAULT_THEME);
+        }
+        await getJaw()!.provider.request({ method: 'eth_requestAccounts' });
+      } else if (!connected) {
+        // Other screens reuse the session; connect only if there is none.
         await jaw.provider.request({ method: 'eth_requestAccounts' });
       }
       onDone();

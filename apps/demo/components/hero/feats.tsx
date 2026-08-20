@@ -1,6 +1,7 @@
 'use client';
 
 import type { ComponentType } from 'react';
+import type { JawTheme } from '@jaw.id/core';
 import { SceneAgent, SceneCreate, SceneSiwe } from '@/components/jaw/scenes';
 import { BatchDialog, SwapAdvDialog, SwapDialog, TransferAdvDialog, TransferDialog } from '@/components/jaw/dialogs';
 
@@ -24,6 +25,8 @@ export type Feat = {
   title: string;
   teaser: string;
   variants: Variant[];
+  /** Theme pushed to the keys dialog while this feature is active. */
+  theme?: JawTheme;
 };
 
 const SiweAdversarial = ({ onDone }: { onDone: () => void }) => <SceneSiwe act="adversarial" onDone={onDone} oneStep />;
@@ -42,6 +45,14 @@ export const FEATS: Feat[] = [
     accent: 'rgb(8,81,255)',
     title: 'Sign in / Sign up',
     teaser: 'Face ID or fingerprint. No seed phrase.',
+    theme: {
+      mode: 'light',
+      colors: {
+        primary: '#0851FF',
+        primaryForeground: '#FFFFFF',
+        ring: '#0851FF',
+      },
+    },
     variants: [
       {
         key: 'happy',

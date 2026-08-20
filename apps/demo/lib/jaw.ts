@@ -27,6 +27,13 @@ export function getJaw() {
   return sdk;
 }
 
+// After a full disconnect the transport is gone; rebuilding the SDK re-runs
+// the constructor prewarm so the next connect opens instantly.
+export function resetJaw() {
+  sdk = null;
+  return getJaw();
+}
+
 // Constructing the provider prewarms the hidden keys iframe (mount + handshake)
 // before the user ever taps a CTA, so the first dialog opens instantly.
 export function prewarmJaw() {
