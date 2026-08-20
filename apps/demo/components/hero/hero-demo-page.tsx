@@ -7,6 +7,7 @@ import { IOS_BEZEL, IOSDevice } from '@/components/ios/device';
 import { btnGhost, btnPrimary, JdIcon } from '@/components/jaw/shared';
 import { SocialApp } from '@/components/phone-apps/social';
 import { getJaw, prewarmJaw, resetJaw } from '@/lib/jaw';
+import { sendSplitsBatch } from '@/lib/requests';
 import { useDialogEmbed } from '@/lib/use-dialog-embed';
 import { SplitsApp } from '@/components/phone-apps/splits';
 import { SwaprApp } from '@/components/phone-apps/swapr';
@@ -165,9 +166,15 @@ export function HeroDemoPage() {
           resetJaw()?.provider.setTheme(cur.theme ?? DEFAULT_THEME);
         }
         await getJaw()!.provider.request({ method: 'eth_requestAccounts' });
-      } else if (!connected) {
+      } else {
         // Other screens reuse the session; connect only if there is none.
-        await jaw.provider.request({ method: 'eth_requestAccounts' });
+        if (!connected) {
+          await jaw.provider.request({ method: 'eth_requestAccounts' });
+        }
+        // Per-feature real request (the dialog shows the actual review).
+        if (cur.id === 2) {
+          await sendSplitsBatch(jaw.provider);
+        }
       }
       onDone();
     } catch {

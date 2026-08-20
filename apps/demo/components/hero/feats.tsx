@@ -75,6 +75,35 @@ export const FEATS: Feat[] = [
     accent: '#C29A34',
     title: 'Send',
     teaser: 'One tap, name resolved, no gas token.',
+    // Unlike sign-in's single accent swap, splits dresses the dialog like the
+    // app's own Settle Up sheet: cream drawer surface (popover is what the
+    // sheet is painted with), white inner cards, navy type, gold actions.
+    theme: {
+      mode: 'light',
+      borderRadius: 'lg',
+      colors: {
+        background: '#F4F5F7',
+        foreground: '#16233F',
+        card: '#FFFFFF',
+        cardForeground: '#16233F',
+        popover: '#F4F5F7',
+        popoverForeground: '#16233F',
+        primary: '#C29A34',
+        primaryForeground: '#FFFFFF',
+        secondary: '#E9EBEF',
+        secondaryForeground: '#16233F',
+        muted: '#E9EBEF',
+        mutedForeground: '#5A6379',
+        accent: '#E9EBEF',
+        accentForeground: '#16233F',
+        border: '#DDE0E6',
+        input: '#DDE0E6',
+        ring: '#C29A34',
+        positive: '#1E7A45',
+        negative: '#C81E33',
+        scrim: '#16233F',
+      },
+    },
     variants: [
       {
         key: 'happy',
