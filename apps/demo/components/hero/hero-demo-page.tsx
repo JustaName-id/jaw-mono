@@ -6,6 +6,8 @@ import { FeatRow } from './feat-row';
 import { IOS_BEZEL, IOSDevice } from '@/components/ios/device';
 import { btnGhost, btnPrimary, JdIcon } from '@/components/jaw/shared';
 import { SocialApp } from '@/components/phone-apps/social';
+import { getJaw, prewarmJaw } from '@/lib/jaw';
+import { useDialogEmbed } from '@/lib/use-dialog-embed';
 import { SplitsApp } from '@/components/phone-apps/splits';
 import { SwaprApp } from '@/components/phone-apps/swapr';
 import { AgensApp } from '@/components/phone-apps/agens';
@@ -34,10 +36,14 @@ function usePhoneScale() {
   useLayoutEffect(() => {
     const el = areaRef.current;
     if (!el) return;
+    // Width-fit only, no height shrink: the embedded keys iframe renders at
+    // native pixels (it cannot be transform-scaled without tripping keys'
+    // visibility guard), so any scale < 1 makes the real dialog look oversized
+    // next to the scaled-down mock app. Keep the phone at 1:1 whenever the
+    // column is wide enough and let the page scroll on short windows.
     const measure = () => {
       const byWidth = el.clientWidth / FRAME_W;
-      const byHeight = (window.innerHeight - 120) / FRAME_H;
-      setScale(Math.max(MIN_SCALE, Math.min(MAX_SCALE, byWidth, byHeight)));
+      setScale(Math.max(MIN_SCALE, Math.min(MAX_SCALE, byWidth)));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -76,6 +82,14 @@ export function HeroDemoPage() {
   const [menu, setMenu] = useState(false);
   const { areaRef, scale } = usePhoneScale();
   const isMobile = useIsMobile();
+  // Elements the real keys.jaw.id dialog gets pinned to: the phone screen on
+  // desktop, the full-bleed demo area on mobile.
+  const [mobileEl, setMobileEl] = useState<HTMLDivElement | null>(null);
+  const [screenEl, setScreenEl] = useState<HTMLDivElement | null>(null);
+  useDialogEmbed(isMobile ? mobileEl : screenEl, isMobile ? 0 : 47 * scale);
+  useEffect(() => {
+    prewarmJaw();
+  }, []);
 
   const cur = FEATS.find((f) => f.id === id) ?? FEATS[0];
   const v = cur.variants[vi] ?? cur.variants[0];
@@ -106,15 +120,36 @@ export function HeroDemoPage() {
       pick(id + 1);
     }
   };
-  const DialogC = v.C;
   const Base = BASE_APPS[v.app || cur.app];
+
+  // Every CTA opens the real keys.jaw.id dialog (contained in the phone).
+  // v1 wires connect; per-feature requests (send/swap/delegate) come next.
+  const onCta = async () => {
+    const jaw = getJaw();
+    if (!jaw) return;
+    setOpen(true);
+    try {
+      // eth_accounts is silent + local: it reports the live session without
+      // opening the dialog. Only ask keys to connect when there is no session,
+      // so moving between screens never re-runs the account picker.
+      const accounts = (await jaw.provider.request({ method: 'eth_accounts' })) as string[];
+      if (!accounts || accounts.length === 0) {
+        await jaw.provider.request({ method: 'eth_requestAccounts' });
+      }
+      onDone();
+    } catch {
+      // dismissed or rejected — stay on the current feature
+    } finally {
+      setOpen(false);
+    }
+  };
 
   // The demo itself: the fake app plus every overlay (menu, dialog, finale).
   // Rendered once — inside the device frame on desktop, full-bleed on mobile.
   const demo = (
     <div className="animate-jd-fade relative h-full" key={`${id}-${v.key}`}>
       <div className="group/stage h-full" data-pulse={open || fin || menu ? undefined : ''}>
-        <Base onCta={() => setOpen(true)} />
+        <Base onCta={onCta} />
       </div>
 
       {/* mobile-only: feature switcher floats over the app */}
@@ -311,13 +346,6 @@ export function HeroDemoPage() {
           </div>
         </div>
       )}
-      {open && (
-        <div className="animate-jd-fade absolute inset-0 z-40 flex items-end justify-center bg-[rgba(15,23,42,.35)] px-2.5 pb-4 backdrop-blur-[2px]">
-          <div className="max-h-[92%] w-full overflow-y-auto rounded-[20px]">
-            <DialogC onDone={onDone} />
-          </div>
-        </div>
-      )}
     </div>
   );
 
@@ -362,7 +390,9 @@ export function HeroDemoPage() {
       </section>
 
       {/* mobile: the visitor's phone IS the device — demo runs full-bleed, no frame */}
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-white md:hidden">{isMobile && demo}</div>
+      <div ref={setMobileEl} className="relative min-h-0 flex-1 overflow-hidden bg-white md:hidden">
+        {isMobile && demo}
+      </div>
 
       {/* desktop / tablet: framed phone on the stage */}
       <main className="mx-auto grid w-full max-w-[1400px] flex-1 grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] items-start max-[1040px]:grid-cols-1 max-md:hidden">
@@ -420,7 +450,7 @@ export function HeroDemoPage() {
             <div ref={areaRef} className="flex w-full justify-center">
               <div className="shrink-0" style={{ width: FRAME_W * scale, height: FRAME_H * scale }}>
                 <div className="origin-top-left" style={{ transform: `scale(${scale})` }}>
-                  <IOSDevice width={PW} height={PH}>
+                  <IOSDevice width={PW} height={PH} screenRef={setScreenEl}>
                     {!isMobile && demo}
                   </IOSDevice>
                 </div>

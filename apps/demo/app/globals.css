@@ -31,3 +31,30 @@
   background: var(--acc);
   color: var(--bg);
 }
+
+/* Contain the CrossPlatform keys.jaw.id dialog inside the demo phone.
+   core's iframe transport appends a top-layer <dialog data-jaw> to
+   document.body with inline fixed/inset-0 styles — there is no container
+   option, so we pin it to the phone screen's rect (published as CSS vars by
+   useDialogEmbed) with !important. The iframe flips from fixed to absolute so
+   the dialog becomes its containing block; no transforms here or keys'
+   visibility guard would shield the frame. */
+html.jaw-embed-active dialog[data-jaw] {
+  position: fixed !important;
+  inset: auto !important;
+  top: var(--jaw-embed-top, 0) !important;
+  left: var(--jaw-embed-left, 0) !important;
+  width: var(--jaw-embed-w, 100vw) !important;
+  height: var(--jaw-embed-h, 100vh) !important;
+  max-width: none !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  border-radius: var(--jaw-embed-radius, 0) !important;
+  background: rgba(15, 23, 42, 0.35) !important;
+}
+html.jaw-embed-active dialog[data-jaw] > iframe {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
