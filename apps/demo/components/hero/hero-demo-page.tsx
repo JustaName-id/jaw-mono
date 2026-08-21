@@ -10,7 +10,7 @@ import { IOS_BEZEL, IOSDevice } from '@/components/ios-device';
 import { btnGhost, btnPrimary, Icon } from '@/components/ui';
 import { SocialApp } from '@/components/screens/social';
 import { getJaw, prewarmJaw, resetJaw } from '@/lib/jaw';
-import { sendAgentGrant, sendSplitsBatch, sendSwapBatch } from '@/lib/requests';
+import { connectVariant, featureRequest } from '@/lib/requests';
 import { useEthQuote, type SwapQuote } from '@/lib/use-eth-quote';
 import { useDialogEmbed } from '@/lib/use-dialog-embed';
 import { SplitsApp } from '@/components/screens/splits';
@@ -23,7 +23,6 @@ const BASE_APPS: Record<PhoneAppKey, (props: BaseAppProps) => React.ReactElement
   social: ({ onCta }) => <SocialApp onCta={onCta} />,
   splits: ({ onCta }) => <SplitsApp onCta={onCta} />,
   swap: ({ onCta, quote }) => <SwapApp onCta={onCta} quote={quote} />,
-  swapSend: ({ onCta, quote }) => <SwapApp onCta={onCta} quote={quote} sendTo="ghadii.justaname.eth" />,
   agent: ({ onCta }) => <AgentApp onCta={onCta} />,
 };
 
@@ -171,8 +170,9 @@ export function HeroDemoPage() {
   const activeApp = v.app || cur.app;
   const darkScreen = activeApp.startsWith('swap') || activeApp === 'agent';
 
-  // Every CTA opens the real keys.jaw.id dialog (contained in the phone).
-  // v1 wires connect; per-feature requests (send/swap/delegate) come next.
+  // Every CTA opens the real keys.jaw.id dialog (contained in the phone). Each
+  // feature runs a genuine request; the adversarial variant runs a flaggable
+  // one (SIWE spoof / unlimited approval / unscoped grant).
   const onCta = async () => {
     // One request at a time: the CTA stays clickable until the dialog paints,
     // so a double-tap must not fire two wallet requests.
@@ -181,6 +181,7 @@ export function HeroDemoPage() {
     if (!jaw) return;
     const run = ++runRef.current;
     const fromId = cur.id;
+    const adversarial = v.key === 'adversarial';
     setOpen(true);
     try {
       // eth_accounts is silent + local: it reports the live session without
@@ -194,28 +195,18 @@ export function HeroDemoPage() {
           await jaw.provider.disconnect();
           resetJaw()?.provider.setTheme(cur.theme ?? DEFAULT_THEME);
         }
-        await getJaw()!.provider.request({ method: 'eth_requestAccounts' });
+        await connectVariant(getJaw()!.provider, adversarial);
+        // The adversarial SIWE dialog closes the instant the user accepts the
+        // risk and signs; hold a beat so the phishing warning they just
+        // acknowledged doesn't vanish into the next screen.
+        if (adversarial) await new Promise((r) => setTimeout(r, 1000));
       } else {
         // Other screens reuse the session; connect only if there is none.
         if (!connected) {
           await jaw.provider.request({ method: 'eth_requestAccounts' });
         }
-        // Per-feature real request (the dialog shows the actual review).
-        if (cur.id === 2) {
-          await sendSplitsBatch(jaw.provider);
-        }
-        if (cur.id === 4) {
-          // Real ERC-7715 delegation: 25 USDC/day + 0.01 ETH/month, 30 days.
-          await sendAgentGrant(jaw.provider);
-        }
-        if (cur.id === 3) {
-          // Swap 0.2 USDC → WETH on Uniswap v3; the swap output goes back to
-          // the connected account, so fetch its address (post-connect too).
-          const addrs = (await jaw.provider.request({ method: 'eth_accounts' })) as string[];
-          if (addrs?.[0]) {
-            await sendSwapBatch(jaw.provider, addrs[0]);
-          }
-        }
+        const addrs = (await jaw.provider.request({ method: 'eth_accounts' })) as string[];
+        await featureRequest(jaw.provider, cur.id, adversarial, addrs?.[0] ?? '');
       }
       // Only advance if the user hasn't navigated while the request ran.
       if (runRef.current === run) advanceFrom(fromId);

@@ -25,6 +25,13 @@ const POOL_FEE = 3000n;
 // 0.2 USDC
 const FIFTH_USDC = 200000n;
 
+// Max uint256 — the "blank cheque" allowance keys renders as "Unlimited".
+const MAX_UINT256 = 2n ** 256n - 1n;
+// Permission-manager wildcards: keys renders these as "Any contract" / "Any
+// function" with a warning, the real signal of an unscoped grant.
+const ANY_TARGET = '0x3232323232323232323232323232323232323232';
+const ANY_FN_SELECTOR = '0x32323232';
+
 // 32-byte ABI word from an address or uint.
 function word(v: bigint | string): string {
   return typeof v === 'bigint'
@@ -58,6 +65,29 @@ export function sendSwapBatch(provider: JawProvider, recipient: string) {
         atomicRequired: true,
         calls: [
           { to: USDC, data: erc20Approve(SWAP_ROUTER, FIFTH_USDC) },
+          { to: SWAP_ROUTER, data: exactInputSingle(recipient) },
+        ],
+      },
+    ],
+  });
+}
+
+/**
+ * Swap screen, ADVERSARIAL: the same approve+swap as the happy path, but the
+ * approval is MAX_UINT256 instead of the exact 0.2 USDC — a blank cheque to the
+ * router left sitting after the swap. keys decodes the approve so the unlimited
+ * allowance is visible before signing.
+ */
+export function sendSwapUnlimited(provider: JawProvider, recipient: string) {
+  return provider.request({
+    method: 'wallet_sendCalls',
+    params: [
+      {
+        version: '2.0.0',
+        chainId: BASE_SEPOLIA_HEX,
+        atomicRequired: true,
+        calls: [
+          { to: USDC, data: erc20Approve(SWAP_ROUTER, MAX_UINT256) },
           { to: SWAP_ROUTER, data: exactInputSingle(recipient) },
         ],
       },
@@ -105,12 +135,92 @@ export function sendAgentGrant(provider: JawProvider) {
   });
 }
 
+/**
+ * Agent screen, ADVERSARIAL: an unscoped grant — wildcard target and selector,
+ * so keys renders "Any contract" / "Any function" with a warning: the whole
+ * account, handed over. The spend is a plain 100 USDC/day (a readable number,
+ * not a max-uint — keys renders that as an unreadable 78-digit figure and
+ * doesn't flag it anyway); the wildcard scope is what carries the danger.
+ */
+export function sendAgentGrantUnlimited(provider: JawProvider) {
+  const expiry = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60;
+  return provider.request({
+    method: 'wallet_grantPermissions',
+    params: [
+      {
+        expiry,
+        spender: AGENT,
+        chainId: BASE_SEPOLIA_HEX,
+        permissions: {
+          calls: [{ target: ANY_TARGET, selector: ANY_FN_SELECTOR }],
+          spends: [{ token: USDC, allowance: '0x5f5e100', unit: 'day', multiplier: 1 }],
+        },
+      },
+    ],
+  });
+}
+
 // Hand-rolled ERC-20 transfer(address,uint256) calldata — selector a9059cbb —
 // so the demo needs no ABI library.
 function erc20Transfer(to: string, amount: bigint): `0x${string}` {
   const addr = to.toLowerCase().replace(/^0x/, '').padStart(64, '0');
   const amt = amount.toString(16).padStart(64, '0');
   return `0xa9059cbb${addr}${amt}`;
+}
+
+// SIWE nonce: ≥8 alphanumeric chars per the spec.
+function siweNonce(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  return Array.from(bytes, (b) => (b % 36).toString(36)).join('');
+}
+
+/**
+ * Sign-in CONNECT. Happy path is a plain connect. Adversarial requests a SIWE
+ * sign-in whose message claims to be evil.com while the request comes from this
+ * site — keys compares the two, flags the mismatch as phishing, and blocks
+ * one-tap signing until the user accepts the risk.
+ */
+export function connectVariant(provider: JawProvider, adversarial: boolean) {
+  if (!adversarial) return provider.request({ method: 'eth_requestAccounts' });
+  return provider.request({
+    method: 'wallet_connect',
+    params: [
+      {
+        capabilities: {
+          signInWithEthereum: {
+            nonce: siweNonce(),
+            chainId: BASE_SEPOLIA_HEX,
+            domain: 'evil.com',
+            uri: 'https://evil.com/claim',
+            statement: 'Sign in to claim your reward.',
+          },
+        },
+      },
+    ],
+  });
+}
+
+/**
+ * Post-connect request for a non-sign-in feature, chosen by feature id and
+ * variant. Returns null when the feature has no wallet request. Keeping the
+ * dispatch here means the page never grows a chain of per-feature branches.
+ */
+export function featureRequest(
+  provider: JawProvider,
+  featureId: number,
+  adversarial: boolean,
+  account: string
+): Promise<unknown> | null {
+  switch (featureId) {
+    case 2:
+      return sendSplitsBatch(provider);
+    case 3:
+      return adversarial ? sendSwapUnlimited(provider, account) : sendSwapBatch(provider, account);
+    case 4:
+      return adversarial ? sendAgentGrantUnlimited(provider) : sendAgentGrant(provider);
+    default:
+      return null;
+  }
 }
 
 /**

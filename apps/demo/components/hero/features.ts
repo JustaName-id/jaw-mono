@@ -2,7 +2,7 @@
 
 import type { JawTheme } from '@jaw.id/core';
 
-export type PhoneAppKey = 'social' | 'splits' | 'swap' | 'swapSend' | 'agent';
+export type PhoneAppKey = 'social' | 'splits' | 'swap' | 'agent';
 
 export type Variant = {
   key: string;
@@ -51,7 +51,7 @@ export const FEATS: Feat[] = [
       {
         key: 'adversarial',
         label: 'Adversarial',
-        desc: 'Same button, hostile payload. JAW checks the origin against the domain the message claims, flags the impersonation and the lookalike characters in the URI, and disables one-tap signing.',
+        desc: 'Same button, hostile payload. The sign-in message claims to be evil.com while the request comes from this site. JAW compares the two, flags the mismatch as phishing, and blocks one-tap signing until you accept the risk.',
       },
     ],
   },
@@ -97,11 +97,6 @@ export const FEATS: Feat[] = [
         label: 'Happy path',
         desc: 'Amount, recipient and fee in one currency, confirmed with one biometric tap. Each name is shown next to the address it resolves to, and the whole thing settles in seconds with no gas token to top up first.',
       },
-      {
-        key: 'adversarial',
-        label: 'Adversarial',
-        desc: 'A lookalike name resolving to an address registered minutes ago. JAW shows what the name actually points at, compares it against who this account has paid before, and disables one-tap signing.',
-      },
     ],
   },
   {
@@ -146,20 +141,12 @@ export const FEATS: Feat[] = [
         desc: 'Approve and swap collapse into one atomic call, decoded step by step before the tap rather than hidden behind a hash. If the swap fails the approval never happened, so no allowance is left sitting on the router afterwards.',
       },
       {
-        key: 'batch',
-        label: 'Batched with a send',
-        app: 'swapSend',
-        appLabel: 'Exchange',
-        accent: '#0F172A',
-        desc: 'Approve, swap and send in a single transaction. Three calls, one signature, all or nothing: the recipient is paid in the same atomic step, or nothing moves at all and the account is exactly where it started.',
-      },
-      {
         key: 'adversarial',
         label: 'Adversarial',
         app: 'swap',
         appLabel: 'Exchange',
         accent: '#0F172A',
-        desc: 'The same batch with an unlimited approval smuggled in as a third call. Every call in the batch is decoded and shown rather than summarised, so the one that does not belong is visible before signing.',
+        desc: 'The same swap, but the approval is unlimited instead of the exact amount. JAW decodes the approve so the blank cheque to the router is visible before signing, not buried behind a hash.',
       },
     ],
   },
@@ -206,7 +193,7 @@ export const FEATS: Feat[] = [
       {
         key: 'adversarial',
         label: 'Adversarial',
-        desc: 'A grant with no cap and no expiry is the whole account, handed over permanently and revocable only by the user remembering to do it. The dialog puts that blast radius in front of them before the permission exists.',
+        desc: 'A grant scoped to any contract and any function — effectively the whole account. JAW renders it as “Any contract / Any function” with a warning, so the blast radius is visible before the permission exists.',
       },
     ],
   },
