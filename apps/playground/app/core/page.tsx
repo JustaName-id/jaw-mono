@@ -5,17 +5,21 @@ import { useSearchParams } from 'next/navigation';
 import { JAW, Mode } from '@jaw.id/core';
 import type { JawTheme } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
-import { Card } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
 import { ThemePicker } from '../../components/theme-picker';
 import { ShellHeader } from '../../components/shell/header';
+import { ShellSidebar, type ShellView } from '../../components/shell/sidebar';
+import { ConfigCard } from '../../components/shell/config-card';
+import { MethodList } from '../../components/shell/method-list';
 
-import { MethodCard } from '../../components/method-card';
+import { MethodDetail } from '../../components/shell/method-detail';
+import { ResponsePanel, latestResponse } from '../../components/shell/response-panel';
+import { ConnectPrompt, ConnectedIdle } from '../../components/shell/empty-state';
 import { MethodModal } from '../../components/method-modal';
 import { EncodeDataModal } from '../../components/encode-data-modal';
-import { ExecutionLog, type LogEntry } from '../../components/execution-log';
+import { type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
-import { RPC_METHODS, CATEGORIES, CATEGORY_LABELS, type RpcMethod, type MethodCategory } from '../../lib/rpc-methods';
+import { RPC_METHODS, type RpcMethod } from '../../lib/rpc-methods';
+import { activePresetLabel } from '../../lib/jaw-theme-presets';
 import { reverseResolveEnsName } from '../../lib/ens-resolver';
 import { resolveKeysUrl } from '../../lib/keys-url';
 import { getAnalyticsClient } from '../../analytics';
@@ -68,7 +72,10 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEncodeModalOpen, setIsEncodeModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
+  // v2 shell UI state: sidebar view, highlighted method, chain preference.
+  const [view, setView] = useState<ShellView>('playground');
+  const [activeMethodId, setActiveMethodId] = useState<string | null>(null);
+  const [prefChain, setPrefChain] = useState(defaultChainId);
 
   const [theme, setTheme] = useState<JawTheme>({ mode: 'auto' });
   const uiHandlerRef = useRef<ReactUIHandler>(new ReactUIHandler({ theme }));
@@ -248,172 +255,128 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
     setSelectedMethod(null);
   };
 
-  const filteredMethods =
-    selectedCategory === 'all' ? RPC_METHODS : RPC_METHODS.filter((m) => m.category === selectedCategory);
+  const themeMeta = activePresetLabel(theme) ?? (theme.colors ? 'Custom' : 'Default');
+  const surface = transportMode === 'popup' ? ('popup' as const) : ('iframe' as const);
+  const activeMethod = RPC_METHODS.find((m) => m.id === activeMethodId) ?? null;
+  const dispatchNote = `${surface === 'popup' ? 'Popup' : 'Iframe (default)'} · ${
+    mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'
+  }`;
+  const toggleConnect = () => {
+    const m = RPC_METHODS.find((m) => m.id === (isConnected ? 'wallet_disconnect' : 'wallet_connect'));
+    if (m) handleMethodClick(m);
+  };
 
   return (
-    <div className="bg-shell-canvas text-shell-ink flex min-h-screen flex-col">
+    <div className="bg-shell-canvas text-shell-ink grid h-screen grid-rows-[auto_1fr] overflow-hidden">
       <ShellHeader
         sdk="core"
         isConnected={isConnected}
-        onToggleConnect={() => {
-          const m = RPC_METHODS.find((m) => m.id === (isConnected ? 'wallet_disconnect' : 'wallet_connect'));
-          if (m) handleMethodClick(m);
-        }}
+        onToggleConnect={toggleConnect}
         address={accounts[0]}
         ensName={ensName}
         chainId={chainId}
       />
-      <div className="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-8">
-        {/* Mode Toggle */}
-        <Card className="p-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-muted-foreground text-sm font-medium">Mode:</span>
-              <span
-                className={`rounded-full px-3 py-1 text-sm font-medium ${
-                  mode === Mode.AppSpecific
-                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
-                    : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                }`}
-              >
-                {mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <ConfigSnippet type="core" mode={mode} paymasters={pmConfig} onPaymasterApply={handlePaymasterApply} />
-              <a
-                href="/core"
-                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                  mode === Mode.CrossPlatform
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                Cross-Platform
-              </a>
-              <a
-                href="/core?mode=app-specific"
-                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                  mode === Mode.AppSpecific
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                App-Specific
-              </a>
-            </div>
-          </div>
-          <p className="text-muted-foreground mt-2 text-xs">
-            {mode === Mode.AppSpecific
-              ? 'Direct signing with UI handled by UIHandler in your app'
-              : 'Passkey operations handled via keys.jaw.id'}
-          </p>
-        </Card>
 
-        {/* Transport Toggle (CrossPlatform only — how keys.jaw.id is reached) */}
-        {mode === Mode.CrossPlatform && (
-          <Card className="p-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-muted-foreground text-sm font-medium">Transport:</span>
-                <span
-                  className={`rounded-full px-3 py-1 text-sm font-medium ${
-                    transportMode === 'popup'
-                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
-                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
-                  }`}
-                >
-                  {transportMode === 'popup' ? 'Popup' : `Iframe (${transportMode})`}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <a
-                  href="/core"
-                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                    transportMode !== 'popup'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  }`}
-                >
-                  Iframe (default)
-                </a>
-                <a
-                  href="/core?transport=popup"
-                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                    transportMode === 'popup'
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  }`}
-                >
-                  Popup
-                </a>
-              </div>
-            </div>
-            <p className="text-muted-foreground mt-2 text-xs">
-              {transportMode === 'popup'
-                ? 'Legacy opt-out: keys.jaw.id opens in a popup window'
-                : 'Default: embedded dialog with automatic popup fallback (Safari passkey creation, insecure contexts, occluded UI)'}
+      <div className="grid min-h-0 grid-cols-[334px_minmax(0,1fr)]">
+        <ShellSidebar view={view} onViewChange={setView} themeMeta={themeMeta} methodCount={RPC_METHODS.length}>
+          {view === 'playground' ? (
+            <>
+              <ConfigCard
+                sdk="core"
+                chainValue={prefChain}
+                onChainChange={setPrefChain}
+                mode={mode === Mode.AppSpecific ? 'app-specific' : 'cross-platform'}
+                transport={surface}
+              />
+              <MethodList
+                methods={RPC_METHODS}
+                selectedId={activeMethodId}
+                onSelect={(m) => setActiveMethodId(m.id)}
+                isConnected={isConnected}
+                transport={surface}
+              />
+            </>
+          ) : (
+            <p className="text-shell-ink-3 m-0 px-4 pb-6 text-[13px] leading-relaxed">
+              Tokens apply to SDK dialogs only. The playground chrome is independent.
             </p>
-          </Card>
-        )}
+          )}
+        </ShellSidebar>
 
-        {/* Theme Picker: AppSpecific applies via ReactUIHandler, CrossPlatform
-            via provider.setTheme pushing to the keys dialog. */}
-        <ThemePicker theme={theme} onThemeChange={handleThemeChange} />
-
-        {/* Category Filter */}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={selectedCategory === 'all' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setSelectedCategory('all')}
-          >
-            All ({RPC_METHODS.length})
-          </Button>
-          {CATEGORIES.map((category) => {
-            const count = RPC_METHODS.filter((m) => m.category === category).length;
-            return (
-              <Button
-                key={category}
-                variant={selectedCategory === category ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSelectedCategory(category)}
-              >
-                {CATEGORY_LABELS[category]} ({count})
-              </Button>
-            );
-          })}
-        </div>
-
-        {/* Method Grid */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredMethods.map((method) => (
-            <MethodCard
-              key={method.id}
-              method={method}
-              onClick={() => handleMethodClick(method)}
-              disabled={method.requiresConnection && !isConnected}
-            />
-          ))}
-        </div>
-
-        {/* Activity Log */}
-        <ExecutionLog logs={logs} onClear={() => setLogs([])} />
-
-        {/* Method Modal */}
-        <MethodModal
-          method={selectedMethod}
-          isOpen={isModalOpen}
-          onClose={handleCloseModal}
-          onExecute={handleExecute}
-          context={{ address: accounts[0], chainId: chainId || undefined }}
-          isConnected={isConnected}
-        />
-
-        {/* Encode Data Modal */}
-        <EncodeDataModal isOpen={isEncodeModalOpen} onClose={() => setIsEncodeModalOpen(false)} />
+        <main className="flex min-h-0 flex-col overflow-y-auto">
+          <div className="flex flex-1 flex-col gap-6 px-6 py-6 md:px-9 md:py-[30px]">
+            {view === 'theme' ? (
+              /* Theme Picker: AppSpecific applies via ReactUIHandler, CrossPlatform
+                 via provider.setTheme pushing to the keys dialog. */
+              <ThemePicker theme={theme} onThemeChange={handleThemeChange} />
+            ) : activeMethod ? (
+              <>
+                {/* Interim: ConfigSnippet moves to its shell home in a later step. */}
+                <div className="flex justify-end">
+                  <ConfigSnippet
+                    type="core"
+                    mode={mode}
+                    paymasters={pmConfig}
+                    onPaymasterApply={handlePaymasterApply}
+                  />
+                </div>
+                <MethodDetail
+                  key={activeMethod.id}
+                  method={activeMethod}
+                  transport={surface}
+                  isConnected={isConnected}
+                  onToggleConnect={toggleConnect}
+                  snippet={activeMethod.getCodeSnippet({})}
+                  snippetLabel="@jaw.id/core"
+                >
+                  {/* Interim execute surface: opens the existing modal until the
+                      inline parameter form lands. */}
+                  <div className="border-shell-line bg-shell-raise rounded-2xl border">
+                    <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4">
+                      <span className="text-shell-ink-3 text-[13px]">{dispatchNote}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleMethodClick(activeMethod)}
+                        className="bg-shell-btn text-shell-btn-ink inline-flex min-h-[46px] cursor-pointer items-center gap-[9px] rounded-full border-0 px-5 text-[15px] font-medium tracking-[-0.005em]"
+                      >
+                        Open execute form
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={1.8}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M5 12h13" />
+                          <path d="M13 6l6 6-6 6" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </MethodDetail>
+                <ResponsePanel response={latestResponse(logs, activeMethod.method)} />
+              </>
+            ) : null}
+          </div>
+        </main>
       </div>
+
+      {/* Method Modal */}
+      <MethodModal
+        method={selectedMethod}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onExecute={handleExecute}
+        context={{ address: accounts[0], chainId: chainId || undefined }}
+        isConnected={isConnected}
+      />
+
+      {/* Encode Data Modal */}
+      <EncodeDataModal isOpen={isEncodeModalOpen} onClose={() => setIsEncodeModalOpen(false)} />
     </div>
   );
 }
