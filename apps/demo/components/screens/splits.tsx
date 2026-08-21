@@ -1,7 +1,7 @@
 'use client';
 
-import { JdIcon } from '@/components/jaw/shared';
-import { ctaInteract } from './chrome';
+import { Icon } from '@/components/ui';
+import { ctaInteract } from './common';
 
 const cream = '#F4F5F7';
 const navy = '#16233F';
@@ -37,7 +37,7 @@ function Row({
         className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] text-white"
         style={{ background: on ? navy : '#fff', border: on ? 'none' : '1.5px solid rgba(22,35,63,.25)' }}
       >
-        {on && <JdIcon.Check size={10} />}
+        {on && <Icon.Check size={10} />}
       </span>
       <span
         className="relative grid h-[34px] w-[34px] shrink-0 place-items-center overflow-hidden rounded-full text-[12.5px] font-semibold text-white"
@@ -239,7 +239,7 @@ export function SplitsApp({ onCta }: { onCta: () => void }) {
             className={`flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[14px] px-3 py-[15px] text-[16px] font-semibold tracking-[-0.01em] text-white ${ctaInteract}`}
             style={{ background: gold, boxShadow: '0 12px 28px -12px rgba(194,154,52,.85)' }}
           >
-            Settle All <JdIcon.Arrow size={15} />
+            Settle All <Icon.Arrow size={15} />
           </button>
         </div>
       </div>

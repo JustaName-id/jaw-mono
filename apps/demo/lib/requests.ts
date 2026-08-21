@@ -44,7 +44,7 @@ function exactInputSingle(recipient: string): `0x${string}` {
 }
 
 /**
- * Swapr "Review swap": one atomic batch — approve 0.2 USDC to the Uniswap
+ * Swap screen "Review swap": one atomic batch — approve 0.2 USDC to the Uniswap
  * router, then swap it for WETH via the 0.3% pool. amountOutMinimum is 0
  * (testnet demo; no MEV to guard against).
  */
@@ -74,7 +74,7 @@ const USDC_DAILY_CAP = '0x17d7840';
 const ETH_MONTHLY_CAP = '0x2386f26fc10000';
 
 /**
- * Agens "Delegate to agent": ERC-7715 grant — the agent may spend up to
+ * Agent screen "Delegate to agent": ERC-7715 grant — the agent may spend up to
  * 25 USDC per DAY and 0.01 ETH per MONTH, and the whole permission expires
  * in 30 days. Enforced onchain by the permission manager, revocable anytime.
  */

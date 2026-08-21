@@ -1,7 +1,7 @@
 'use client';
 
-import { CtaBtn, Screen } from './chrome';
-import { JdIcon } from '@/components/jaw/shared';
+import { CtaBtn, Screen } from './common';
+import { Icon } from '@/components/ui';
 
 const blue = 'rgb(8,81,255)';
 
@@ -62,7 +62,7 @@ export function SocialApp({ onCta }: { onCta: () => void }) {
                 <span className="text-ink-3 block font-mono text-[9.5px]">mia.nova.eth</span>
               </span>
               <span className="text-green ml-auto inline-flex items-center gap-1 text-[9.5px] font-semibold">
-                <JdIcon.Check size={9} />
+                <Icon.Check size={9} />
                 Yours
               </span>
             </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import type { Feat, Variant } from './feats';
+import type { Feat, Variant } from './features';
 
 export function VariantPills({ variants, vi, setVi }: { variants: Variant[]; vi: number; setVi: (i: number) => void }) {
   return (

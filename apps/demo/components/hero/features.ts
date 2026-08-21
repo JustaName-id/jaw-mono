@@ -1,17 +1,13 @@
 'use client';
 
-import type { ComponentType } from 'react';
 import type { JawTheme } from '@jaw.id/core';
-import { SceneAgent, SceneCreate, SceneSiwe } from '@/components/jaw/scenes';
-import { BatchDialog, SwapAdvDialog, SwapDialog, TransferAdvDialog, TransferDialog } from '@/components/jaw/dialogs';
 
-export type PhoneAppKey = 'social' | 'splits' | 'swapr' | 'swaprsend' | 'agens';
+export type PhoneAppKey = 'social' | 'splits' | 'swap' | 'swapSend' | 'agent';
 
 export type Variant = {
   key: string;
   label: string;
   desc: string;
-  C: ComponentType<{ onDone: () => void }>;
   app?: PhoneAppKey;
   appLabel?: string;
   accent?: string;
@@ -28,13 +24,6 @@ export type Feat = {
   /** Theme pushed to the keys dialog while this feature is active. */
   theme?: JawTheme;
 };
-
-const SiweAdversarial = ({ onDone }: { onDone: () => void }) => <SceneSiwe act="adversarial" onDone={onDone} oneStep />;
-const CreateHappy = ({ onDone }: { onDone: () => void }) => <SceneCreate onDone={onDone} oneStep />;
-const AgentHappy = ({ onDone }: { onDone: () => void }) => <SceneAgent act="happy" onDone={onDone} oneStep />;
-const AgentAdversarial = ({ onDone }: { onDone: () => void }) => (
-  <SceneAgent act="adversarial" onDone={onDone} oneStep />
-);
 
 // Four features; some have variants the user can switch between.
 export const FEATS: Feat[] = [
@@ -57,13 +46,11 @@ export const FEATS: Feat[] = [
       {
         key: 'happy',
         label: 'Happy path',
-        C: CreateHappy,
         desc: 'One button for new and returning users. People are known by a name instead of an 0x address, keys never leave the device, and a Face ID prompt sets it all up with a gasless name and profile.',
       },
       {
         key: 'adversarial',
         label: 'Adversarial',
-        C: SiweAdversarial,
         desc: 'Same button, hostile payload. JAW checks the origin against the domain the message claims, flags the impersonation and the lookalike characters in the URI, and disables one-tap signing.',
       },
     ],
@@ -108,20 +95,18 @@ export const FEATS: Feat[] = [
       {
         key: 'happy',
         label: 'Happy path',
-        C: TransferDialog,
         desc: 'Amount, recipient and fee in one currency, confirmed with one biometric tap. Each name is shown next to the address it resolves to, and the whole thing settles in seconds with no gas token to top up first.',
       },
       {
         key: 'adversarial',
         label: 'Adversarial',
-        C: TransferAdvDialog,
         desc: 'A lookalike name resolving to an address registered minutes ago. JAW shows what the name actually points at, compares it against who this account has paid before, and disables one-tap signing.',
       },
     ],
   },
   {
     id: 3,
-    app: 'swapr',
+    app: 'swap',
     appLabel: 'Exchange',
     accent: '#0F172A',
     title: 'Swap',
@@ -155,35 +140,32 @@ export const FEATS: Feat[] = [
       {
         key: 'swap',
         label: 'Swap',
-        app: 'swapr',
+        app: 'swap',
         appLabel: 'Exchange',
         accent: '#0F172A',
-        C: SwapDialog,
         desc: 'Approve and swap collapse into one atomic call, decoded step by step before the tap rather than hidden behind a hash. If the swap fails the approval never happened, so no allowance is left sitting on the router afterwards.',
       },
       {
         key: 'batch',
         label: 'Batched with a send',
-        app: 'swaprsend',
+        app: 'swapSend',
         appLabel: 'Exchange',
         accent: '#0F172A',
-        C: BatchDialog,
         desc: 'Approve, swap and send in a single transaction. Three calls, one signature, all or nothing: the recipient is paid in the same atomic step, or nothing moves at all and the account is exactly where it started.',
       },
       {
         key: 'adversarial',
         label: 'Adversarial',
-        app: 'swapr',
+        app: 'swap',
         appLabel: 'Exchange',
         accent: '#0F172A',
-        C: SwapAdvDialog,
         desc: 'The same batch with an unlimited approval smuggled in as a third call. Every call in the batch is decoded and shown rather than summarised, so the one that does not belong is visible before signing.',
       },
     ],
   },
   {
     id: 4,
-    app: 'agens',
+    app: 'agent',
     appLabel: 'AI agent',
     accent: '#5FE0A0',
     title: 'Agent delegation',
@@ -219,13 +201,11 @@ export const FEATS: Feat[] = [
       {
         key: 'happy',
         label: 'Happy path',
-        C: AgentHappy,
         desc: 'Agents get scoped permissions, not keys: this token, this cap, this expiry. The cap is enforced onchain rather than in the app, so an agent that tries to spend past its limit simply reverts instead of asking again.',
       },
       {
         key: 'adversarial',
         label: 'Adversarial',
-        C: AgentAdversarial,
         desc: 'A grant with no cap and no expiry is the whole account, handed over permanently and revocable only by the user remembering to do it. The dialog puts that blast radius in front of them before the permission exists.',
       },
     ],

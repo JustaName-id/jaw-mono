@@ -1,27 +1,30 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { FEATS, type PhoneAppKey } from './feats';
-import { FeatRow } from './feat-row';
-import { IOS_BEZEL, IOSDevice } from '@/components/ios/device';
-import { btnGhost, btnPrimary, JdIcon } from '@/components/jaw/shared';
-import { SocialApp } from '@/components/phone-apps/social';
+import { FEATS, type PhoneAppKey } from './features';
+import { FeatRow } from './feature-row';
+import { SiteHeader } from './site-header';
+import { MobileMenu } from './mobile-menu';
+import { FinSheet } from './fin-sheet';
+import { IOS_BEZEL, IOSDevice } from '@/components/ios-device';
+import { btnGhost, btnPrimary, Icon } from '@/components/ui';
+import { SocialApp } from '@/components/screens/social';
 import { getJaw, prewarmJaw, resetJaw } from '@/lib/jaw';
 import { sendAgentGrant, sendSplitsBatch, sendSwapBatch } from '@/lib/requests';
 import { useEthQuote, type SwapQuote } from '@/lib/use-eth-quote';
 import { useDialogEmbed } from '@/lib/use-dialog-embed';
-import { SplitsApp } from '@/components/phone-apps/splits';
-import { SwaprApp } from '@/components/phone-apps/swapr';
-import { AgensApp } from '@/components/phone-apps/agens';
+import { SplitsApp } from '@/components/screens/splits';
+import { SwapApp } from '@/components/screens/swap';
+import { AgentApp } from '@/components/screens/agent';
 
 type BaseAppProps = { onCta: () => void; quote: SwapQuote };
 
 const BASE_APPS: Record<PhoneAppKey, (props: BaseAppProps) => React.ReactElement> = {
   social: ({ onCta }) => <SocialApp onCta={onCta} />,
   splits: ({ onCta }) => <SplitsApp onCta={onCta} />,
-  swapr: ({ onCta, quote }) => <SwaprApp onCta={onCta} quote={quote} />,
-  swaprsend: ({ onCta, quote }) => <SwaprApp onCta={onCta} quote={quote} sendTo="ghadii.justaname.eth" />,
-  agens: ({ onCta }) => <AgensApp onCta={onCta} />,
+  swap: ({ onCta, quote }) => <SwapApp onCta={onCta} quote={quote} />,
+  swapSend: ({ onCta, quote }) => <SwapApp onCta={onCta} quote={quote} sendTo="ghadii.justaname.eth" />,
+  agent: ({ onCta }) => <AgentApp onCta={onCta} />,
 };
 
 // Screen size of the mock phone; the rendered frame adds the bezel.
@@ -74,9 +77,6 @@ function useIsMobile() {
   }, []);
   return mobile;
 }
-
-// Staggered fade for the fin sheet's children.
-const finFade = 'animate-hd-fin-fade [animation-delay:220ms]';
 
 // Features without a theme of their own reset the dialog to the SDK's light
 // defaults, so a themed feature never leaks its palette into the next screen.
@@ -153,7 +153,7 @@ export function HeroDemoPage() {
   const Base = BASE_APPS[v.app || cur.app];
   // Swapr and Agens screens are dark — flip the status bar / home indicator.
   const activeApp = v.app || cur.app;
-  const darkScreen = activeApp.startsWith('swapr') || activeApp === 'agens';
+  const darkScreen = activeApp.startsWith('swap') || activeApp === 'agent';
 
   // Every CTA opens the real keys.jaw.id dialog (contained in the phone).
   // v1 wires connect; per-feature requests (send/swap/delegate) come next.
@@ -212,200 +212,18 @@ export function HeroDemoPage() {
         <Base onCta={onCta} quote={quote} />
       </div>
 
-      {/* mobile-only: feature switcher floats over the app */}
-      {!open && !fin && (
-        <button
-          type="button"
-          aria-label="Choose a feature"
-          onClick={() => setMenu(true)}
-          className="absolute right-3.5 top-3.5 z-[35] grid h-9 w-9 cursor-pointer place-items-center rounded-full border border-black/10 bg-white/75 shadow-[0_2px_10px_rgba(15,23,42,.12)] backdrop-blur-md md:hidden"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--ink)"
-            strokeWidth="2"
-            strokeLinecap="round"
-          >
-            <path d="M4 7h16" />
-            <path d="M4 12h16" />
-            <path d="M4 17h16" />
-          </svg>
-        </button>
-      )}
-      {menu && (
-        <div
-          className="animate-jd-fade absolute inset-0 z-[55] flex items-end bg-[rgba(15,23,42,.35)] backdrop-blur-[2px] md:hidden"
-          onClick={() => setMenu(false)}
-        >
-          <div
-            className="max-h-[86%] w-full overflow-y-auto rounded-t-[26px] bg-white px-4 pb-9 pt-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <span className="bg-line-2 mx-auto mb-4 block h-[5px] w-[38px] rounded-full" />
-            <div className="text-ink-3 mb-3 px-1 font-mono text-[10px] uppercase tracking-[.12em]">
-              Walk through what your users do
-            </div>
-            <div className="flex flex-col gap-2">
-              {FEATS.map((f) => {
-                const on = id === f.id;
-                return (
-                  <div
-                    key={f.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => pick(f.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') pick(f.id);
-                    }}
-                    className={`cursor-pointer rounded-xl border px-3.5 py-3 transition-colors duration-200 ${
-                      on ? 'border-ink shadow-[0_1px_0_var(--ink)]' : 'border-line'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span className={`font-mono text-[11px] font-semibold ${on ? 'text-jaw-blue' : 'text-ink-3'}`}>
-                        {String(f.id).padStart(2, '0')}
-                      </span>
-                      <span
-                        className={`text-[15px] tracking-[-0.01em] ${on ? 'font-semibold' : 'text-ink-2 font-medium'}`}
-                      >
-                        {f.title}
-                      </span>
-                    </div>
-                    <div className="text-ink-3 mt-1 pl-[26px] text-[12px]">{f.teaser}</div>
-                    {f.variants.length > 1 && (
-                      <div className="mt-2 flex flex-wrap gap-1.5 pl-[26px]">
-                        {f.variants.map((fv, i) => {
-                          const vOn = on && i === vi;
-                          const danger = fv.key === 'adversarial';
-                          return (
-                            <button
-                              key={fv.key}
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                pickFeatVariant(f.id, i);
-                              }}
-                              className={`cursor-pointer whitespace-nowrap rounded-full border px-2.5 py-1 font-mono text-[9.5px] uppercase tracking-[.08em] ${
-                                vOn
-                                  ? danger
-                                    ? 'border-red-line bg-red-bg text-red'
-                                    : 'border-jaw-blue text-jaw-blue bg-[rgba(8,81,255,.06)]'
-                                  : 'border-line-2 text-ink-3'
-                              }`}
-                            >
-                              {fv.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <a
-              href="https://playground.jaw.id/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="border-line text-ink-3 mt-2 flex items-center justify-between rounded-xl border px-3.5 py-3 text-[14px] font-medium no-underline"
-            >
-              Everything else
-              <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[.1em]">
-                Playground <JdIcon.ArrowUR size={10} />
-              </span>
-            </a>
-            <a
-              href="https://jaw.id"
-              className="border-line text-ink-3 mt-2 flex items-center justify-between rounded-xl border px-3.5 py-3 text-[14px] font-medium no-underline"
-            >
-              Back to website
-              <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[.1em]">
-                jaw.id
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M19 12H5" />
-                  <path d="m12 19-7-7 7-7" />
-                </svg>
-              </span>
-            </a>
-            <div className="mt-4 flex gap-2">
-              <a href="https://dashboard.jaw.id" className={`${btnPrimary} flex-1`}>
-                Get Started <JdIcon.Arrow size={12} />
-              </a>
-              <a href="https://docs.jaw.id" target="_blank" rel="noopener noreferrer" className={btnGhost}>
-                Docs <JdIcon.ArrowUR size={11} />
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
+      <MobileMenu
+        showButton={!open && !fin}
+        open={menu}
+        onOpen={() => setMenu(true)}
+        onClose={() => setMenu(false)}
+        activeId={id}
+        activeVi={vi}
+        onPick={pick}
+        onPickVariant={pickFeatVariant}
+      />
 
-      {fin && (
-        <div className="absolute inset-0 z-[60] flex items-end">
-          <div className="animate-hd-fin-fade absolute inset-0 bg-[rgba(15,23,42,.4)] backdrop-blur-[3px]" />
-          <div className="animate-hd-fin-up relative w-full rounded-t-[26px] bg-white px-6 pb-[34px] pt-[26px] text-center shadow-[0_-24px_60px_-24px_rgba(15,23,42,.5)]">
-            <span className={`bg-line-2 mx-auto mb-5 block h-[5px] w-[38px] rounded-full ${finFade}`} />
-            <span
-              className={`text-jaw-blue mx-auto mb-4 grid h-[52px] w-[52px] place-items-center rounded-full bg-[#EEF3FF] ${finFade}`}
-            >
-              <JdIcon.Logo size={24} />
-            </span>
-            <div className={`mb-[7px] text-[20px] font-semibold tracking-[-0.025em] ${finFade}`}>
-              One account, any app
-            </div>
-            <p className={`text-ink-2 mx-auto mb-[22px] max-w-[250px] text-[13.5px] leading-[1.55] ${finFade}`}>
-              Four of the things a JAW account can do. The playground has many more, all on the same account.
-            </p>
-            <div className={`flex flex-col gap-[9px] ${finFade}`}>
-              <a
-                href="https://dashboard.jaw.id"
-                className="bg-ink flex items-center justify-center gap-2 rounded-[14px] px-[18px] py-3.5 text-[15px] font-semibold tracking-[-0.01em] text-white no-underline transition-transform duration-150 hover:-translate-y-px"
-              >
-                Get Started <JdIcon.Arrow size={14} />
-              </a>
-              <a
-                href="https://playground.jaw.id/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="border-line-2 text-ink flex items-center justify-center gap-2 rounded-[14px] border px-[18px] py-3.5 text-[15px] font-semibold tracking-[-0.01em] no-underline transition-transform duration-150 hover:-translate-y-px"
-              >
-                See the playground <JdIcon.ArrowUR size={12} />
-              </a>
-            </div>
-            <button
-              type="button"
-              onClick={() => pick(1)}
-              className={`text-ink-2 hover:bg-raise-2 hover:text-ink mt-3.5 flex w-full cursor-pointer items-center justify-center gap-[7px] rounded-xl px-3.5 py-2.5 text-[14px] font-medium transition-colors duration-[180ms] ${finFade}`}
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-                <path d="M3 3v5h5" />
-              </svg>
-              Run the flows again
-            </button>
-          </div>
-        </div>
-      )}
+      {fin && <FinSheet onRestart={() => pick(1)} />}
     </div>
   );
 
@@ -413,41 +231,7 @@ export function HeroDemoPage() {
     <div className="flex min-h-screen flex-col max-md:h-dvh max-md:min-h-0">
       {/* desktop-only header; on mobile the demo owns the whole screen and
           brand/back-link live in the hamburger menu */}
-      <section className="mx-auto w-full max-w-[1400px] px-9 pt-[22px] max-md:hidden">
-        <div className="flex items-center justify-between gap-6">
-          <div className="inline-flex items-center gap-3">
-            <span className="inline-flex items-center gap-2">
-              <JdIcon.Logo size={26} />
-              <span className="text-[18px] font-semibold tracking-[-0.015em]">
-                JAW<span className="text-ink-3">.id</span>
-              </span>
-            </span>
-            <span className="text-ink inline-flex items-center gap-2 font-mono text-[14px] uppercase tracking-[.12em] max-md:hidden">
-              <span className="animate-hd-live bg-jaw-blue h-1.5 w-1.5 rounded-full" />
-              Interactive demo
-            </span>
-          </div>
-          <a
-            href="https://jaw.id"
-            className="border-line-2 text-ink-2 hover:border-line-2 hover:bg-raise hover:text-ink inline-flex items-center gap-[7px] whitespace-nowrap rounded-full border px-[13px] py-[7px] font-mono text-[10.5px] uppercase tracking-[.1em] no-underline transition-colors duration-200"
-          >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M19 12H5" />
-              <path d="m12 19-7-7 7-7" />
-            </svg>
-            Back to website
-          </a>
-        </div>
-      </section>
+      <SiteHeader />
 
       {/* mobile: the visitor's phone IS the device — demo runs full-bleed, no frame */}
       <div ref={setMobileEl} className="relative min-h-0 flex-1 overflow-hidden bg-white md:hidden">
@@ -491,7 +275,7 @@ export function HeroDemoPage() {
                     Everything else
                   </span>
                   <span className="text-ink-3 group-hover:text-jaw-blue ml-auto inline-flex min-w-0 items-center gap-[5px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] uppercase tracking-[.1em] transition-colors duration-[220ms]">
-                    Playground <JdIcon.ArrowUR size={10} />
+                    Playground <Icon.ArrowUR size={10} />
                   </span>
                 </div>
               </div>
@@ -525,11 +309,11 @@ export function HeroDemoPage() {
             )}
             {!fin && (
               <a href="https://dashboard.jaw.id" className={btnPrimary}>
-                Get Started <JdIcon.Arrow size={12} />
+                Get Started <Icon.Arrow size={12} />
               </a>
             )}
             <a href="https://docs.jaw.id" target="_blank" rel="noopener noreferrer" className={btnGhost}>
-              Docs <JdIcon.ArrowUR size={11} />
+              Docs <Icon.ArrowUR size={11} />
             </a>
           </div>
         </div>

@@ -1,8 +1,8 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { ctaInteract } from './chrome';
-import { JdIcon } from '@/components/jaw/shared';
+import { ctaInteract } from './common';
+import { Icon } from '@/components/ui';
 import type { SwapQuote } from '@/lib/use-eth-quote';
 
 const pink = 'oklch(0.68 0.24 340)';
@@ -71,7 +71,7 @@ function Pill({ sym, icon }: { sym: string; icon: ReactNode }) {
 
 // "Swapr": dark exchange sheet; `sendTo` turns it into the swap-and-send
 // variant. `quote` carries the live 0.2 USDC → ETH numbers fetched by the page.
-export function SwaprApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?: string; quote: SwapQuote }) {
+export function SwapApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?: string; quote: SwapQuote }) {
   const pad = !sendTo;
   return (
     <div className="flex h-full flex-col overflow-hidden font-sans text-slate-100" style={{ background: bg }}>
@@ -226,7 +226,7 @@ export function SwaprApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?:
                 {sendTo}
               </span>
               <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-[10.5px] font-semibold text-[#3FA968]">
-                <JdIcon.Check size={9} />
+                <Icon.Check size={9} />
                 Resolved
               </span>
             </div>

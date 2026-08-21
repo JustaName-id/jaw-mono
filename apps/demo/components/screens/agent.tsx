@@ -1,7 +1,7 @@
 'use client';
 
-import { ctaInteract } from './chrome';
-import { JdIcon } from '@/components/jaw/shared';
+import { ctaInteract } from './common';
+import { Icon } from '@/components/ui';
 
 // Green "ox" Agens palette from the copy-edit design (Screen dark="ox").
 const shell = '#0C2721';
@@ -12,7 +12,7 @@ const inkOnMint = '#062018';
 const tint = 'rgba(224,248,238,.5)';
 
 // "Agens": deep-green AI-agent chat asking for a spending permission.
-export function AgensApp({ onCta }: { onCta: () => void }) {
+export function AgentApp({ onCta }: { onCta: () => void }) {
   return (
     <div className="flex h-full flex-col overflow-hidden font-sans text-[#EAF7F1]" style={{ background: shell }}>
       <div className="flex items-center gap-2.5 border-b border-white/10 px-5 pb-3 pt-[70px]">
@@ -81,7 +81,7 @@ export function AgensApp({ onCta }: { onCta: () => void }) {
             className={`mt-[11px] flex w-full cursor-pointer items-center justify-center gap-[7px] rounded-[10px] bg-white px-4 py-[11px] text-[13.5px] font-semibold ${ctaInteract}`}
             style={{ color: inkOnMint }}
           >
-            Delegate to agent <JdIcon.Arrow size={13} />
+            Delegate to agent <Icon.Arrow size={13} />
           </button>
         </div>
       </div>

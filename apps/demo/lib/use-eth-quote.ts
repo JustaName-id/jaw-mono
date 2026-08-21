@@ -20,7 +20,7 @@ export type SwapQuote = {
 const FALLBACK_ETH_USD = 3086;
 
 /**
- * Live ETH price for the Swapr screen's quote (USDC treated as $1).
+ * Live ETH price for the swap screen's quote (USDC treated as $1).
  * Uniswap's quote API needs a server-side key, so this uses a public,
  * CORS-friendly price feed instead — the point is real numbers on screen.
  */
