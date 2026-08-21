@@ -5,6 +5,7 @@ import { FEATS, type PhoneAppKey } from './features';
 import { FeatRow } from './feature-row';
 import { SiteHeader } from './site-header';
 import { MobileMenu } from './mobile-menu';
+import { MobileIntro } from './mobile-intro';
 import { FinSheet } from './fin-sheet';
 import { IOS_BEZEL, IOSDevice } from '@/components/ios-device';
 import { btnGhost, btnPrimary, Icon } from '@/components/ui';
@@ -90,6 +91,9 @@ export function HeroDemoPage() {
   // Non-cancel failure of the last wallet request (missing funds, dead RPC…),
   // surfaced as an inline banner on the phone screen.
   const [err, setErr] = useState<string | null>(null);
+  // Mobile-only: the intro page is shown until the visitor launches the demo.
+  // Desktop always renders the demo — its pitch lives beside the phone.
+  const [started, setStarted] = useState(false);
   const { areaRef, scale } = usePhoneScale();
   const isMobile = useIsMobile();
   // Live 0.2 USDC → ETH quote for the Swapr screen.
@@ -282,9 +286,11 @@ export function HeroDemoPage() {
           brand/back-link live in the hamburger menu */}
       <SiteHeader />
 
-      {/* mobile: the visitor's phone IS the device — demo runs full-bleed, no frame */}
+      {/* mobile: the visitor's phone IS the device — demo runs full-bleed, no
+          frame. The intro page fronts it; the keys iframe prewarms while the
+          visitor reads, so launching opens the first dialog with no lag. */}
       <div ref={setMobileEl} className="relative min-h-0 flex-1 overflow-hidden bg-white md:hidden">
-        {isMobile && demo}
+        {isMobile && (started ? demo : <MobileIntro onLaunch={() => setStarted(true)} />)}
       </div>
 
       {/* desktop / tablet: framed phone on the stage */}
