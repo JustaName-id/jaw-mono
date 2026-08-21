@@ -20,10 +20,6 @@
  *      falls back to its default keys.jaw.id.
  */
 
-// Vercel *project names* as they appear in the git branch-alias hostname
-// (`<project>-git-<branch>-<team>.vercel.app`). If either project is renamed
-// in Vercel, update these or per-PR derivation silently falls back to
-// production keys.
 const DEMO_PREFIX = 'demo';
 const KEYS_PREFIX = 'keys-jaw-id';
 const VERCEL_PREVIEW_SUFFIX = '.vercel.app';
