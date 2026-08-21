@@ -64,10 +64,11 @@ in the owner account. payerAddress and the session address are the same address:
 a session is one account, the session key EOA, upgraded in place via EIP-7702.
 Neither it nor the owner account needs a native token. The payment itself is
 gasless for the payer: the facilitator pays that gas. A top-up is an on-chain
-transfer and its gas is real, taken in USDC from the payer (the first one of a
-session is sponsored, because the payer is still empty), so budget slightly more
-USDC in the owner account than the prices you plan to pay. If a payment fails with an insufficient-balance reason, the
-owner account is out of USDC (or the permission's remaining allowance is).
+transfer and its gas is real, taken in USDC from the payer, which the session
+grant leaves enough in to cover its first one. So budget slightly more USDC in
+the owner account than the prices you plan to pay. If a payment fails with an
+insufficient-balance reason, the owner account is out of USDC (or the
+permission's remaining allowance is).
 
 LIMITS
 Every payment is bounded by a policy plus the per-call maxAmount. If nothing is

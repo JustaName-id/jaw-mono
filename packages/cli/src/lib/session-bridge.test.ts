@@ -37,13 +37,6 @@ vi.mock('viem/accounts', () => ({
   privateKeyToAccount: vi.fn().mockReturnValue({ address: '0xRawEOA' }),
 }));
 
-// Mock the USDC balance read the gas bootstrap does. Funded by default, which
-// is the steady state: the payer pays its own gas and nothing is sponsored.
-const mockUsdcBalance = vi.fn(async () => ({ raw: '1000000' }));
-vi.mock('../x402/balance.js', () => ({
-  usdcBalance: (...args: unknown[]) => mockUsdcBalance(...(args as [])),
-}));
-
 // Mock @jaw.id/core Account
 const mockSendCalls = vi.fn().mockResolvedValue({ id: '0xBatchId', chainId: 84532 });
 const mockSignMessage = vi.fn().mockResolvedValue('0xSig');
@@ -145,6 +138,24 @@ describe('SessionBridge', () => {
     await expect(bridge.request('eth_accounts')).rejects.toThrow(
       /Session was created for chain 84532, but --chain 8453 was requested/
     );
+  });
+
+  // Once nothing is sponsored this is the only way the send breaks, and core's
+  // error names the token and the chain but not the account that cannot pay.
+  it('names the account to fund when the paymaster approval cannot be sized', async () => {
+    mockSendCalls.mockRejectedValueOnce(
+      new Error('Could not size the ERC-20 paymaster approval for token 0xUSDC on chain 84532: reverted')
+    );
+    const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
+
+    await expect(bridge.request('wallet_sendCalls', [{ calls: [] }])).rejects.toThrow(/0xSession holds no USDC/);
+  });
+
+  it('leaves every other send failure alone', async () => {
+    mockSendCalls.mockRejectedValueOnce(new Error('bundler is down'));
+    const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
+
+    await expect(bridge.request('wallet_sendCalls', [{ calls: [] }])).rejects.toThrow(/^bundler is down$/);
   });
 
   it('close is a no-op', () => {
@@ -317,67 +328,5 @@ describe('SessionBridge paymaster token', () => {
     });
     const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 84532 });
     expect(optionsOf(bridge).paymasterContext).toEqual({ mode: 'SPONSORED' });
-  });
-});
-
-// The ERC-20 paymaster charges the payer in USDC, but the first refill is the
-// transaction that funds the payer: there is nothing to charge yet. That op goes
-// out sponsored instead, and only that one, since every refill leaves a gas
-// reserve behind.
-describe('SessionBridge gas bootstrap', () => {
-  const FLOOR = 10_000n; // 0.01 USDC, under which nothing can pay a fee
-
-  beforeEach(async () => {
-    mockAccountAddress = '0xSession';
-    mockExpiry = FUTURE_EXPIRY;
-    mockMode = 'eip7702';
-    vi.clearAllMocks();
-    mockUsdcBalance.mockResolvedValue({ raw: '0' });
-    const { loadConfig } = await import('./config.js');
-    vi.mocked(loadConfig).mockReturnValue({});
-  });
-
-  it('drops the token when the sender cannot cover the fee, so the op is sponsored', async () => {
-    const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 84532 });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const url = (bridge as any).options.paymasterUrl as string;
-
-    await bridge.request('wallet_sendCalls', [{ calls: [{ to: '0xToken', data: '0x' }] }]);
-
-    expect(mockSendCalls).toHaveBeenCalledWith(expect.anything(), expect.anything(), url, undefined);
-  });
-
-  it('charges in USDC once there is enough to pay a fee', async () => {
-    mockUsdcBalance.mockResolvedValue({ raw: FLOOR.toString() });
-    const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 84532 });
-
-    await bridge.request('wallet_sendCalls', [{ calls: [{ to: '0xToken', data: '0x' }] }]);
-
-    // No override: the account keeps the ERC-20 paymaster it was built with.
-    expect(mockSendCalls).toHaveBeenCalledWith(expect.anything(), { permissionId: '0xPermId' });
-  });
-
-  // A paymaster the user configured is theirs, mode included.
-  it('leaves a configured paymaster alone', async () => {
-    const { loadConfig } = await import('./config.js');
-    vi.mocked(loadConfig).mockReturnValue({
-      paymasters: { 84532: { url: 'https://api.pimlico.io/v2/84532/rpc?apikey=x', context: { mode: 'SPONSORED' } } },
-    });
-    const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 84532 });
-
-    await bridge.request('wallet_sendCalls', [{ calls: [] }]);
-
-    expect(mockUsdcBalance).not.toHaveBeenCalled();
-    expect(mockSendCalls).toHaveBeenCalledWith(expect.anything(), { permissionId: '0xPermId' });
-  });
-
-  // An RPC hiccup must not quietly change who pays.
-  it('sends unchanged when the balance read fails', async () => {
-    mockUsdcBalance.mockRejectedValue(new Error('rpc down'));
-    const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 84532 });
-
-    await bridge.request('wallet_sendCalls', [{ calls: [] }]);
-
-    expect(mockSendCalls).toHaveBeenCalledWith(expect.anything(), { permissionId: '0xPermId' });
   });
 });

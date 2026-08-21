@@ -1,8 +1,7 @@
 import { loadSessionKey } from './keystore.js';
 import { isLegacySession, loadSessionConfig, type SessionConfig } from './session-config.js';
 import { loadConfig } from './config.js';
-import { usdcForNetwork, type UsdcAsset } from '../x402/asset-registry.js';
-import { gasFloor } from '../x402/gas-reserve.js';
+import { usdcForNetwork } from '../x402/asset-registry.js';
 
 // JAW's ERC-20 paymaster, mirrored from core's JAW_PAYMASTER_URL. Kept as a
 // local literal rather than an import because `@jaw.id/core` is lazy-loaded in
@@ -29,7 +28,7 @@ const JAW_ERC20_PAYMASTER_URL = 'https://api.justaname.id/proxy/v1/rpc/erc20-pay
  */
 function resolvePaymaster(
   options: SessionBridgeOptions
-): Pick<SessionBridgeOptions, 'paymasterUrl' | 'paymasterContext'> & { gasToken?: UsdcAsset } {
+): Pick<SessionBridgeOptions, 'paymasterUrl' | 'paymasterContext'> {
   if (options.paymasterUrl) {
     return { paymasterUrl: options.paymasterUrl, paymasterContext: options.paymasterContext };
   }
@@ -64,10 +63,29 @@ function resolvePaymaster(
   const url = new URL(JAW_ERC20_PAYMASTER_URL);
   url.searchParams.set('chainId', String(options.chainId));
   url.searchParams.set('api-key', options.apiKey);
-  // `gasToken` marks this as our own fallback, the only case where the bridge
-  // may drop the token and ask for sponsorship instead. A paymaster the caller
-  // configured is theirs, mode included.
-  return { paymasterUrl: url.toString(), paymasterContext: { token: asset.address }, gasToken: asset };
+  return { paymasterUrl: url.toString(), paymasterContext: { token: asset.address } };
+}
+
+/**
+ * The one way the send still breaks once nothing is sponsored: the ERC-20
+ * paymaster charges the account the userOp is sent from, and an account with no
+ * USDC cannot be charged, so sizing its approval fails. Core's error names the
+ * token and the chain and nothing about the account, which is what made this
+ * hard to read the first time it happened.
+ *
+ * A session normally receives its gas in the grant, so an empty one means that
+ * transfer did not happen: the wallet that approved the permission does not
+ * carry it yet. Say the address and the amount rather than leaving the user to
+ * work backwards from a paymaster error.
+ */
+function explainUnchargeableSender(err: unknown, sessionAddress: string): unknown {
+  const message = err instanceof Error ? err.message : String(err);
+  if (!message.includes('Could not size the ERC-20 paymaster approval')) return err;
+  return new Error(
+    `${message}\n\nIf ${sessionAddress} holds no USDC, that is why: it pays for its own gas and ` +
+      'cannot be charged with an empty balance. Send it 0.1 USDC, or run `jaw session setup` again.',
+    { cause: err }
+  );
 }
 
 export interface SessionBridgeOptions {
@@ -91,13 +109,10 @@ interface InitializedSession {
 
 export class SessionBridge {
   private readonly options: SessionBridgeOptions;
-  private readonly gasToken: UsdcAsset | null;
   private session: InitializedSession | null = null;
 
   constructor(options: SessionBridgeOptions) {
-    const { gasToken, ...paymaster } = resolvePaymaster(options);
-    this.options = { ...options, ...paymaster };
-    this.gasToken = gasToken ?? null;
+    this.options = { ...options, ...resolvePaymaster(options) };
   }
 
   private async getSession(): Promise<InitializedSession> {
@@ -165,27 +180,6 @@ export class SessionBridge {
     return this.session;
   }
 
-  /**
-   * Whether the sending account holds less USDC than the ERC-20 paymaster would
-   * need to charge it. Only asked on our own fallback paymaster.
-   *
-   * A read that fails answers no: the send then goes out exactly as it would
-   * have without this check, rather than turning an RPC hiccup into a silent
-   * change of who pays.
-   */
-  private async cannotCoverGas(sender: `0x${string}`): Promise<boolean> {
-    if (!this.gasToken) return false;
-    try {
-      // Imported here, not at module scope, for the same reason as the rest of
-      // this file: `balance.js` pulls viem, and the CLI keeps it off startup.
-      const { usdcBalance } = await import('../x402/balance.js');
-      const { raw } = await usdcBalance(this.gasToken.wireNetwork, sender);
-      return BigInt(raw) < gasFloor(this.gasToken);
-    } catch {
-      return false;
-    }
-  }
-
   private checkExpiry(config: SessionConfig): void {
     if (config.expiry <= Date.now() / 1000) {
       const expiryDate = new Date(config.expiry * 1000).toISOString();
@@ -208,20 +202,14 @@ export class SessionBridge {
         };
         const sendOptions = { permissionId: config.permissionId as `0x${string}` };
 
-        // The ERC-20 paymaster charges the account the userOp is sent from,
-        // and an account with no USDC cannot be charged. That is the first op
-        // of a session: this account is the x402 payer, and the refill it is
-        // about to send is what funds it. Sending without the token in context
-        // asks the same paymaster to sponsor instead, which is how this path
-        // behaved before the context reached the SDK. Refills leave
-        // `gasReserve` behind so the ops after it are charged, though nothing
-        // fences that reserve off from the payments themselves: a run of prices
-        // well under it can spend it down to the floor and land here again.
-        if (await this.cannotCoverGas(config.sessionAddress as `0x${string}`)) {
-          return account.sendCalls(calls, sendOptions, this.options.paymasterUrl, undefined);
+        // Always charged, never sponsored. The grant leaves the session enough
+        // to pay for its first op and every refill leaves `gasReserve` behind
+        // for the next one, so the sender can be charged.
+        try {
+          return await account.sendCalls(calls, sendOptions);
+        } catch (err) {
+          throw explainUnchargeableSender(err, config.sessionAddress);
         }
-
-        return account.sendCalls(calls, sendOptions);
       }
 
       case 'wallet_getCallsStatus': {
