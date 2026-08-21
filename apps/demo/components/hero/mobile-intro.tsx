@@ -29,7 +29,10 @@ const LINKS = [
 // page carries the headline, the four capabilities, and the launch CTA first.
 export function MobileIntro({ onLaunch }: { onLaunch: () => void }) {
   return (
-    <div className="animate-jd-fade flex h-full flex-col overflow-y-auto bg-white">
+    <div
+      className="animate-jd-fade flex h-full flex-col overflow-y-auto bg-white"
+      data-analytics-surface="mobile-intro"
+    >
       <header className="flex items-center justify-between px-5 pb-4 pt-[54px]">
         <a href="https://jaw.id" className="inline-flex items-center gap-2 text-inherit no-underline">
           <Icon.Logo size={24} />

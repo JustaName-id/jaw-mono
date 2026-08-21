@@ -54,6 +54,7 @@ export function MobileMenu({
         <div
           className="animate-jd-fade absolute inset-0 z-[55] flex items-end bg-[rgba(15,23,42,.35)] backdrop-blur-[2px] md:hidden"
           onClick={onClose}
+          data-analytics-surface="mobile-menu"
         >
           <div
             className="max-h-[86%] w-full overflow-y-auto rounded-t-[26px] bg-white px-4 pb-9 pt-2"
