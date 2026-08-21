@@ -85,7 +85,7 @@ describe('the period a spend limit is enforced over', () => {
             fc.property(fc.integer({ min: 5_462, max: 65_535 }), (years) => {
                 expect(() =>
                     encodedSpends([{ token: TOKEN, allowance: '1000', unit: 'year' as SpendPeriod, multiplier: years }])
-                ).toThrow();
+                ).toThrow(/not in safe 16-bit unsigned integer range/);
             })
         );
     });
@@ -120,7 +120,7 @@ describe('what the contract will not hold', () => {
             fc.property(fc.bigInt({ min: 2n ** 160n, max: 2n ** 200n }), (allowance) => {
                 expect(() =>
                     encodedSpends([{ token: TOKEN, allowance: allowance.toString(), unit: 'day', multiplier: 1 }])
-                ).toThrow();
+                ).toThrow(/not in safe 160-bit unsigned integer range/);
             })
         );
     });
@@ -128,7 +128,9 @@ describe('what the contract will not hold', () => {
     it('refuses a multiplier past the uint16 the struct declares', () => {
         fc.assert(
             fc.property(fc.integer({ min: 65_536, max: 1_000_000 }), (multiplier) => {
-                expect(() => encodedSpends([{ token: TOKEN, allowance: '1000', unit: 'day', multiplier }])).toThrow();
+                expect(() => encodedSpends([{ token: TOKEN, allowance: '1000', unit: 'day', multiplier }])).toThrow(
+                    /not in safe 16-bit unsigned integer range/
+                );
             })
         );
     });
