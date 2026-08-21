@@ -13,9 +13,8 @@ import { MethodList } from '../../components/shell/method-list';
 
 import { MethodDetail } from '../../components/shell/method-detail';
 import { ResponsePanel, latestResponse } from '../../components/shell/response-panel';
-import { ConnectPrompt, ConnectedIdle } from '../../components/shell/empty-state';
-import { MethodModal } from '../../components/method-modal';
-import { EncodeDataModal } from '../../components/encode-data-modal';
+import { ExecutePanel } from '../../components/shell/execute-panel';
+import { EncodePanel } from '../../components/shell/encode-panel';
 import { type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
 import { RPC_METHODS, type RpcMethod } from '../../lib/rpc-methods';
@@ -68,13 +67,12 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
   const defaultChainId = String(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID || 84532);
   const [chainId, setChainId] = useState<string>(defaultChainId);
   const [ensName, setEnsName] = useState<string | null>(null);
-  const [selectedMethod, setSelectedMethod] = useState<RpcMethod | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEncodeModalOpen, setIsEncodeModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
   // v2 shell UI state: sidebar view, highlighted method, chain preference.
   const [view, setView] = useState<ShellView>('playground');
-  const [activeMethodId, setActiveMethodId] = useState<string | null>(null);
+  // wallet_connect is the default selection — the natural first step of a session.
+  const [activeMethodId, setActiveMethodId] = useState<string | null>('wallet_connect');
   const [prefChain, setPrefChain] = useState(defaultChainId);
 
   const [theme, setTheme] = useState<JawTheme>({ mode: 'auto' });
@@ -241,29 +239,59 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
     [sdk, addLog, defaultChainId, mode, transportMode, chainId]
   );
 
-  const handleMethodClick = (method: RpcMethod) => {
-    if (method.category === 'utility') {
-      setIsEncodeModalOpen(true);
-      return;
-    }
-    setSelectedMethod(method);
-    setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setSelectedMethod(null);
-  };
-
   const themeMeta = activePresetLabel(theme) ?? (theme.colors ? 'Custom' : 'Default');
   const surface = transportMode === 'popup' ? ('popup' as const) : ('iframe' as const);
-  const activeMethod = RPC_METHODS.find((m) => m.id === activeMethodId) ?? null;
+  const activeMethod = RPC_METHODS.find((m) => m.id === activeMethodId) ?? RPC_METHODS[0] ?? null;
   const dispatchNote = `${surface === 'popup' ? 'Popup' : 'Iframe (default)'} · ${
     mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'
   }`;
+
+  // Errors are surfaced through the same log the response panel reads from —
+  // handleExecute logs its own; this covers the pre-execution stages.
+  const logUiError = useCallback(
+    (methodName: string, err: unknown) => {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'message' in err
+            ? (err as { message: string }).message
+            : JSON.stringify(err);
+      addLog('error', methodName, message);
+    },
+    [addLog]
+  );
+
+  const runMethod = useCallback(
+    async (method: RpcMethod, resolvedParams: Record<string, string>) => {
+      let built: unknown[];
+      try {
+        built = method.buildParams(resolvedParams, { address: accounts[0], chainId: chainId || undefined });
+      } catch (err) {
+        logUiError(method.method, err);
+        return;
+      }
+      setIsRunning(true);
+      try {
+        await handleExecute(method.method, built);
+      } catch {
+        // Already logged inside handleExecute.
+      } finally {
+        setIsRunning(false);
+      }
+    },
+    [accounts, chainId, handleExecute, logUiError]
+  );
+
+  // Straight to the keys dialog: plain passkey auth, no SIWE capabilities (Leo's call).
   const toggleConnect = () => {
-    const m = RPC_METHODS.find((m) => m.id === (isConnected ? 'wallet_disconnect' : 'wallet_connect'));
-    if (m) handleMethodClick(m);
+    const methodName = isConnected ? 'wallet_disconnect' : 'eth_requestAccounts';
+    setIsRunning(true);
+    setActiveMethodId(methodName);
+    void handleExecute(methodName, [])
+      .catch(() => {
+        // Already logged inside handleExecute.
+      })
+      .finally(() => setIsRunning(false));
   };
 
   return (
@@ -329,54 +357,28 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
                   snippet={activeMethod.getCodeSnippet({})}
                   snippetLabel="@jaw.id/core"
                 >
-                  {/* Interim execute surface: opens the existing modal until the
-                      inline parameter form lands. */}
-                  <div className="border-shell-line bg-shell-raise rounded-2xl border">
-                    <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4">
-                      <span className="text-shell-ink-3 text-[13px]">{dispatchNote}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleMethodClick(activeMethod)}
-                        className="bg-shell-btn text-shell-btn-ink inline-flex min-h-[46px] cursor-pointer items-center gap-[9px] rounded-full border-0 px-5 text-[15px] font-medium tracking-[-0.005em]"
-                      >
-                        Open execute form
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={1.8}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M5 12h13" />
-                          <path d="M13 6l6 6-6 6" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
+                  {activeMethod.category === 'utility' ? (
+                    <EncodePanel dispatchNote="Local · viem" />
+                  ) : (
+                    <ExecutePanel
+                      method={activeMethod}
+                      context={{ address: accounts[0], chainId: chainId || undefined }}
+                      isConnected={isConnected}
+                      dispatchNote={dispatchNote}
+                      running={isRunning}
+                      onRun={(resolved) => runMethod(activeMethod, resolved)}
+                      onError={(message) => addLog('error', activeMethod.method, message)}
+                    />
+                  )}
                 </MethodDetail>
-                <ResponsePanel response={latestResponse(logs, activeMethod.method)} />
+                {activeMethod.category !== 'utility' && (
+                  <ResponsePanel response={latestResponse(logs, activeMethod.method)} running={isRunning} />
+                )}
               </>
             ) : null}
           </div>
         </main>
       </div>
-
-      {/* Method Modal */}
-      <MethodModal
-        method={selectedMethod}
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        onExecute={handleExecute}
-        context={{ address: accounts[0], chainId: chainId || undefined }}
-        isConnected={isConnected}
-      />
-
-      {/* Encode Data Modal */}
-      <EncodeDataModal isOpen={isEncodeModalOpen} onClose={() => setIsEncodeModalOpen(false)} />
     </div>
   );
 }

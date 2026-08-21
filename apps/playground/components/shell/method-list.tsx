@@ -9,9 +9,8 @@ import {
   splitMethodName,
   NEEDS_DISCONNECTED,
   type PlaygroundMethod,
-  type TriggerFilter,
 } from '../../lib/method-ui-meta';
-import { InfoPopover, segClass } from './primitives';
+import { InfoPopover } from './primitives';
 
 export interface MethodListProps<M extends PlaygroundMethod> {
   methods: M[];
@@ -48,29 +47,19 @@ export function MethodList<M extends PlaygroundMethod>({
   transport,
 }: MethodListProps<M>) {
   const [query, setQuery] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [trigger, setTrigger] = useState<TriggerFilter>('all');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
-  const dialogCount = methods.filter(opensDialog).length;
-  const silentCount = methods.length - dialogCount;
-  const matches = filterMethods(methods, query, trigger);
+  const matches = filterMethods(methods, query, 'all');
   const groups = groupMethods(matches);
 
   const selected = methods.find((m) => m.id === selectedId);
-  const forceOpen = query.trim() !== '' || trigger !== 'all';
+  const forceOpen = query.trim() !== '';
   const isOpen = (category: string) => {
     if (forceOpen) return true;
     const explicit = collapsed[category];
     if (explicit !== undefined) return !explicit;
     return category === (selected?.category ?? groups[0]?.category);
   };
-
-  const chips: { key: TriggerFilter; label: string; icon?: 'dialog' | 'x' }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'dialog', label: `Dialog ${dialogCount}`, icon: 'dialog' },
-    { key: 'silent', label: `Silent ${silentCount}`, icon: 'x' },
-  ];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -81,39 +70,35 @@ export function MethodList<M extends PlaygroundMethod>({
         </span>
       </div>
 
-      {/* Search / trigger filters */}
-      <div className="flex min-h-[30px] items-center gap-2 px-3.5 pb-3">
-        {searchOpen ? (
-          <div className="border-shell-line-2 bg-shell-raise flex min-w-0 flex-1 items-center gap-[7px] rounded-[10px] border px-2.5 py-[7px]">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.4}
-              strokeLinecap="round"
-              aria-hidden="true"
-              className="text-shell-ink-3 flex-none"
-            >
-              <circle cx="11" cy="11" r="6.5" />
-              <path d="M16 16l4 4" />
-            </svg>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              autoFocus
-              placeholder="Filter methods"
-              aria-label="Filter methods"
-              className="text-shell-ink placeholder:text-shell-ink-4 min-w-0 flex-1 border-0 bg-transparent text-[13px] outline-none"
-            />
+      {/* Search */}
+      <div className="px-3.5 pb-3">
+        <div className="border-shell-line bg-shell-raise focus-within:border-shell-line-2 flex min-w-0 items-center gap-[7px] rounded-[10px] border px-2.5 py-[7px]">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.4}
+            strokeLinecap="round"
+            aria-hidden="true"
+            className="text-shell-ink-3 flex-none"
+          >
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="M16 16l4 4" />
+          </svg>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter methods"
+            aria-label="Filter methods"
+            className="text-shell-ink placeholder:text-shell-ink-4 min-w-0 flex-1 border-0 bg-transparent text-[13px] outline-none"
+          />
+          {query && (
             <button
               type="button"
-              aria-label="Close filter"
-              onClick={() => {
-                setSearchOpen(false);
-                setQuery('');
-              }}
+              aria-label="Clear filter"
+              onClick={() => setQuery('')}
               className="text-shell-ink-3 hover:text-shell-ink inline-flex h-5 w-5 flex-none cursor-pointer items-center justify-center border-0 bg-transparent p-0"
             >
               <svg
@@ -129,64 +114,8 @@ export function MethodList<M extends PlaygroundMethod>({
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
             </button>
-          </div>
-        ) : (
-          <>
-            <div role="group" aria-label="Filter by dialog" className="flex flex-none gap-[5px]">
-              {chips.map((chip) => (
-                <button
-                  key={chip.key}
-                  type="button"
-                  aria-pressed={trigger === chip.key}
-                  onClick={() => setTrigger(chip.key)}
-                  className={segClass(
-                    trigger === chip.key,
-                    'border-shell-line-2 inline-flex items-center gap-[5px] px-2.5 py-1.5'
-                  )}
-                >
-                  {chip.icon === 'dialog' && <DialogIcon />}
-                  {chip.icon === 'x' && (
-                    <svg
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={1.9}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                      className="flex-none"
-                    >
-                      <path d="M6 6l12 12M18 6L6 18" />
-                    </svg>
-                  )}
-                  {chip.label}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              aria-label="Filter methods"
-              onClick={() => setSearchOpen(true)}
-              className="border-shell-line text-shell-ink-3 hover:text-shell-ink ml-auto inline-flex h-[30px] w-[30px] flex-none cursor-pointer items-center justify-center rounded-full border bg-transparent p-0"
-            >
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.6}
-                strokeLinecap="round"
-                aria-hidden="true"
-              >
-                <circle cx="11" cy="11" r="6.5" />
-                <path d="M16 16l4 4" />
-              </svg>
-            </button>
-          </>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Groups */}
