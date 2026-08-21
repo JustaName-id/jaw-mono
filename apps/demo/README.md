@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# JAW Demo
 
-## Getting Started
+The guided product tour at [demo.jaw.id](https://demo.jaw.id). Four mock consumer apps in a
+phone frame — every CTA opens the **real** keys.jaw.id dialog and sends a **real** request on
+Base Sepolia (84532).
 
-First, run the development server:
+## The tour
+
+| #   | Screen            | Request                                                                           | Adversarial variant                                                    |
+| --- | ----------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 1   | Sign in / Sign up | `wallet_connect` + SIWE                                                           | message claims `evil.com` → keys flags the domain mismatch as phishing |
+| 2   | Send (Splitos)    | `wallet_sendCalls` — 2 × 0.1 USDC transfer, atomic                                | —                                                                      |
+| 3   | Swap (Exchange)   | `wallet_sendCalls` — approve + Uniswap v3 `exactInputSingle`, atomic              | unlimited approval instead of the exact amount                         |
+| 4   | Agent delegation  | `wallet_grantPermissions` (ERC-7715) — 25 USDC/day, 0.01 ETH/month, 30-day expiry | wildcard target + selector, i.e. the whole account                     |
+
+Each screen pushes its own `JawTheme`, so the dialog is painted like the host app. Sign-in
+always disconnects first, so onboarding is demoed fresh.
+
+## Run it
+
+From the repo root:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+bun install
+cp apps/demo/.env.example apps/demo/.env.local   # fill in NEXT_PUBLIC_API_KEY
+bunx nx dev @jaw-mono/demo
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`NEXT_PUBLIC_API_KEY` ([dashboard.jaw.id](https://dashboard.jaw.id/)) is the only required
+var — dev throws without it. Funding stays off unless `TREASURY_PRIVATE_KEY` is set;
+analytics stays off unless `NEXT_PUBLIC_ANALYTICS_ENABLED=true`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The iframe transport needs a secure context: over plain `http://localhost` the SDK falls back
+to the popup on its own, so use `next dev --experimental-https` to exercise the real path.
+`.env.example` points `NEXT_PUBLIC_KEYS_URL` at a local keys app on `:3000`, leaving the demo
+on the next free port.
