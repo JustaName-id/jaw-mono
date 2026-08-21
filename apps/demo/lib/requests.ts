@@ -173,13 +173,21 @@ function siweNonce(): string {
 }
 
 /**
- * Sign-in CONNECT. Happy path is a plain connect. Adversarial requests a SIWE
- * sign-in whose message claims to be evil.com while the request comes from this
- * site — keys compares the two, flags the mismatch as phishing, and blocks
- * one-tap signing until the user accepts the risk.
+ * Sign-in CONNECT: both variants are SIWE sign-ins via wallet_connect. The
+ * happy path's message claims this site's own origin — keys verifies domain
+ * and uri against the requester and one-tap signing stays enabled. The
+ * adversarial one claims to be evil.com while the request comes from this
+ * site — keys flags the mismatch as phishing and blocks one-tap signing until
+ * the user accepts the risk.
  */
 export function connectVariant(provider: JawProvider, adversarial: boolean) {
-  if (!adversarial) return provider.request({ method: 'eth_requestAccounts' });
+  const siwe = adversarial
+    ? { domain: 'evil.com', uri: 'https://evil.com/claim', statement: 'Sign in to claim your reward.' }
+    : {
+        domain: window.location.host,
+        uri: window.location.origin,
+        statement: 'Sign in to Nova with your JAW account.',
+      };
   return provider.request({
     method: 'wallet_connect',
     params: [
@@ -188,9 +196,7 @@ export function connectVariant(provider: JawProvider, adversarial: boolean) {
           signInWithEthereum: {
             nonce: siweNonce(),
             chainId: BASE_SEPOLIA_HEX,
-            domain: 'evil.com',
-            uri: 'https://evil.com/claim',
-            statement: 'Sign in to claim your reward.',
+            ...siwe,
           },
         },
       },
