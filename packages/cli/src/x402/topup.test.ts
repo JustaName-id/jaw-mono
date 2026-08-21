@@ -52,7 +52,7 @@ describe('ensurePayerFunds', () => {
     expect(requests).toHaveLength(0);
   });
 
-  test('Given a shortfall, When ensuring funds, Then a permitted transfer for exactly the shortfall runs and confirms', async () => {
+  test('Given a shortfall, When ensuring funds, Then a permitted transfer for the shortfall plus the gas reserve runs and confirms', async () => {
     const { executor, requests } = fakeExecutor();
 
     const out = await ensurePayerFunds(requirement('1000000'), PAYER, executor, {
@@ -61,7 +61,7 @@ describe('ensurePayerFunds', () => {
     });
 
     expect(out.ok).toBe(true);
-    expect(out.amount).toBe('750000');
+    expect(out.amount).toBe('850000'); // 0.75 short + 0.10 reserve
     expect(out.batchId).toBe('0xbatch1');
 
     const send = requests.find((r) => r.method === 'wallet_sendCalls');
@@ -69,41 +69,26 @@ describe('ensurePayerFunds', () => {
     expect(call.to.toLowerCase()).toBe(BASE_SEPOLIA_USDC.toLowerCase());
     const decoded = decodeFunctionData({ abi: erc20Abi, data: call.data });
     expect(decoded.functionName).toBe('transfer');
-    expect(decoded.args).toEqual([PAYER, 750_000n]);
+    expect(decoded.args).toEqual([PAYER, 850_000n]);
   });
 
-  // In an eip7702 session the payer sends the top-up userOp itself, so the
-  // ERC-20 paymaster charges it right after the transfer lands. Pulling only the
-  // shortfall would leave the fee to come out of the payment.
-  test('Given the payer also sends the top-up, When ensuring funds, Then the refill carries the gas reserve', async () => {
+  // The payer sends the top-up userOp itself, so the ERC-20 paymaster charges it
+  // right after the transfer lands. Pulling only the shortfall would leave the
+  // fee to come out of the payment, and the payment would land short.
+  test('Given a refill, When it lands, Then the reserve is left behind so the next one can pay its own fee', async () => {
     const { executor, requests } = fakeExecutor();
 
     const out = await ensurePayerFunds(requirement('1000000'), PAYER, executor, {
-      balanceReader: async () => 250_000n,
-      gasAccount: PAYER,
+      balanceReader: async () => 1_000_000n - 1n, // one base unit short
       ...instantly,
     });
 
-    expect(out.amount).toBe('850000'); // 0.75 short + 0.10 reserve
+    expect(out.amount).toBe('100001');
 
     const send = requests.find((r) => r.method === 'wallet_sendCalls');
     const call = (send?.params as Array<{ calls: Array<{ to: string; data: `0x${string}` }> }>)[0].calls[0];
     const decoded = decodeFunctionData({ abi: erc20Abi, data: call.data });
-    expect(decoded.args).toEqual([PAYER, 850_000n]);
-  });
-
-  // The default session sends from a separate spender that never holds USDC, so
-  // a reserve on the payer would fund nothing. Those refills are sponsored.
-  test('Given a spender that is not the payer, When ensuring funds, Then no reserve is pulled', async () => {
-    const { executor } = fakeExecutor();
-
-    const out = await ensurePayerFunds(requirement('1000000'), PAYER, executor, {
-      balanceReader: async () => 250_000n,
-      gasAccount: '0x3333333333333333333333333333333333333333',
-      ...instantly,
-    });
-
-    expect(out.amount).toBe('750000');
+    expect(decoded.args).toEqual([PAYER, 100_001n]);
   });
 
   test('Given a float target above the price, When topping up, Then the refill reaches the float (fewer hops later)', async () => {
@@ -116,7 +101,7 @@ describe('ensurePayerFunds', () => {
     });
 
     expect(out.ok).toBe(true);
-    expect(out.amount).toBe('5000000');
+    expect(out.amount).toBe('5100000'); // the float, plus the reserve
   });
 
   test('Given a float target above the session cap, When topping up, Then the refill is clamped to the session cap (blast-radius bound)', async () => {

@@ -59,6 +59,14 @@ describe('diagnose', () => {
     expect(diagnose({ ...healthy, expired: true })[0]).toMatch(/session expired/i);
   });
 
+  // Auto mode refuses these, so a report that stayed quiet would call a setup
+  // ready when no payment can go through.
+  it('flags a session an older CLI created', () => {
+    const problems = diagnose({ ...healthy, outdated: true });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/older CLI and cannot pay/);
+  });
+
   // The case worth having this command for: payments succeed, so nothing looks
   // wrong, but they spend the payer's own balance and never touch the permission.
   it('catches a funded payer next to an empty owner', () => {
@@ -72,6 +80,20 @@ describe('diagnose', () => {
     const problems = diagnose({ ...healthy, ownerBalance: '0', payerBalance: '0' });
     expect(problems[0]).toMatch(/nothing to pay with/);
     expect(problems[0]).not.toMatch(/bypass/);
+  });
+
+  // Refills leave the reserve in the payer on purpose, to pay userOp fees with.
+  // Reading it back as misdirected funds would tell the user to move money the
+  // CLI put there itself.
+  it('does not call the gas reserve misdirected funds', () => {
+    const problems = diagnose({ ...healthy, ownerBalance: '0', payerBalance: '0.1', payerReserve: 0.1 });
+    expect(problems[0]).toMatch(/nothing to pay with/);
+    expect(problems[0]).not.toMatch(/bypass/);
+  });
+
+  it('still flags a payer holding more than its own gas', () => {
+    const problems = diagnose({ ...healthy, ownerBalance: '0', payerBalance: '0.5', payerReserve: 0.1 });
+    expect(problems[0]).toMatch(/bypass the permission/);
   });
 
   it('blames the connection only when both balance reads failed', () => {

@@ -4,12 +4,17 @@ import { ensureDir } from './config.js';
 import type { PeriodUnit } from '../x402/period.js';
 
 /**
- * How the session account address is derived. 'counterfactual' (the default,
- * and what configs written before this field existed mean): a CREATE2
- * prediction from the account factory, a separate address from the session
- * key EOA. 'eip7702': the session key EOA itself, upgraded in place via an
- * EIP-7702 delegation attached to its first userOp — session account and
- * x402 payer collapse into one address.
+ * How the session account address is derived, as it appears on disk.
+ *
+ * 'eip7702' is the only one written now: the session key EOA itself, upgraded
+ * in place via a delegation attached to its first userOp, so the session
+ * account and the x402 payer are one address.
+ *
+ * 'counterfactual' is what earlier versions wrote, and what a config from
+ * before the field existed means: a CREATE2 prediction from the account
+ * factory, a second address that holds nothing and so cannot be charged for
+ * the gas of the ops it sends. Still in the union because those files exist and
+ * `SessionBridge` has to recognise them; `SessionSetup` never writes it.
  */
 export type SessionMode = 'counterfactual' | 'eip7702';
 
@@ -46,6 +51,19 @@ export interface GrantedSpend {
   periodAnchor?: string;
 }
 
+/**
+ * Whether this session predates the CLI settling on one account derivation, so
+ * its permission belongs to an address separate from the session key and no op
+ * it sends can be charged for its own gas.
+ *
+ * Named rather than compared inline: three callers ask this, and each one
+ * spelled as `mode !== 'eip7702'` reads like a check for a variant among
+ * several, when the only question is whether the session is still usable.
+ */
+export function isLegacySession(config: Pick<SessionConfig, 'mode'>): boolean {
+  return config.mode !== 'eip7702';
+}
+
 export interface SessionConfig {
   ownerAddress: string;
   sessionAddress: string;
@@ -57,7 +75,14 @@ export interface SessionConfig {
   grantedSpend?: GrantedSpend;
 }
 
-export function saveSessionConfig(input: Omit<SessionConfig, 'createdAt'>): void {
+/**
+ * `mode` is required and pinned here, unlike on the read side where it stays
+ * optional to describe files earlier versions wrote. Nothing but `SessionSetup`
+ * writes a session, and a session written without the mode would be refused by
+ * `SessionBridge` as if an old CLI had made it, so the compiler holds the
+ * invariant rather than a test having to.
+ */
+export function saveSessionConfig(input: Omit<SessionConfig, 'createdAt' | 'mode'> & { mode: 'eip7702' }): void {
   const config: SessionConfig = {
     ...input,
     createdAt: new Date().toISOString(),

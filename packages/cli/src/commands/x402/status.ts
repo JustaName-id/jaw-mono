@@ -1,7 +1,7 @@
 import { BaseCommand } from '../../base-command.js';
 import { keystoreExists } from '../../lib/keystore.js';
 import { loadConfig } from '../../lib/config.js';
-import { tryLoadSessionConfig } from '../../lib/session-config.js';
+import { isLegacySession, tryLoadSessionConfig } from '../../lib/session-config.js';
 import { sessionPayerAddress } from '../../x402/payer.js';
 import { usdcBalance } from '../../x402/balance.js';
 import { sumSpentSince } from '../../x402/ledger.js';
@@ -10,6 +10,7 @@ import { currentPeriodSpend } from '../../x402/spend-window.js';
 import { describePeriod } from '../../x402/period.js';
 import { parseBigInt } from '../../x402/amount.js';
 import { USDC_BY_NETWORK } from '../../x402/asset-registry.js';
+import { gasReserve } from '../../x402/gas-reserve.js';
 import { formatUsdc, formatRemaining, diagnose } from '../../x402/status-report.js';
 import type { OutputFormat } from '../../lib/types.js';
 
@@ -98,6 +99,10 @@ export default class X402Status extends BaseCommand {
       periodCap,
       periodSpent: periodSpend?.spent ?? null,
       periodLabel,
+      outdated: isLegacySession(session),
+      // Same units as the formatted balances. Exact in a double: the reserve
+      // is a tenth of a token, six decimals at most.
+      payerReserve: asset ? Number(gasReserve(asset)) / 10 ** asset.decimals : 0,
     });
 
     if (format === 'json') {

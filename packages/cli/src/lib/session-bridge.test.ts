@@ -12,7 +12,10 @@ const PAST_EXPIRY = Math.floor(Date.now() / 1000) - 86400;
 let mockExpiry = FUTURE_EXPIRY;
 let mockMode: 'counterfactual' | 'eip7702' | undefined;
 
-vi.mock('./session-config.js', () => ({
+// Only the file read is faked. `isLegacySession` stays the real one, so a test
+// that says a session is refused is exercising the predicate the bridge uses.
+vi.mock('./session-config.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./session-config.js')>()),
   loadSessionConfig: vi.fn(() => ({
     ownerAddress: '0xOwner',
     sessionAddress: '0xSession',
@@ -66,7 +69,7 @@ const { Account } = await import('@jaw.id/core');
 describe('SessionBridge', () => {
   beforeEach(() => {
     mockExpiry = FUTURE_EXPIRY;
-    mockMode = undefined;
+    mockMode = 'eip7702';
     mockAccountAddress = '0xSession';
     vi.clearAllMocks();
   });
@@ -149,18 +152,23 @@ describe('SessionBridge', () => {
     expect(() => bridge.close()).not.toThrow();
   });
 
-  it('derives counterfactually when the session config has no mode (older setups)', async () => {
-    const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
-    await bridge.request('eth_accounts');
-    expect(Account.fromLocalAccount).toHaveBeenCalledWith(expect.anything(), expect.anything(), { eip7702: false });
-  });
-
-  it('re-derives with eip7702 when the session was created in eip7702 mode', async () => {
-    mockMode = 'eip7702';
+  it('always re-derives with eip7702, so the account is the permission spender', async () => {
     const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
     await bridge.request('eth_accounts');
     expect(Account.fromLocalAccount).toHaveBeenCalledWith(expect.anything(), expect.anything(), { eip7702: true });
   });
+
+  // Their spender is a second address that holds nothing, so the ops it sends
+  // cannot be charged for their own gas. Refuse with the fix rather than
+  // deriving a different address and failing at the mismatch guard.
+  it.each(['counterfactual' as const, undefined])(
+    'refuses a session created by an older CLI (mode=%s)',
+    async (mode) => {
+      mockMode = mode;
+      const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
+      await expect(bridge.request('eth_accounts')).rejects.toThrow(/older CLI.*jaw session setup/s);
+    }
+  );
 
   it('throws when the derived account does not match the stored session address', async () => {
     // A hand-edited keystore or a config copied from another machine would
@@ -258,11 +266,11 @@ describe('SessionBridge paymaster token', () => {
 
   beforeEach(async () => {
     // The mock session state is module-level and mutable, so a describe that
-    // reaches the SDK has to restore it — the address-mismatch case above
+    // reaches the SDK has to restore it: the address-mismatch case above
     // otherwise leaves the derived account pointing somewhere else.
     mockAccountAddress = '0xSession';
     mockExpiry = FUTURE_EXPIRY;
-    mockMode = undefined;
+    mockMode = 'eip7702';
     vi.clearAllMocks();
     const { loadConfig } = await import('./config.js');
     vi.mocked(loadConfig).mockReturnValue({});
@@ -322,7 +330,7 @@ describe('SessionBridge gas bootstrap', () => {
   beforeEach(async () => {
     mockAccountAddress = '0xSession';
     mockExpiry = FUTURE_EXPIRY;
-    mockMode = undefined;
+    mockMode = 'eip7702';
     vi.clearAllMocks();
     mockUsdcBalance.mockResolvedValue({ raw: '0' });
     const { loadConfig } = await import('./config.js');

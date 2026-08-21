@@ -245,6 +245,7 @@ describe('jaw_session_status', () => {
     const { saveSessionConfig } = await import('../lib/session-config.js');
     saveKeystore('0xabc', '0xSessionAddr');
     saveSessionConfig({
+      mode: 'eip7702',
       ownerAddress: '0xOwner',
       sessionAddress: '0xSessionAddr',
       permissionId: '0xPerm',
@@ -328,6 +329,7 @@ describe('jaw_pay_and_fetch', () => {
     saveKeystore(PK, '0xSmartAccount');
     saveConfig({ apiKey: 'test-key' });
     saveSessionConfig({
+      mode: 'eip7702',
       ownerAddress: '0xOwner',
       sessionAddress: '0xSmartAccount',
       permissionId: '0xperm1',
@@ -360,7 +362,9 @@ describe('jaw_pay_and_fetch', () => {
       );
 
       expect(parsed.paid).toBe(true);
-      expect(parsed.topUp).toEqual({ amount: '1000', batchId: '0xtopupbatch' });
+      // The price, plus the gas reserve the refill leaves behind so the payer
+      // can be charged for the next one.
+      expect(parsed.topUp).toEqual({ amount: '101000', batchId: '0xtopupbatch' });
       // The transfer went through the session bridge with the granted permission.
       const send = sessionRequestMock.mock.calls.find((c) => c[0] === 'wallet_sendCalls');
       expect(send).toBeTruthy();
@@ -663,21 +667,22 @@ describe('jaw_pay_and_fetch', () => {
   it('reports the payer address (the EOA to fund) in jaw_session_status', async () => {
     const { saveKeystore } = await import('../lib/keystore.js');
     const { saveSessionConfig } = await import('../lib/session-config.js');
-    saveKeystore(PK, '0xSmartAccount');
+    const SESSION_EOA = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+    saveKeystore(PK, SESSION_EOA);
     saveSessionConfig({
+      mode: 'eip7702',
       ownerAddress: '0xOwner',
-      sessionAddress: '0xSmartAccount',
+      sessionAddress: SESSION_EOA,
       permissionId: '0xPerm',
       chainId: 84532,
       expiry: Math.floor(Date.now() / 1000) + 86400,
     });
     const client = await connectClient();
     const parsed = JSON.parse(toolText(await client.callTool({ name: 'jaw_session_status', arguments: {} })));
-    // Distinct from sessionAddress (the smart account) — this is where USDC goes.
-    expect(parsed.payerAddress.toLowerCase()).toBe('0x70997970c51812dc3a010c7d01b50e0d17dc79c8');
-    expect(parsed.sessionAddress).toBe('0xSmartAccount');
-    // Pre-7702 config: no mode field, so none is reported.
-    expect(parsed.mode).toBeUndefined();
+    // The address to fund, derived from the key rather than read from the
+    // config, and the same one the permission was granted to.
+    expect(parsed.payerAddress.toLowerCase()).toBe(SESSION_EOA.toLowerCase());
+    expect(parsed.sessionAddress).toBe(SESSION_EOA);
   });
 
   it('reports the derivation mode in jaw_session_status for an eip7702 session', async () => {

@@ -43,9 +43,9 @@ const EIP712_DOMAIN_ABI = parseAbi([
  *
  * Delegation-aware: while the EOA has no code the signature is the plain
  * typed-data one (ecrecover path). Once the session was upgraded in place via
- * EIP-7702 (`jaw session setup --eip7702` + first userOp), USDC validates
- * through EIP-1271/ERC-7739 instead — the payer detects the delegation
- * designator and signs the wrapped TypedDataSign envelope (see erc7739.ts).
+ * EIP-7702 (which the first userOp of a session does), USDC validates through
+ * EIP-1271/ERC-7739 instead, so the payer detects the delegation designator and
+ * signs the wrapped TypedDataSign envelope (see erc7739.ts).
  */
 export class Eip3009EoaPayer implements Payer {
   readonly address: `0x${string}`;
@@ -127,13 +127,12 @@ export class Eip3009EoaPayer implements Payer {
 }
 
 /**
- * The address pull-mode payments are made from — the session key's own EOA.
- * In the counterfactual session mode this is DISTINCT from the session
- * smart-account address (`sessionAddress`); in eip7702 mode they are the same
- * address (the EOA is the session account, upgraded in place). Either way this
- * is the address that must hold USDC for `jaw_pay_and_fetch` to pay; expose it
- * so a user/agent knows where to send funds. Derives the public address only
- * (no signing, no key exposure). Throws if no session key exists.
+ * The address pull-mode payments are made from, which is the session key's own
+ * EOA and also the session address: the EOA is the session account, upgraded in
+ * place. This is the address that must hold USDC for `jaw_pay_and_fetch` to
+ * pay; expose it so a user/agent knows where the funds end up. Derives the
+ * public address only (no signing, no key exposure). Throws if no session key
+ * exists.
  */
 export function sessionPayerAddress(): `0x${string}` {
   if (!keystoreExists()) {

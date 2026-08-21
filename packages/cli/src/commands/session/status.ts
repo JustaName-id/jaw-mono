@@ -1,6 +1,6 @@
 import { BaseCommand } from '../../base-command.js';
 import { keystoreExists } from '../../lib/keystore.js';
-import { loadSessionConfig } from '../../lib/session-config.js';
+import { isLegacySession, loadSessionConfig } from '../../lib/session-config.js';
 import type { OutputFormat } from '../../lib/types.js';
 
 export default class SessionStatus extends BaseCommand {
@@ -47,8 +47,12 @@ export default class SessionStatus extends BaseCommand {
       const remaining = Math.floor((config.expiry - now) / 86400);
       this.log('Session active.\n');
       this.log(`  Session address:  ${config.sessionAddress}`);
-      if (config.mode === 'eip7702') {
-        this.log('                    (EIP-7702: same address as the session key EOA / x402 payer)');
+      if (isLegacySession(config)) {
+        // Auto mode refuses these, so say it here rather than letting the next
+        // command be the one that explains it.
+        this.log('                    (separate from the session key: created by an older CLI)');
+      } else {
+        this.log('                    (the session key EOA, and the x402 payer)');
       }
       this.log(`  Owner address:    ${config.ownerAddress}`);
       this.log(`  Permission ID:    ${config.permissionId}`);

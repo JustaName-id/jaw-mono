@@ -28,6 +28,12 @@ export function formatRemaining(seconds: number): string {
 
 export interface StatusFacts {
   expired: boolean;
+  /**
+   * True for a session an older CLI created, whose permission was granted to an
+   * address separate from the session key. Auto mode refuses those, so a report
+   * that stayed quiet about it would call a setup ready that cannot pay.
+   */
+  outdated?: boolean;
   ownerAddress: string;
   /** Formatted balance, or null when the read failed. */
   ownerBalance: string | null;
@@ -47,6 +53,12 @@ export interface StatusFacts {
   periodSpent?: bigint | null;
   /** How the window reads in a sentence, e.g. "day" or "2 weeks". */
   periodLabel?: string | null;
+  /**
+   * The gas reserve refills leave in the payer, in the same formatted units as
+   * the balances. A payer holding no more than this is holding what the CLI put
+   * there to pay userOp fees, so it is not the misdirected-funds case below.
+   */
+  payerReserve?: number;
 }
 
 /**
@@ -64,6 +76,13 @@ export function diagnose(facts: StatusFacts): string[] {
     problems.push('The session expired. Run `jaw session setup --x402`.');
   }
 
+  if (facts.outdated) {
+    problems.push(
+      'This session was created by an older CLI and cannot pay: its permission belongs to an address ' +
+        'separate from the session key. Run `jaw session setup --x402` to recreate it.'
+    );
+  }
+
   if (!facts.hasAsset) {
     problems.push('This chain has no USDC configured, so x402 payments cannot be made on it.');
   }
@@ -79,8 +98,13 @@ export function diagnose(facts: StatusFacts): string[] {
   }
 
   if (facts.ownerBalance !== null && Number(facts.ownerBalance) === 0) {
+    // Above the reserve, because refills deliberately leave that much in the
+    // payer to pay userOp fees with. Reading it back as funds sent to the wrong
+    // address would tell the user to move money the CLI put there on purpose.
+    const payerHoldsMoreThanItsGas =
+      facts.payerBalance !== null && Number(facts.payerBalance) > (facts.payerReserve ?? 0);
     problems.push(
-      facts.payerBalance !== null && Number(facts.payerBalance) > 0
+      payerHoldsMoreThanItsGas
         ? 'The owner account is empty but the payer holds USDC. Payments will work, but they bypass the ' +
             'permission, so the cap you granted is not applying. Move the funds to the owner.'
         : 'The owner account holds no USDC, so there is nothing to pay with.'

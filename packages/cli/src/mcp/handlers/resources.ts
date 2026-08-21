@@ -60,13 +60,13 @@ owner account through the on-chain session permission, which is what bounds
 every payment to the cap the user approved in their wallet. Money sent straight
 to payerAddress bypasses that permission, so the granted cap stops applying.
 jaw x402 status reports that as a misconfiguration and asks for the funds back
-in the owner account. In the default (counterfactual) session mode payerAddress
-is NOT the smart-account (session) address; in eip7702 mode they are the same
-address. Neither account needs a native token. The payment itself is gasless for
-the payer: the facilitator pays that gas. A top-up is an on-chain transfer and
-its gas is real, but it is either sponsored or taken in USDC from the account
-that sent it, so budget slightly more USDC in the owner account than the prices
-you plan to pay. If a payment fails with an insufficient-balance reason, the
+in the owner account. payerAddress and the session address are the same address:
+a session is one account, the session key EOA, upgraded in place via EIP-7702.
+Neither it nor the owner account needs a native token. The payment itself is
+gasless for the payer: the facilitator pays that gas. A top-up is an on-chain
+transfer and its gas is real, taken in USDC from the payer (the first one of a
+session is sponsored, because the payer is still empty), so budget slightly more
+USDC in the owner account than the prices you plan to pay. If a payment fails with an insufficient-balance reason, the
 owner account is out of USDC (or the permission's remaining allowance is).
 
 LIMITS

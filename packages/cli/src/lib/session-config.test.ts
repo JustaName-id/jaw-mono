@@ -39,6 +39,7 @@ const SAMPLE_CONFIG = {
   permissionId: '0xPerm' as const,
   chainId: 84532,
   expiry: Math.floor(Date.now() / 1000) + 86400 * 7,
+  mode: 'eip7702' as const,
 };
 
 describe('session-config', () => {
@@ -52,13 +53,21 @@ describe('session-config', () => {
     expect(loaded.createdAt).toBeDefined();
   });
 
-  it('round-trips the derivation mode, and leaves it undefined for older configs', () => {
-    saveSessionConfig({ ...SAMPLE_CONFIG, mode: 'eip7702' });
-    expect(loadSessionConfig().mode).toBe('eip7702');
-    // A config written before the field existed must read as counterfactual
-    // (the consumers treat any non-'eip7702' value as the default).
+  it('round-trips the derivation mode', () => {
     saveSessionConfig(SAMPLE_CONFIG);
+    expect(loadSessionConfig().mode).toBe('eip7702');
+  });
+
+  // The writer cannot produce one any more, so the fixture is a file. Loading
+  // stays permissive so `session status` and `session revoke` still work on a
+  // session an older CLI wrote; auto mode is where it is refused.
+  it('reads a config from before the field existed without complaining', () => {
+    const legacy: Record<string, unknown> = { ...SAMPLE_CONFIG, createdAt: new Date().toISOString() };
+    delete legacy.mode;
+    fs.mkdirSync(PATHS.root, { recursive: true });
+    fs.writeFileSync(PATHS.sessionConfig, JSON.stringify(legacy));
     expect(loadSessionConfig().mode).toBeUndefined();
+    expect(loadSessionConfig().permissionId).toBe('0xPerm');
   });
 
   it('loadSessionConfig throws if file does not exist', () => {

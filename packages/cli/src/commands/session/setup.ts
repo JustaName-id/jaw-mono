@@ -50,13 +50,6 @@ export default class SessionSetup extends BaseCommand {
     expiry: Flags.integer({
       description: 'Permission expiry in days. Overrides config.sessionExpiry.',
     }),
-    eip7702: Flags.boolean({
-      description:
-        'Experimental: derive the session account via EIP-7702 delegation, so the session address ' +
-        'IS the session key EOA (one address instead of a separate counterfactual smart account). ' +
-        'The delegation is attached to the first userOp. Requires bundler EIP-7702 support.',
-      default: false,
-    }),
   };
 
   async run(): Promise<void> {
@@ -209,10 +202,12 @@ export default class SessionSetup extends BaseCommand {
 
       const { Account } = await import('@jaw.id/core');
       const pm = config.paymasters?.[chainId];
-      // eip7702 keeps the session address equal to the session key EOA (the
-      // delegation rides the first userOp); otherwise the address is the
-      // factory's counterfactual prediction for [sessionEOA, PermissionManager].
-      const mode = flags.eip7702 ? ('eip7702' as const) : ('counterfactual' as const);
+      // EIP-7702 keeps the session address equal to the session key EOA, with
+      // the delegation riding the first userOp. That is what lets the account
+      // holding the USDC be the same one the ERC-20 paymaster charges for the
+      // ops it sends; the factory's counterfactual address was a second one
+      // that never held anything.
+      const mode = 'eip7702' as const;
       const account = await Account.fromLocalAccount(
         {
           chainId,
@@ -221,7 +216,7 @@ export default class SessionSetup extends BaseCommand {
           paymasterContext: pm?.context,
         },
         localAccount,
-        { eip7702: flags.eip7702 }
+        { eip7702: true }
       );
       const sessionAddress = account.address;
 
@@ -279,9 +274,7 @@ export default class SessionSetup extends BaseCommand {
       } else {
         this.log('\nSession created successfully.\n');
         this.log(`  Session address:  ${sessionAddress}`);
-        if (mode === 'eip7702') {
-          this.log('                    (EIP-7702: same address as the session key EOA / x402 payer)');
-        }
+        this.log('                    (the session key EOA, and the x402 payer)');
         this.log(`  Owner address:    ${grantResponse.account}`);
         this.log(`  Permission ID:    ${grantResponse.permissionId}`);
         this.log(`  Chain:            ${chainId}`);
@@ -289,9 +282,9 @@ export default class SessionSetup extends BaseCommand {
         if (flags.x402) {
           this.log(`  Granted:          ${describeX402Grant(flags.limit)}`);
           // Which of the two addresses to fund is the easiest thing to get
-          // wrong, and getting it wrong looks like it worked: the payer holds
-          // the money, so the permission is never exercised and the cap never
-          // applies. Say it here, where both addresses are on screen.
+          // wrong, and getting it wrong looks like it worked: the session
+          // address holds the money, so the permission is never exercised and
+          // the cap never applies. Say it here, where both are on screen.
           this.log(
             `\nFund the OWNER account (${grantResponse.account}) with USDC, not the session address.\n` +
               'Payments pull from it through the permission, only when one is needed.'

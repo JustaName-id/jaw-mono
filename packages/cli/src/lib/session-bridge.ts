@@ -1,5 +1,5 @@
 import { loadSessionKey } from './keystore.js';
-import { loadSessionConfig, type SessionConfig } from './session-config.js';
+import { isLegacySession, loadSessionConfig, type SessionConfig } from './session-config.js';
 import { loadConfig } from './config.js';
 import { usdcForNetwork, type UsdcAsset } from '../x402/asset-registry.js';
 import { gasFloor } from '../x402/gas-reserve.js';
@@ -109,6 +109,19 @@ export class SessionBridge {
     const config = loadSessionConfig();
     this.checkExpiry(config);
 
+    // Sessions from before the CLI settled on EIP-7702 granted their permission
+    // to a counterfactual second address, which holds nothing and so cannot be
+    // charged the gas of the ops it sends. Re-deriving one of those here would
+    // produce a different address and fail at the mismatch guard below, which
+    // blames the keystore. Say what it actually is, and how to fix it.
+    if (isLegacySession(config)) {
+      throw new Error(
+        'This session was created by an older CLI and uses a session address separate from the session key. ' +
+          'Run `jaw session setup` to recreate it, which offers to revoke the old permission first. ' +
+          '`jaw session status` still shows the old session, and `jaw session revoke` still revokes it.'
+      );
+    }
+
     if (config.chainId !== this.options.chainId) {
       throw new Error(
         `Session was created for chain ${config.chainId}, but --chain ${this.options.chainId} was requested. ` +
@@ -123,10 +136,9 @@ export class SessionBridge {
     privateKeyHex = null;
 
     const { Account } = await import('@jaw.id/core');
-    // Sessions created with `--eip7702` must re-derive the same way: without
-    // the option the account would be the counterfactual sibling — a different
-    // address than the permission's spender — and no delegation would ever be
-    // attached to its userOps.
+    // Every session is EIP-7702, so the account re-derives to the session key
+    // EOA and the delegation rides its userOps. Deriving any other way would
+    // produce an address the permission was never granted to.
     const account = await Account.fromLocalAccount(
       {
         chainId: this.options.chainId,
@@ -135,7 +147,7 @@ export class SessionBridge {
         paymasterContext: this.options.paymasterContext,
       },
       localAccount,
-      { eip7702: config.mode === 'eip7702' }
+      { eip7702: true }
     );
 
     // The stored sessionAddress is the on-chain permission's spender. If the
@@ -197,13 +209,14 @@ export class SessionBridge {
         const sendOptions = { permissionId: config.permissionId as `0x${string}` };
 
         // The ERC-20 paymaster charges the account the userOp is sent from,
-        // and an account with no USDC cannot be charged. That is the first
-        // refill of an eip7702 session, where this account is the payer and
-        // the refill is what funds it, and it is every refill of a default
-        // session, where the spender is a separate account that holds nothing
-        // by design. Sending without the token in context asks the same
-        // paymaster to sponsor instead, which is how this path behaved before
-        // the context reached the SDK.
+        // and an account with no USDC cannot be charged. That is the first op
+        // of a session: this account is the x402 payer, and the refill it is
+        // about to send is what funds it. Sending without the token in context
+        // asks the same paymaster to sponsor instead, which is how this path
+        // behaved before the context reached the SDK. Refills leave
+        // `gasReserve` behind so the ops after it are charged, though nothing
+        // fences that reserve off from the payments themselves: a run of prices
+        // well under it can spend it down to the floor and land here again.
         if (await this.cannotCoverGas(config.sessionAddress as `0x${string}`)) {
           return account.sendCalls(calls, sendOptions, this.options.paymasterUrl, undefined);
         }
