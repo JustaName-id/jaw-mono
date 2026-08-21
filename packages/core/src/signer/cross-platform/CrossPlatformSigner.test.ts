@@ -1280,6 +1280,23 @@ describe('CrossPlatformSigner', () => {
             expect(result).toBeNull();
         });
 
+        it('should refuse eth_coinbase when the account list is empty', async () => {
+            // Arrange - Create new signer without handshake, so accounts is []
+            const unauthenticatedSigner = new CrossPlatformSigner({
+                metadata: mockMetadata,
+                communicator: mockCommunicator,
+                callback: mockCallback,
+            });
+
+            // Act & Assert - The authenticated branch returns accounts[0], but
+            // an empty list never reaches it: the request routes to the
+            // unauthenticated branch, whose default refuses. So there is no
+            // path where eth_coinbase resolves undefined.
+            await expect(unauthenticatedSigner.request({ method: 'eth_coinbase' })).rejects.toMatchObject({
+                code: 4100,
+            });
+        });
+
         it('should allow wallet_sendCalls when unauthenticated', async () => {
             // Arrange - Create new signer without handshake
             const unauthenticatedSigner = new CrossPlatformSigner({
