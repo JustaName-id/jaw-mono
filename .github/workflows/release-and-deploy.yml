@@ -91,6 +91,7 @@ jobs:
       playground: ${{ steps.check.outputs.playground }}
       keys: ${{ steps.check.outputs.keys }}
       docs: ${{ steps.check.outputs.docs }}
+      demo: ${{ steps.check.outputs.demo }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -123,6 +124,7 @@ jobs:
           echo "playground=$([[ "$AFFECTED" == *"@jaw-mono/playground"* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "keys=$([[ "$AFFECTED" == *"@jaw-mono/keys-jaw-id"* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "docs=$([[ "$AFFECTED" == *"docs"* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "demo=$([[ "$AFFECTED" == *"@jaw-mono/demo"* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
   # ─── Deploy Playground ───
   deploy-playground:
@@ -171,6 +173,54 @@ jobs:
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_PLAYGROUND }}
+
+  # ─── Deploy Demo ───
+  deploy-demo:
+    needs: check-affected
+    if: needs.check-affected.outputs.demo == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build workspace packages
+        run: bunx nx build @jaw.id/core
+
+      - name: Pull Vercel environment
+        run: bunx vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_DEMO }}
+
+      - name: Build for Vercel
+        run: bunx vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_DEMO }}
+
+      - name: Deploy to Vercel
+        run: bunx vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_DEMO }}
 
   # ─── Deploy Keys ───
   # Lives in its own workflow so it can also be dispatched manually.
