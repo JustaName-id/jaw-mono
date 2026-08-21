@@ -80,7 +80,7 @@ export function SocialApp({ onCta }: { onCta: () => void }) {
           your posts
         </div>
         <p className="text-ink-2 mx-auto mb-4 max-w-[280px] text-[14px] leading-normal">
-          One tap and you're in. Nova gives you an account and a name you keep, even if you leave.
+          One tap and you&apos;re in. Nova gives you an account and a name you keep, even if you leave.
         </p>
         <div className="mb-[18px] flex justify-center gap-[5px]">
           <span className="h-[5px] w-4 rounded-full" style={{ background: blue }} />
