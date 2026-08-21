@@ -355,6 +355,18 @@ export async function payAndFetch(
     return { status: first.status, body: first.body, paid: false, payer: payer.address };
   }
 
+  // Every refusal below answers the same way: the challenge stands, nothing was
+  // paid, and the reason says why. Naming the shape once leaves each site
+  // showing only what makes it different.
+  const refusal = (refusedReason: string | undefined, extra?: Partial<PayAndFetchResult>): PayAndFetchResult => ({
+    status: 402,
+    body: first.body,
+    paid: false,
+    payer: payer.address,
+    refusedReason,
+    ...extra,
+  });
+
   // A 402 means we are about to sign a payment. Gate on the FINAL url (after
   // any redirects), not the original: fetch follows https->http downgrades by
   // default, so a trusted https endpoint that redirects to http would smuggle a
@@ -364,25 +376,13 @@ export async function payAndFetch(
   // fetches returned above, so plain http still works as a generic fetch.
   const resource = first.url || url;
   if (!isPaymentUrlSecure(resource)) {
-    return {
-      status: 402,
-      body: first.body,
-      paid: false,
-      payer: payer.address,
-      refusedReason: 'refusing to sign a payment over a non-HTTPS URL (use https, or localhost for testing)',
-    };
+    return refusal('refusing to sign a payment over a non-HTTPS URL (use https, or localhost for testing)');
   }
 
   // 2. The v2 challenge lives in the PAYMENT-REQUIRED header (body is opaque).
   const challenge = b64json<X402PaymentRequired>(first.headers.get(X402_HEADERS.required));
   if (!challenge || !Array.isArray(challenge.accepts)) {
-    return {
-      status: 402,
-      body: first.body,
-      paid: false,
-      payer: payer.address,
-      refusedReason: 'missing or malformed PAYMENT-REQUIRED challenge',
-    };
+    return refusal('missing or malformed PAYMENT-REQUIRED challenge');
   }
 
   // 3. Choose an option under the constraints + policy, or refuse clearly.
@@ -394,7 +394,7 @@ export async function payAndFetch(
   };
   const { requirement, reason } = selectRequirement(challenge.accepts, opts, ctx);
   if (!requirement) {
-    return { status: 402, body: first.body, paid: false, payer: payer.address, refusedReason: reason };
+    return refusal(reason);
   }
 
   // 3.75 Dry run stops here, the last point before anything costs or commits.
@@ -428,26 +428,15 @@ export async function payAndFetch(
     try {
       funded = await opts.ensureFunds(requirement, payer.address);
     } catch (err) {
-      return {
-        status: 402,
-        body: first.body,
-        paid: false,
-        payer: payer.address,
-        refusedReason: `payer funding failed: ${errorMessage(err)}`,
-      };
+      return refusal(`payer funding failed: ${errorMessage(err)}`);
     }
     if (!funded.ok) {
-      return {
-        status: 402,
-        body: first.body,
-        paid: false,
-        payer: payer.address,
-        refusedReason: funded.reason ?? 'payer funding failed',
-        // A refused funding may still have broadcast the transfer (e.g. a
-        // confirmation timeout) — keep the trace so it can be reconciled.
-        // Gated on either field: the no-call-id path has an amount and no id.
+      // A refused funding may still have broadcast the transfer (e.g. a
+      // confirmation timeout) — keep the trace so it can be reconciled. Gated
+      // on either field: the no-call-id path has an amount and no id.
+      return refusal(funded.reason ?? 'payer funding failed', {
         ...(funded.amount || funded.batchId ? { topUp: { amount: funded.amount, batchId: funded.batchId } } : {}),
-      };
+      });
     }
     if (!funded.skipped) {
       topUp = { amount: funded.amount, batchId: funded.batchId };
@@ -464,14 +453,7 @@ export async function payAndFetch(
   try {
     payload = await payer.pay(requirement);
   } catch (err) {
-    return {
-      status: 402,
-      body: first.body,
-      paid: false,
-      payer: payer.address,
-      refusedReason: `payment signing failed: ${errorMessage(err)}`,
-      topUp,
-    };
+    return refusal(`payment signing failed: ${errorMessage(err)}`, { topUp });
   }
   const details = {
     amount: requirement.amount,
@@ -506,15 +488,11 @@ export async function payAndFetch(
       redirect: 'manual',
     });
   } catch (err) {
-    return {
-      status: 402,
+    return refusal(`payment sent but the response never arrived: ${errorMessage(err)}`, {
       body: '',
-      paid: false,
-      payer: payer.address,
       attemptedPayment: details,
       topUp,
-      refusedReason: `payment sent but the response never arrived: ${errorMessage(err)}`,
-    };
+    });
   }
 
   // A settled x402 response carries the resource directly (never a redirect).
