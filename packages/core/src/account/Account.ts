@@ -32,6 +32,7 @@ import {
     resolveRpId,
 } from '../passkey-manager/index.js';
 import type { SyncStorage } from '../storage-manager/index.js';
+import { buildSpenderPrefundCall, type GrantPermissionsOptions } from './spenderPrefund.js';
 import {
     grantPermissions as grantSmartAccountPermissions,
     revokePermission as revokeSmartAccountPermission,
@@ -1128,21 +1129,25 @@ export class Account {
         permissions: PermissionsDetail,
         paymasterUrlOverride?: string,
         paymasterContextOverride?: Record<string, unknown>,
-        address?: Address
+        address?: Address,
+        options?: GrantPermissionsOptions
     ): Promise<WalletGrantPermissionsResponse> {
         const smartAccount = await this.resolveSmartAccount(address);
 
         // Build the permission call for gas estimation
         const permissionCall = buildGrantPermissionCall(smartAccount.address, spender, expiry, permissions);
 
-        // Check if we need an ERC-20 approval for the paymaster
         const paymaster = this.resolveEffectivePaymaster(paymasterUrlOverride, paymasterContextOverride);
-        const approvalCall = await this.createErc20ApprovalCall(
-            paymaster.url,
-            paymaster.context,
-            [permissionCall],
-            smartAccount
-        );
+
+        // Ahead of the approval sizing, so the ceiling covers the transfer too.
+        const prefundCall = options?.prefundSpender
+            ? await this.buildPrefundCall(smartAccount.address, spender, permissions, paymaster.context)
+            : null;
+
+        const calls = prefundCall ? [prefundCall, permissionCall] : [permissionCall];
+
+        // Check if we need an ERC-20 approval for the paymaster
+        const approvalCall = await this.createErc20ApprovalCall(paymaster.url, paymaster.context, calls, smartAccount);
 
         return await grantSmartAccountPermissions(
             smartAccount,
@@ -1153,8 +1158,47 @@ export class Account {
             this._apiKey,
             paymaster.url,
             paymaster.context,
-            approvalCall || undefined
+            [approvalCall, prefundCall].filter((call) => call !== null)
         );
+    }
+
+    /**
+     * The transfer that leaves the spender able to pay for its own first userOp,
+     * or null when it is not needed. See `spenderPrefund.ts` for the rules.
+     */
+    private async buildPrefundCall(
+        account: Address,
+        spender: Address,
+        permissions: PermissionsDetail,
+        paymasterContext?: Record<string, unknown>
+    ): Promise<{ to: Address; value: bigint; data: Hex } | null> {
+        const publicClient = createPublicClient({
+            chain: { id: this._chain.id } as Parameters<typeof createPublicClient>[0]['chain'],
+            transport: http(this._chain.rpcUrl),
+        });
+
+        const read = {
+            decimals: (token: Address) =>
+                publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'decimals' }),
+            balanceOf: (token: Address, owner: Address) =>
+                publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [owner] }),
+        };
+
+        // What the paymaster will take for this transaction, when it is taking
+        // it in the same token the prefund goes out in. Any other token, or none
+        // at all, leaves nothing for the prefund to reserve.
+        const contextToken = paymasterContext?.token as string | undefined;
+        const gas = paymasterContext?.gas as string | bigint | undefined;
+        const prefundToken = permissions.spends?.find((spend) => spend.token)?.token;
+        const feeInToken =
+            gas !== undefined &&
+            contextToken &&
+            prefundToken &&
+            contextToken.toLowerCase() === prefundToken.toLowerCase()
+                ? BigInt(gas)
+                : 0n;
+
+        return await buildSpenderPrefundCall({ account, spender, permissions, feeInToken, read });
     }
 
     /**

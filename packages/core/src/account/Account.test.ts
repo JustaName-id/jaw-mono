@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createPublicClient, encodeFunctionData, erc20Abi } from 'viem';
+import { createPublicClient, decodeFunctionData, encodeFunctionData, erc20Abi } from 'viem';
 import { Account } from './Account.js';
 import { JAW_PAYMASTER_URL, ERC20_PAYMASTER_ADDRESS } from '../constants.js';
 
@@ -54,7 +54,10 @@ vi.mock('./smartAccount.js', () => ({
     ],
 }));
 
-vi.mock('../rpc/permissions.js', () => ({
+// Partial: only the calls that reach the network are faked. The encoders stay
+// real, so a test that asserts on a built call is asserting on the real one.
+vi.mock('../rpc/permissions.js', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../rpc/permissions.js')>()),
     grantPermissions: vi.fn(),
     revokePermission: vi.fn(),
     getPermissionFromRelay: vi.fn(),
@@ -1570,5 +1573,81 @@ describe('Account — ERC-20 paymaster approval', () => {
         const call = vi.mocked(sendCalls).mock.calls[0];
         expect(call[3]).toBe('https://sponsor.example/rpc');
         expect(call[4]).toBeUndefined();
+    });
+});
+
+// The spender of a permission sends every op it authorises and the ERC-20
+// paymaster charges the sender, so without help its first one has no fee source.
+// The grant is the transaction the owner already signs, so it is where the
+// spender gets what that op costs.
+describe('Account — prefunding the spender in the grant', () => {
+    // Not the JAW ERC-20 paymaster, so the approval sizing short-circuits and
+    // what is under test is the call array, not the quoting.
+    const PAYMASTER_URL = 'https://api.pimlico.io/v2/1/rpc?apikey=x';
+    const TOKEN = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+    const SPENDER = '0x2222222222222222222222222222222222222222' as `0x${string}`;
+    const PERMISSIONS = { spends: [{ token: TOKEN, allowance: '10000000', unit: 'day' }] };
+
+    async function grant(options?: { prefundSpender?: boolean }, balance = 5_000_000n) {
+        const { createSmartAccount } = await import('./smartAccount.js');
+        const { grantPermissions } = await import('../rpc/permissions.js');
+
+        vi.mocked(createSmartAccount).mockResolvedValue({
+            address: '0x1234567890123456789012345678901234567890',
+            getAddress: vi.fn().mockResolvedValue('0x1234567890123456789012345678901234567890'),
+            signMessage: vi.fn(),
+            signTypedData: vi.fn(),
+        } as never);
+        // The spender is empty, which is the case the prefund exists for. Both
+        // balances answering the same number made it look already funded.
+        vi.mocked(createPublicClient).mockReturnValue({
+            readContract: vi.fn(async ({ functionName, args }: { functionName: string; args?: unknown[] }) => {
+                if (functionName === 'decimals') return 6;
+                return (args?.[0] as string)?.toLowerCase() === SPENDER.toLowerCase() ? 0n : balance;
+            }),
+        } as never);
+        vi.mocked(grantPermissions).mockResolvedValue({ permissionId: '0xperm' } as never);
+
+        const account = await Account.fromLocalAccount(
+            { chainId: 1, apiKey: 'test', paymasterUrl: PAYMASTER_URL } as never,
+            { address: '0xabcdef1234567890abcdef1234567890abcdef12', type: 'local', sign: vi.fn() } as never
+        );
+
+        await account.grantPermissions(
+            9999999999,
+            SPENDER,
+            PERMISSIONS as never,
+            undefined,
+            undefined,
+            undefined,
+            options
+        );
+        return vi.mocked(grantPermissions).mock.calls.at(-1)?.[8] ?? [];
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    // A wallet does not move funds nobody asked it to move.
+    it('sends nothing extra when the caller did not ask for it', async () => {
+        expect(await grant()).toEqual([]);
+    });
+
+    it('rides a transfer to the spender along in the same transaction', async () => {
+        const prepended = await grant({ prefundSpender: true });
+
+        expect(prepended).toHaveLength(1);
+        expect(prepended[0].to).toBe(TOKEN);
+        expect(prepended[0].data).toBeDefined();
+        const decoded = decodeFunctionData({ abi: erc20Abi, data: prepended[0].data as `0x${string}` });
+        expect(decoded.functionName).toBe('transfer');
+        expect(decoded.args).toEqual([SPENDER, 100_000n]);
+    });
+
+    // Losing the grant to a reverted transfer is worse than the sponsored op it
+    // was meant to replace.
+    it('leaves the grant alone when the account cannot cover the transfer', async () => {
+        expect(await grant({ prefundSpender: true }, 1n)).toEqual([]);
     });
 });

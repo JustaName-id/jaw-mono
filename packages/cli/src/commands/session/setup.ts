@@ -15,6 +15,7 @@ import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
 import { parsePermissionsConfig } from '../../lib/validation.js';
 import { extractGrantedSpend } from '../../x402/policy.js';
 import { buildX402Permissions, describeX402Grant, DEFAULT_X402_LIMIT } from '../../x402/grant-preset.js';
+import { whyOwnerCannotFundSession } from '../../x402/funded-owner.js';
 
 export default class SessionSetup extends BaseCommand {
   static override description =
@@ -222,6 +223,15 @@ export default class SessionSetup extends BaseCommand {
 
       // 6. Open browser bridge to grant permissions
       if (!flags.quiet) {
+        if (flags.x402) {
+          // Which account gets connected in the browser decides everything
+          // below, and it is the last moment the user can pick a different one.
+          this.log(
+            `Connect with an account that holds USDC on chain ${chainId}.\n` +
+              'Payments pull from it through the permission, and the grant carries 0.1 USDC\n' +
+              'to the session so it can pay for its own first transaction.\n'
+          );
+        }
         this.log('Opening browser to approve permissions...');
       }
 
@@ -234,12 +244,22 @@ export default class SessionSetup extends BaseCommand {
 
       let grantResponse: { permissionId: string; account: string };
       try {
+        if (flags.x402) {
+          const blocked = await whyOwnerCannotFundSession({ chainId, request: (m, p) => bridge.request(m, p) });
+          if (blocked) this.error(blocked);
+        }
+
         grantResponse = (await bridge.request('wallet_grantPermissions', [
           {
             spender: sessionAddress,
             expiry: expiryTimestamp,
             permissions,
             chainId,
+            // The session account sends every op the permission authorises, and
+            // the ERC-20 paymaster charges the sender, so its first one has
+            // nothing to be charged. The wallet rides a small transfer along in
+            // this same transaction; it decides the amount.
+            capabilities: { prefundSpender: true },
           },
         ])) as { permissionId: string; account: string };
       } finally {
@@ -276,20 +296,16 @@ export default class SessionSetup extends BaseCommand {
         this.log(`  Session address:  ${sessionAddress}`);
         this.log('                    (the session key EOA, and the x402 payer)');
         this.log(`  Owner address:    ${grantResponse.account}`);
+        if (flags.x402) {
+          // Where the money stays. Sending it to the session address instead is
+          // the easiest thing to get wrong, and getting it wrong looks like it
+          // worked: payments succeed from there without ever exercising the
+          // permission, so the cap the user granted applies to nothing.
+          this.log(`                    (payments pull from here, capped at ${describeX402Grant(flags.limit)})`);
+        }
         this.log(`  Permission ID:    ${grantResponse.permissionId}`);
         this.log(`  Chain:            ${chainId}`);
         this.log(`  Expires:          ${new Date(expiryTimestamp * 1000).toISOString()} (${expiryDays} days)`);
-        if (flags.x402) {
-          this.log(`  Granted:          ${describeX402Grant(flags.limit)}`);
-          // Which of the two addresses to fund is the easiest thing to get
-          // wrong, and getting it wrong looks like it worked: the session
-          // address holds the money, so the permission is never exercised and
-          // the cap never applies. Say it here, where both are on screen.
-          this.log(
-            `\nFund the OWNER account (${grantResponse.account}) with USDC, not the session address.\n` +
-              'Payments pull from it through the permission, only when one is needed.'
-          );
-        }
         this.log('\nUse --session flag to execute RPC calls in auto mode.');
       }
     } catch (error) {
