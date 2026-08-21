@@ -1,4 +1,5 @@
 import { JAW } from '@jaw.id/core';
+import { resolveKeysUrl } from './keys-url';
 
 // One CrossPlatform SDK instance for the whole demo. The iframe transport is
 // persistent: it mounts hidden + handshakes once (prewarm on provider
@@ -9,14 +10,25 @@ let sdk: ReturnType<typeof JAW.create> | null = null;
 export function getJaw() {
   if (typeof window === 'undefined') return null;
   if (!sdk) {
+    const apiKey = process.env.NEXT_PUBLIC_API_KEY;
+    if (!apiKey) {
+      // An empty key makes JAW.create come up with zero chains/clients and
+      // every request fails obscurely — fail loudly instead.
+      const msg =
+        'NEXT_PUBLIC_API_KEY is not set — copy apps/demo/.env.example to apps/demo/.env.local and fill in a key from https://dashboard.jaw.id/';
+      if (process.env.NODE_ENV !== 'production') throw new Error(msg);
+      console.error(msg);
+    }
+    const keysUrl = resolveKeysUrl();
     sdk = JAW.create({
-      apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
+      apiKey: apiKey || '',
       appName: 'JAW Hero Demo',
       appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
       defaultChainId: 84532, // Base Sepolia
       preference: {
-        // Explicit local/preview keys override, same convention as playground.
-        ...(process.env.NEXT_PUBLIC_KEYS_URL ? { keysUrl: process.env.NEXT_PUBLIC_KEYS_URL } : {}),
+        // Explicit local override or this PR's own keys preview, same
+        // convention as playground.
+        ...(keysUrl ? { keysUrl } : {}),
         showTestnets: true,
         // iframe requires a secure context; on plain http://localhost the SDK
         // falls back to the popup on its own.

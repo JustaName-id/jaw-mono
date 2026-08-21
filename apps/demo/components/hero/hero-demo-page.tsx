@@ -87,6 +87,9 @@ export function HeroDemoPage() {
   const [open, setOpen] = useState(false);
   const [fin, setFin] = useState(false);
   const [menu, setMenu] = useState(false);
+  // Non-cancel failure of the last wallet request (missing funds, dead RPC…),
+  // surfaced as an inline banner on the phone screen.
+  const [err, setErr] = useState<string | null>(null);
   const { areaRef, scale } = usePhoneScale();
   const isMobile = useIsMobile();
   // Live 0.2 USDC → ETH quote for the Swapr screen.
@@ -95,7 +98,7 @@ export function HeroDemoPage() {
   // desktop, the full-bleed demo area on mobile.
   const [mobileEl, setMobileEl] = useState<HTMLDivElement | null>(null);
   const [screenEl, setScreenEl] = useState<HTMLDivElement | null>(null);
-  useDialogEmbed(isMobile ? mobileEl : screenEl, isMobile ? 0 : 47 * scale);
+  useDialogEmbed(isMobile ? mobileEl : screenEl, isMobile ? 0 : 47 * scale, open);
   const cur = FEATS.find((f) => f.id === id) ?? FEATS[0];
   // Latest feature for async callbacks that may outlive a navigation.
   const curRef = useRef(cur);
@@ -144,18 +147,23 @@ export function HeroDemoPage() {
     setOpen(false);
     setFin(false);
     setMenu(false);
+    setErr(null);
   };
   const pickVariant = (i: number) => {
+    runRef.current++;
     setVi(i);
     setOpen(false);
+    setErr(null);
   };
   // From the in-phone menu: jump straight to a feature + variant.
   const pickFeatVariant = (n: number, i: number) => {
+    runRef.current++;
     setId(n);
     setVi(i);
     setOpen(false);
     setFin(false);
     setMenu(false);
+    setErr(null);
   };
   const advanceFrom = (fromId: number) => {
     if (fromId === FEATS.length) {
@@ -182,6 +190,7 @@ export function HeroDemoPage() {
     const run = ++runRef.current;
     const fromId = cur.id;
     const adversarial = v.key === 'adversarial';
+    setErr(null);
     setOpen(true);
     try {
       // eth_accounts is silent + local: it reports the live session without
@@ -210,8 +219,15 @@ export function HeroDemoPage() {
       }
       // Only advance if the user hasn't navigated while the request ran.
       if (runRef.current === run) advanceFrom(fromId);
-    } catch {
-      // dismissed or rejected — stay on the current feature
+    } catch (e) {
+      console.error('[demo] wallet request failed', e);
+      // EIP-1193 4001 = the user dismissed/rejected the dialog — that is a
+      // normal path, stay silent. Everything else (unfunded account, missing
+      // API key, paymaster rejection…) gets an inline banner.
+      const code = (e as { code?: number } | null)?.code;
+      if (code !== 4001 && runRef.current === run) {
+        setErr(e instanceof Error && e.message ? e.message : 'The wallet request failed. See the console for details.');
+      }
     } finally {
       setOpen(false);
     }
@@ -237,6 +253,23 @@ export function HeroDemoPage() {
       />
 
       {fin && <FinSheet onRestart={() => pick(1)} />}
+
+      {err && !open && (
+        <div
+          role="alert"
+          className="animate-jd-fade border-red-line bg-red-bg text-red absolute inset-x-3 top-14 z-[70] flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 shadow-[0_10px_28px_-14px_rgba(15,23,42,.45)]"
+        >
+          <span className="min-w-0 flex-1 break-words text-[12.5px] font-medium leading-[1.45]">{err}</span>
+          <button
+            type="button"
+            aria-label="Dismiss error"
+            onClick={() => setErr(null)}
+            className="grid h-5 w-5 shrink-0 cursor-pointer place-items-center rounded-full text-[13px] leading-none hover:bg-[rgba(15,23,42,.08)]"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 

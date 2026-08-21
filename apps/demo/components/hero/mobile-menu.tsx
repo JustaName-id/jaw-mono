@@ -67,15 +67,13 @@ export function MobileMenu({
               {FEATS.map((f) => {
                 const on = activeId === f.id;
                 return (
+                  // Row selection rides the title button's stretched ::after
+                  // (a native button handles Enter AND Space), keeping the
+                  // variant pill <button>s out of any button-role ancestor —
+                  // they sit z-raised above the overlay.
                   <div
                     key={f.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onPick(f.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') onPick(f.id);
-                    }}
-                    className={`cursor-pointer rounded-xl border px-3.5 py-3 transition-colors duration-200 ${
+                    className={`relative rounded-xl border px-3.5 py-3 transition-colors duration-200 ${
                       on ? 'border-ink shadow-[0_1px_0_var(--ink)]' : 'border-line'
                     }`}
                   >
@@ -83,15 +81,19 @@ export function MobileMenu({
                       <span className={`font-mono text-[11px] font-semibold ${on ? 'text-jaw-blue' : 'text-ink-3'}`}>
                         {String(f.id).padStart(2, '0')}
                       </span>
-                      <span
-                        className={`text-[15px] tracking-[-0.01em] ${on ? 'font-semibold' : 'text-ink-2 font-medium'}`}
+                      <button
+                        type="button"
+                        onClick={() => onPick(f.id)}
+                        className={`cursor-pointer text-[15px] tracking-[-0.01em] after:absolute after:inset-0 after:cursor-pointer after:content-[''] ${
+                          on ? 'font-semibold' : 'text-ink-2 font-medium'
+                        }`}
                       >
                         {f.title}
-                      </span>
+                      </button>
                     </div>
                     <div className="text-ink-3 mt-1 pl-[26px] text-[12px]">{f.teaser}</div>
                     {f.variants.length > 1 && (
-                      <div className="mt-2 flex flex-wrap gap-1.5 pl-[26px]">
+                      <div className="relative z-[1] mt-2 flex flex-wrap gap-1.5 pl-[26px]">
                         {f.variants.map((fv, i) => {
                           const vOn = on && i === activeVi;
                           const danger = fv.key === 'adversarial';

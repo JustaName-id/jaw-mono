@@ -5,7 +5,9 @@ import type { Feat, Variant } from './features';
 
 export function VariantPills({ variants, vi, setVi }: { variants: Variant[]; vi: number; setVi: (i: number) => void }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5 pb-1 pt-3.5">
+    // z-raised above the row's stretched click-target button so the pills stay
+    // individually clickable.
+    <div className="relative z-[2] flex flex-wrap items-center gap-1.5 pb-1 pt-3.5">
       {variants.map((v, i) => {
         const on = i === vi;
         const danger = v.key === 'adversarial';
@@ -33,7 +35,21 @@ export function VariantPills({ variants, vi, setVi }: { variants: Variant[]; vi:
 }
 
 // Height-animated fold. Measures its content and animates the wrapper height.
-export function Fold({ open, delay = 0, children }: { open: boolean; delay?: number; children: ReactNode }) {
+// `contentKey` identifies the current children (e.g. the active variant key):
+// the ResizeObserver catches size changes, but swapping content is re-measured
+// eagerly without depending on the `children` object itself, which is fresh
+// every render and would rebuild the observers each time.
+export function Fold({
+  open,
+  delay = 0,
+  contentKey,
+  children,
+}: {
+  open: boolean;
+  delay?: number;
+  contentKey?: string;
+  children: ReactNode;
+}) {
   const inner = useRef<HTMLDivElement>(null);
   const [h, setH] = useState(0);
   useLayoutEffect(() => {
@@ -50,11 +66,14 @@ export function Fold({ open, delay = 0, children }: { open: boolean; delay?: num
       ro.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, [children, open]);
+  }, [contentKey, open]);
   return (
     <div
       className="overflow-hidden [transition:height_.32s_cubic-bezier(.32,.72,0,1)]"
       style={{ height: open ? h : 0 }}
+      // Collapsed content is invisible but stays mounted; without inert its
+      // buttons would still sit in the tab order.
+      inert={!open || undefined}
     >
       <div
         ref={inner}
@@ -89,16 +108,13 @@ export function FeatRow({
   const label = v.appLabel || f.appLabel;
   const accent = v.accent || f.accent;
   const num = String(f.id).padStart(2, '0');
+  // The whole row is clickable via the title button's stretched ::after (it
+  // fills the row's `relative` box), instead of role="button" on the row
+  // itself: a native button activates on Enter AND Space, and it keeps the
+  // variant pills (real <button>s, z-raised above the overlay) from being
+  // interactive content nested inside a button role.
   return (
-    <div
-      className="group relative z-[1] grid cursor-pointer grid-cols-[24px_1fr] items-start gap-[18px]"
-      role="button"
-      tabIndex={0}
-      onClick={onPick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') onPick();
-      }}
-    >
+    <div className="group relative z-[1] grid grid-cols-[24px_1fr] items-start gap-[18px]">
       <div
         className={`group-hover:text-jaw-blue pt-3.5 font-mono text-[12px] font-semibold tracking-[.08em] transition-colors duration-[250ms] ${
           on ? 'text-jaw-blue' : past ? 'text-ink-2' : 'text-ink-3'
@@ -114,13 +130,15 @@ export function FeatRow({
         }`}
       >
         <div className="flex items-center gap-3">
-          <span
-            className={`shrink-0 whitespace-nowrap text-[17.5px] leading-[1.3] tracking-[-0.02em] transition-colors duration-[220ms] ${
+          <button
+            type="button"
+            onClick={onPick}
+            className={`shrink-0 cursor-pointer whitespace-nowrap text-[17.5px] leading-[1.3] tracking-[-0.02em] transition-colors duration-[220ms] after:absolute after:inset-0 after:cursor-pointer after:content-[''] ${
               on ? 'text-ink font-semibold' : 'text-ink-2 group-hover:text-ink font-medium'
             }`}
           >
             {f.title}
-          </span>
+          </button>
           <span
             className={`text-ink-3 ml-auto inline-flex min-w-0 items-center gap-[7px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] uppercase tracking-[.1em] transition-opacity duration-[250ms] ${
               on ? 'opacity-100' : 'opacity-0'
@@ -130,7 +148,7 @@ export function FeatRow({
             Example: {label}
           </span>
         </div>
-        <Fold open={on} delay={70}>
+        <Fold open={on} delay={70} contentKey={v.key}>
           <p
             key={v.key}
             className="text-ink-2 box-content min-h-[124px] text-pretty pt-2.5 text-[15.5px] leading-[1.6]"

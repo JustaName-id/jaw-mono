@@ -2,7 +2,8 @@
 
 import { Icon } from '@/components/ui';
 
-// Staggered fade for the sheet's children.
+// Delayed fade for the sheet's children: they appear together once the sheet
+// has slid up.
 const finFade = 'animate-hd-fin-fade [animation-delay:220ms]';
 
 // Finale sheet shown inside the phone after the fourth feature completes.

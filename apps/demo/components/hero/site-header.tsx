@@ -22,7 +22,7 @@ export function SiteHeader() {
         </div>
         <a
           href="https://jaw.id"
-          className="border-line-2 text-ink-2 hover:border-line-2 hover:bg-raise hover:text-ink inline-flex items-center gap-[7px] whitespace-nowrap rounded-full border px-[13px] py-[7px] font-mono text-[10.5px] uppercase tracking-[.1em] no-underline transition-colors duration-200"
+          className="border-line-2 text-ink-2 hover:bg-raise hover:text-ink inline-flex items-center gap-[7px] whitespace-nowrap rounded-full border px-[13px] py-[7px] font-mono text-[10.5px] uppercase tracking-[.1em] no-underline transition-colors duration-200"
         >
           <svg
             width="12"

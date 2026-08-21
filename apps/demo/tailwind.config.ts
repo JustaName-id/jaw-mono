@@ -42,7 +42,9 @@ const config: Config = {
           bg: 'var(--red-bg)',
           line: 'var(--red-line)',
         },
-        green: 'var(--green)',
+        // Object-valued so it deep-merges with Tailwind's green scale instead
+        // of replacing it (a bare string would kill text-green-600 etc.).
+        green: { DEFAULT: 'var(--green)' },
       },
       fontFamily: {
         sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],

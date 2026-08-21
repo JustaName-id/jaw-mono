@@ -203,7 +203,6 @@ export function SplitsApp({ onCta }: { onCta: () => void }) {
             c2="#334155"
             ini="KN"
             photo="https://randomuser.me/api/portraits/men/32.jpg"
-            on={false}
           />
           <Row
             name="Samira K."
@@ -213,7 +212,6 @@ export function SplitsApp({ onCta }: { onCta: () => void }) {
             c2="#B91C3C"
             ini="SK"
             photo="https://randomuser.me/api/portraits/women/44.jpg"
-            on={false}
           />
           <Row
             name="Youssef Bahri"
@@ -223,7 +221,6 @@ export function SplitsApp({ onCta }: { onCta: () => void }) {
             c2="#2F5D8C"
             ini="YB"
             photo="https://randomuser.me/api/portraits/men/75.jpg"
-            on={false}
           />
         </div>
         <div className="grid grid-cols-2 gap-2.5 border-t border-[rgba(22,35,63,.1)] px-[18px] pb-11 pt-3">

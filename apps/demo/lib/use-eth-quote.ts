@@ -7,7 +7,7 @@ export type SwapQuote = {
   sell: string;
   /** WETH received at the live rate */
   receive: string;
-  /** "1 ETH = 3,086 USDC" */
+  /** "1 WETH = 3,086 USDC" */
   rate: string;
   /** Fiat value of the sold amount */
   usd: string;
