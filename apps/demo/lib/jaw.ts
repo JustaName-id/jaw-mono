@@ -22,7 +22,7 @@ export function getJaw() {
     const keysUrl = resolveKeysUrl();
     sdk = JAW.create({
       apiKey: apiKey || '',
-      appName: 'JAW Hero Demo',
+      appName: 'JAW Demo',
       appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
       defaultChainId: 84532, // Base Sepolia
       preference: {

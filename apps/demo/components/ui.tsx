@@ -1,9 +1,16 @@
 'use client';
 
+import Image from 'next/image';
+
 // Shared primitives for the demo: the icon set and the two pill-button styles
 // used across the page chrome, the mobile menu, and the finale sheet.
 
 type IconProps = { size?: number };
+
+// Native size of public/jaw-logo.png (same asset as playground and keys);
+// width follows the aspect ratio so the mark never squishes.
+const LOGO_W = 203;
+const LOGO_H = 222;
 
 export const Icon = {
   Arrow: ({ size = 14 }: IconProps) => (
@@ -50,19 +57,15 @@ export const Icon = {
       <path d="M20 6 9 17l-5-5" />
     </svg>
   ),
-  // Placeholder brand mark (the design uses assets/brand-mark.png).
+  // Brand mark, the same asset playground and keys ship.
   Logo: ({ size = 22 }: IconProps) => (
-    <svg viewBox="0 0 24 24" width={size} height={size} aria-label="JAW.id" className="block">
-      <rect width="24" height="24" rx="6" fill="var(--jaw-blue)" />
-      <path
-        d="M8 12.2 10.6 15 16.4 9"
-        fill="none"
-        stroke="#fff"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <Image
+      src="/jaw-logo.png"
+      alt="JAW.id"
+      width={Math.round((size * LOGO_W) / LOGO_H)}
+      height={size}
+      className="block"
+    />
   ),
 };
 

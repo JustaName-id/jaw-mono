@@ -10,7 +10,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "{projectRoot}",
-        "command": "if [ -f ../playground/certificates/localhost-key.pem ]; then bunx next dev --experimental-https --experimental-https-key ../playground/certificates/localhost-key.pem --experimental-https-cert ../playground/certificates/localhost.pem; else bunx next dev --experimental-https; fi"
+        "command": "bunx next dev"
       }
     }
   }

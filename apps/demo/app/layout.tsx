@@ -21,7 +21,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: 'JAW — Hero Demo',
+  title: 'JAW Demo',
   description: 'Walk through exactly what your users do: sign in, send, swap and delegate with a JAW smart account.',
 };
 
