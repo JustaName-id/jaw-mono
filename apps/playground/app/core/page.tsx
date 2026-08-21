@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { JAW, Mode } from '@jaw.id/core';
 import type { JawTheme } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
-import { ThemePicker } from '../../components/theme-picker';
+import { ThemeStudioControls, DialogPreviews } from '../../components/shell/theme-studio';
 import { ShellHeader } from '../../components/shell/header';
 import { ShellSidebar, type ShellView } from '../../components/shell/sidebar';
 import { ConfigCard } from '../../components/shell/config-card';
@@ -325,18 +325,16 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
               />
             </>
           ) : (
-            <p className="text-shell-ink-3 m-0 px-4 pb-6 text-[13px] leading-relaxed">
-              Tokens apply to SDK dialogs only. The playground chrome is independent.
-            </p>
+            /* Theme controls: AppSpecific applies via ReactUIHandler, CrossPlatform
+               via provider.setTheme pushing to the keys dialog. */
+            <ThemeStudioControls theme={theme} onThemeChange={handleThemeChange} />
           )}
         </ShellSidebar>
 
         <main className="flex min-h-0 flex-col overflow-y-auto">
           <div className="flex flex-1 flex-col gap-6 px-6 py-6 md:px-9 md:py-[30px]">
             {view === 'theme' ? (
-              /* Theme Picker: AppSpecific applies via ReactUIHandler, CrossPlatform
-                 via provider.setTheme pushing to the keys dialog. */
-              <ThemePicker theme={theme} onThemeChange={handleThemeChange} />
+              <DialogPreviews theme={theme} />
             ) : activeMethod ? (
               <>
                 {/* Interim: ConfigSnippet moves to its shell home in a later step. */}
