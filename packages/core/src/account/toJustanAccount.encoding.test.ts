@@ -24,7 +24,7 @@ const WRAPPED_SIGNATURE = [
     {
         type: 'tuple',
         components: [
-            { name: 'ownerIndex', type: 'uint8' },
+            { name: 'ownerIndex', type: 'uint256' },
             { name: 'signatureData', type: 'bytes' },
         ],
     },
@@ -70,13 +70,13 @@ describe('wrapSignature', () => {
         const out = wrapSignature({ ownerIndex: 3, signature: P256_SIGNATURE });
 
         const [decoded] = decodeAbiParameters(WRAPPED_SIGNATURE, out);
-        expect(decoded.ownerIndex).toBe(3);
+        expect(decoded.ownerIndex).toBe(3n);
         expect(decoded.signatureData).toBe(P256_SIGNATURE);
     });
 
     it('defaults to owner index 0', () => {
         const [decoded] = decodeAbiParameters(WRAPPED_SIGNATURE, wrapSignature({ signature: P256_SIGNATURE }));
-        expect(decoded.ownerIndex).toBe(0);
+        expect(decoded.ownerIndex).toBe(0n);
     });
 
     it.each([
