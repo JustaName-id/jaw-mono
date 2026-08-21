@@ -6,7 +6,7 @@ import { Icon } from '@/components/ui';
 // owns the whole screen and these live in the hamburger menu instead.
 export function SiteHeader() {
   return (
-    <section className="mx-auto w-full max-w-[1400px] px-9 pt-[22px] max-md:hidden">
+    <section className="mx-auto w-full max-w-[1400px] px-9 pt-[22px] max-md:hidden" data-analytics-surface="header">
       <div className="flex items-center justify-between gap-6">
         <div className="inline-flex items-center gap-3">
           <span className="inline-flex items-center gap-2">

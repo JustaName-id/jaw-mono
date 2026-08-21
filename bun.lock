@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "@jaw-mono/source",
@@ -71,6 +70,7 @@
       "dependencies": {
         "@jaw.id/core": "workspace:*",
         "next": "~15.5.10",
+        "posthog-js": "^1.187.2",
         "react": "19.2.6",
         "react-dom": "19.2.6",
         "viem": "^2.55.16",
@@ -135,7 +135,7 @@
     },
     "packages/cli": {
       "name": "@jaw.id/cli",
-      "version": "0.1.25",
+      "version": "0.1.26",
       "bin": {
         "jaw": "./bin/run.js",
       },
@@ -158,7 +158,7 @@
     },
     "packages/core": {
       "name": "@jaw.id/core",
-      "version": "1.2.2",
+      "version": "1.2.3",
       "dependencies": {
         "axios": "1.13.5",
         "eventemitter3": "5.0.1",
@@ -176,7 +176,7 @@
     },
     "packages/ui": {
       "name": "@jaw.id/ui",
-      "version": "1.3.2",
+      "version": "1.3.3",
       "dependencies": {
         "@hookform/resolvers": "^5.2.2",
         "@jaw.id/core": "1.1.4",
@@ -218,7 +218,7 @@
     },
     "packages/wagmi": {
       "name": "@jaw.id/wagmi",
-      "version": "1.0.18",
+      "version": "1.0.19",
       "dependencies": {
         "@jaw.id/core": "1.1.4",
         "@wagmi/core": "^3.0.0",

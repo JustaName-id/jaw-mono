@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono, Playfair_Display } from 'next/font/google';
+import { Suspense } from 'react';
 import './globals.css';
+import { AnalyticsProvider } from './providers/analytics-provider';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -35,7 +37,9 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} ${playfair.variable} bg-paper text-ink font-sans leading-[1.45] antialiased [font-feature-settings:'ss01','cv01','tnum']`}
       >
-        {children}
+        <Suspense fallback={null}>
+          <AnalyticsProvider>{children}</AnalyticsProvider>
+        </Suspense>
       </body>
     </html>
   );

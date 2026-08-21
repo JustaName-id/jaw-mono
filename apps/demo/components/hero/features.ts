@@ -1,6 +1,7 @@
 'use client';
 
 import type { JawTheme } from '@jaw.id/core';
+import type { FeatureName } from '@/lib/analytics/events/types';
 
 export type PhoneAppKey = 'social' | 'splits' | 'swap' | 'agent';
 
@@ -15,6 +16,8 @@ export type Variant = {
 
 export type Feat = {
   id: number;
+  /** Stable analytics name — decoupled from `title` so copy edits keep funnels intact. */
+  analytics: FeatureName;
   app: PhoneAppKey;
   appLabel: string;
   accent: string;
@@ -29,6 +32,7 @@ export type Feat = {
 export const FEATS: Feat[] = [
   {
     id: 1,
+    analytics: 'sign-in',
     app: 'social',
     appLabel: 'Social app',
     accent: 'rgb(8,81,255)',
@@ -57,6 +61,7 @@ export const FEATS: Feat[] = [
   },
   {
     id: 2,
+    analytics: 'send',
     app: 'splits',
     appLabel: 'Splitos',
     accent: '#C29A34',
@@ -101,6 +106,7 @@ export const FEATS: Feat[] = [
   },
   {
     id: 3,
+    analytics: 'swap',
     app: 'swap',
     appLabel: 'Exchange',
     accent: '#0F172A',
@@ -152,6 +158,7 @@ export const FEATS: Feat[] = [
   },
   {
     id: 4,
+    analytics: 'agent-delegation',
     app: 'agent',
     appLabel: 'AI agent',
     accent: '#5FE0A0',

@@ -1,6 +1,18 @@
 import { JAW } from '@jaw.id/core';
 import { resolveKeysUrl } from './keys-url';
 
+/** Base Sepolia — the one chain the demo runs on. */
+export const DEMO_CHAIN_ID = 84532;
+
+/**
+ * Effective keys transport, for analytics. The demo asks for the iframe, but
+ * that needs a secure context — on plain http://localhost the SDK falls back to
+ * the popup on its own, so report what will actually be used.
+ */
+export function transportMode(): 'iframe' | 'popup' {
+  return typeof window !== 'undefined' && window.isSecureContext ? 'iframe' : 'popup';
+}
+
 // One CrossPlatform SDK instance for the whole demo. The iframe transport is
 // persistent: it mounts hidden + handshakes once (prewarm on provider
 // construction) and every later request re-shows the same keys.jaw.id iframe,
@@ -24,7 +36,7 @@ export function getJaw() {
       apiKey: apiKey || '',
       appName: 'JAW Demo',
       appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
-      defaultChainId: 84532, // Base Sepolia
+      defaultChainId: DEMO_CHAIN_ID,
       preference: {
         // Explicit local override or this PR's own keys preview, same
         // convention as playground.
