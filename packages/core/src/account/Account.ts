@@ -1184,21 +1184,7 @@ export class Account {
                 publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [owner] }),
         };
 
-        // What the paymaster will take for this transaction, when it is taking
-        // it in the same token the prefund goes out in. Any other token, or none
-        // at all, leaves nothing for the prefund to reserve.
-        const contextToken = paymasterContext?.token as string | undefined;
-        const gas = paymasterContext?.gas as string | bigint | undefined;
-        const prefundToken = permissions.spends?.find((spend) => spend.token)?.token;
-        const feeInToken =
-            gas !== undefined &&
-            contextToken &&
-            prefundToken &&
-            contextToken.toLowerCase() === prefundToken.toLowerCase()
-                ? BigInt(gas)
-                : 0n;
-
-        return await buildSpenderPrefundCall({ account, spender, permissions, feeInToken, read });
+        return await buildSpenderPrefundCall({ account, spender, permissions, paymasterContext, read });
     }
 
     /**

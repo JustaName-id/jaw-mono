@@ -108,7 +108,7 @@ describe('buildSpenderPrefundCall', () => {
             account: ACCOUNT,
             spender: SPENDER,
             permissions: usdcSpend,
-            feeInToken: 50_000n,
+            paymasterContext: { token: USDC, gas: '50000' },
             read: reader({ [ACCOUNT]: PREFUND + 49_999n }),
         };
 
@@ -116,5 +116,39 @@ describe('buildSpenderPrefundCall', () => {
         expect(
             await buildSpenderPrefundCall({ ...args, read: reader({ [ACCOUNT]: PREFUND + 50_000n }) })
         ).not.toBeNull();
+    });
+
+    // A paymaster charging in something else takes nothing from the balance the
+    // prefund comes out of, so there is nothing to reserve.
+    it('reserves nothing when the transaction is paid in another token', async () => {
+        const call = await buildSpenderPrefundCall({
+            account: ACCOUNT,
+            spender: SPENDER,
+            permissions: usdcSpend,
+            paymasterContext: { token: '0x9999999999999999999999999999999999999999', gas: '50000' },
+            read: reader({ [ACCOUNT]: PREFUND }),
+        });
+
+        expect(call).not.toBeNull();
+    });
+
+    // The fee used to be decided against `spends[0]` while the prefund went out
+    // in the first non-native one, so a native spend ahead of the token left the
+    // fee unreserved and the grant could revert for want of it.
+    it('reserves the fee against the token it actually sends, not the first spend', async () => {
+        const call = await buildSpenderPrefundCall({
+            account: ACCOUNT,
+            spender: SPENDER,
+            permissions: {
+                spends: [
+                    { token: NATIVE_TOKEN, allowance: '1', unit: 'day' as never },
+                    { token: USDC, allowance: '10000000', unit: 'day' as never },
+                ],
+            },
+            paymasterContext: { token: USDC, gas: '50000' },
+            read: reader({ [ACCOUNT]: PREFUND + 49_999n }),
+        });
+
+        expect(call).toBeNull();
     });
 });

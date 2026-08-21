@@ -49,13 +49,14 @@ export interface PrefundArgs {
     spender: Address;
     permissions: PermissionsDetail;
     /**
-     * What the paymaster will take from `account` for this very transaction, in
-     * the same token, when it is being paid in one. The prefund has to leave it
-     * behind: an account with exactly enough for the fee would pass the keys
-     * screen's estimate, which runs before this call exists, and then fail when
-     * the paymaster charges in postOp, reverting the whole grant.
+     * The paymaster context for this transaction. When it names the same token
+     * the prefund goes out in, its `gas` is what the paymaster will take from
+     * `account`, and the prefund has to leave that behind: an account with
+     * exactly enough for the fee would pass the keys screen's estimate, which
+     * runs before this call exists, and then fail when the paymaster charges in
+     * postOp, reverting the whole grant.
      */
-    feeInToken?: bigint;
+    paymasterContext?: Record<string, unknown>;
     read: PrefundReader;
 }
 
@@ -83,13 +84,25 @@ export async function buildSpenderPrefundCall(
     if (spenderBalance >= amount) return null;
 
     const accountBalance = await args.read.balanceOf(token, args.account);
-    if (accountBalance < amount + (args.feeInToken ?? 0n)) return null;
+    if (accountBalance < amount + paymasterFeeIn(token, args.paymasterContext)) return null;
 
     return {
         to: token,
         value: 0n,
         data: encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [args.spender, amount] }),
     };
+}
+
+/**
+ * What the paymaster will charge for this transaction, when it charges in the
+ * same token the prefund goes out in. Anything else, or a sponsored transaction,
+ * takes nothing from the balance the prefund comes out of.
+ */
+function paymasterFeeIn(token: Address, context?: Record<string, unknown>): bigint {
+    const contextToken = context?.token as string | undefined;
+    const gas = context?.gas as string | bigint | undefined;
+    if (gas === undefined || contextToken?.toLowerCase() !== token.toLowerCase()) return 0n;
+    return BigInt(gas);
 }
 
 /** The first token the permission authorises spending, native ones aside. */
