@@ -361,10 +361,13 @@ export async function payAndFetch(
   const refusal = (refusedReason: string | undefined, extra?: Partial<PayAndFetchResult>): PayAndFetchResult => ({
     status: 402,
     body: first.body,
-    paid: false,
     payer: payer.address,
     refusedReason,
     ...extra,
+    // After the spread, never from it. Both front ends decide whether to write a
+    // settled row in the ledger from this field, and the ledger is what the caps
+    // are rebuilt from, so a refusal must not be able to claim a payment.
+    paid: false,
   });
 
   // A 402 means we are about to sign a payment. Gate on the FINAL url (after

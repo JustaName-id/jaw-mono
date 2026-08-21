@@ -83,8 +83,11 @@ export async function buildSpenderPrefundCall(
     const spenderBalance = await args.read.balanceOf(token, args.spender);
     if (spenderBalance >= amount) return null;
 
+    const fee = paymasterFeeIn(token, args.paymasterContext);
+    if (fee === null) return null;
+
     const accountBalance = await args.read.balanceOf(token, args.account);
-    if (accountBalance < amount + paymasterFeeIn(token, args.paymasterContext)) return null;
+    if (accountBalance < amount + fee) return null;
 
     return {
         to: token,
@@ -98,11 +101,19 @@ export async function buildSpenderPrefundCall(
  * same token the prefund goes out in. Anything else, or a sponsored transaction,
  * takes nothing from the balance the prefund comes out of.
  */
-function paymasterFeeIn(token: Address, context?: Record<string, unknown>): bigint {
+function paymasterFeeIn(token: Address, context?: Record<string, unknown>): bigint | null {
     const contextToken = context?.token as string | undefined;
     const gas = context?.gas as string | bigint | undefined;
     if (gas === undefined || contextToken?.toLowerCase() !== token.toLowerCase()) return 0n;
-    return BigInt(gas);
+    try {
+        return BigInt(gas);
+    } catch {
+        // The context reaches here from the grant request, so this is a number
+        // the requester wrote. Null rather than zero: a fee we cannot read is
+        // one we cannot leave room for, and sending the transfer anyway is how
+        // the account ends up short and takes the grant down with it.
+        return null;
+    }
 }
 
 /** The first token the permission authorises spending, native ones aside. */

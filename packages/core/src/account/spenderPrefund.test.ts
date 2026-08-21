@@ -132,6 +132,21 @@ describe('buildSpenderPrefundCall', () => {
         expect(call).not.toBeNull();
     });
 
+    // The context comes from the grant request, so this number is one the
+    // requester wrote. Sending the transfer against a fee we cannot read is how
+    // the account ends up short and the grant reverts.
+    it('does nothing when the fee in the paymaster context cannot be read', async () => {
+        const call = await buildSpenderPrefundCall({
+            account: ACCOUNT,
+            spender: SPENDER,
+            permissions: usdcSpend,
+            paymasterContext: { token: USDC, gas: 'not a number' },
+            read: reader({ [ACCOUNT]: 5_000_000n }),
+        });
+
+        expect(call).toBeNull();
+    });
+
     // The fee used to be decided against `spends[0]` while the prefund went out
     // in the first non-native one, so a native spend ahead of the token left the
     // fee unreserved and the grant could revert for want of it.
