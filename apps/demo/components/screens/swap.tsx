@@ -2,7 +2,6 @@
 
 import type { ReactNode } from 'react';
 import { ctaInteract } from './common';
-import { Icon } from '@/components/ui';
 import type { SwapQuote } from '@/lib/use-eth-quote';
 
 const pink = 'oklch(0.68 0.24 340)';
@@ -69,17 +68,16 @@ function Pill({ sym, icon }: { sym: string; icon: ReactNode }) {
   );
 }
 
-// "Swapr": dark exchange sheet; `sendTo` turns it into the swap-and-send
-// variant. `quote` carries the live 0.2 USDC → ETH numbers fetched by the page.
-export function SwapApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?: string; quote: SwapQuote }) {
-  const pad = !sendTo;
+// "Swapr": dark exchange sheet. `quote` carries the live 0.2 USDC → ETH
+// numbers fetched by the page.
+export function SwapApp({ onCta, quote }: { onCta: () => void; quote: SwapQuote }) {
   return (
     <div className="flex h-full flex-col overflow-hidden font-sans text-slate-100" style={{ background: bg }}>
       <div className="pt-[58px]">
         <span className="mx-auto block h-1 w-[34px] rounded-full bg-white/20" />
       </div>
       <div className="flex items-center justify-between px-[22px] pb-3 pt-3.5">
-        <span className="text-[19px] font-semibold tracking-[-0.02em]">{sendTo ? 'Swap and send' : 'Swap'}</span>
+        <span className="text-[19px] font-semibold tracking-[-0.02em]">Swap</span>
         <svg
           width="19"
           height="19"
@@ -160,79 +158,32 @@ export function SwapApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?: 
           </span>
         </div>
       </div>
-      {pad ? (
-        <div className="grid flex-1 grid-cols-3 content-center gap-y-0.5 px-[30px] py-1.5">
-          {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'back'].map((k) => (
-            <span
-              key={k}
-              className="grid h-11 place-items-center text-[23px] font-medium tracking-[-0.01em] text-slate-100"
-            >
-              {k === 'back' ? (
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="rgba(255,255,255,.5)"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M19 12H5" />
-                  <path d="m12 19-7-7 7-7" />
-                </svg>
-              ) : (
-                k
-              )}
-            </span>
-          ))}
-        </div>
-      ) : (
-        <div className="flex flex-1 flex-col gap-2 px-6 pt-3 text-[12.5px] text-[rgba(255,255,255,.5)]">
-          <div className="flex justify-between">
-            <span>Max slippage</span>
-            <span className="font-mono text-[11.5px] text-slate-300">0.5%</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Steps</span>
-            <span className="text-[12px] font-semibold text-slate-300">Approve + swap + send</span>
-          </div>
-          <div
-            className="mt-1.5 rounded-2xl px-[15px] py-[13px]"
-            style={{ background: tile, border: `1px solid ${line}` }}
+      <div className="grid flex-1 grid-cols-3 content-center gap-y-0.5 px-[30px] py-1.5">
+        {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'back'].map((k) => (
+          <span
+            key={k}
+            className="grid h-11 place-items-center text-[23px] font-medium tracking-[-0.01em] text-slate-100"
           >
-            <div className="mb-[9px] flex items-center gap-[7px] text-[11.5px] text-[rgba(255,255,255,.5)]">
+            {k === 'back' ? (
               <svg
-                width="13"
-                height="13"
+                width="20"
+                height="20"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
+                stroke="rgba(255,255,255,.5)"
+                strokeWidth="1.8"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
-                <path d="M5 12h14" />
-                <path d="m12 5 7 7-7 7" />
+                <path d="M19 12H5" />
+                <path d="m12 19-7-7 7-7" />
               </svg>
-              Then send the WETH to
-            </div>
-            <div className="flex items-center gap-2.5">
-              <span
-                className="h-[26px] w-[26px] shrink-0 rounded-full"
-                style={{ background: 'linear-gradient(135deg,#38BDF8,#0EA5E9)' }}
-              />
-              <span className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[12.5px] font-semibold text-slate-100">
-                {sendTo}
-              </span>
-              <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-[10.5px] font-semibold text-[#3FA968]">
-                <Icon.Check size={9} />
-                Resolved
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
+            ) : (
+              k
+            )}
+          </span>
+        ))}
+      </div>
       <div className="px-5 pb-[46px] pt-2">
         <button
           type="button"
@@ -240,7 +191,7 @@ export function SwapApp({ onCta, sendTo, quote }: { onCta: () => void; sendTo?: 
           className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-5 py-[17px] text-[16.5px] font-[650] tracking-[-0.01em] text-white ${ctaInteract}`}
           style={{ background: pink, boxShadow: `0 12px 28px -12px ${pink.replace(')', ' / .5)')}` }}
         >
-          {sendTo ? 'Review swap and send' : 'Review swap'}
+          Review swap
         </button>
       </div>
     </div>

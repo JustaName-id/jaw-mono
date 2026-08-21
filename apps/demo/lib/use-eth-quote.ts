@@ -13,7 +13,6 @@ export type SwapQuote = {
   usd: string;
   /** Fiat value of 1 WETH, e.g. "$3,086.00" */
   rateUsd: string;
-  live: boolean;
 };
 
 // Design-file rate used until (or if) the live fetch lands.
@@ -55,6 +54,5 @@ export function useEthQuote(usdcAmount: number): SwapQuote {
     rate: `1 WETH = ${fmt(ethUsd, { maximumFractionDigits: 0 })} USDC`,
     usd: `$${usdcAmount.toFixed(2)}`,
     rateUsd: `$${fmt(ethUsd, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-    live: price !== null,
   };
 }

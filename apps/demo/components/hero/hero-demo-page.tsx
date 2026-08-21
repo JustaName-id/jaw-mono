@@ -166,17 +166,20 @@ export function HeroDemoPage() {
     setErr(null);
   };
   const advanceFrom = (fromId: number) => {
-    if (fromId === FEATS.length) {
+    // Advance by list position, not id arithmetic — ids are not guaranteed to
+    // stay contiguous with the list.
+    const next = FEATS[FEATS.findIndex((f) => f.id === fromId) + 1];
+    if (next) {
+      pick(next.id);
+    } else {
       setOpen(false);
       setFin(true);
-    } else {
-      pick(fromId + 1);
     }
   };
   const Base = BASE_APPS[v.app || cur.app];
   // Swapr and Agens screens are dark — flip the status bar / home indicator.
   const activeApp = v.app || cur.app;
-  const darkScreen = activeApp.startsWith('swap') || activeApp === 'agent';
+  const darkScreen = activeApp === 'swap' || activeApp === 'agent';
 
   // Every CTA opens the real keys.jaw.id dialog (contained in the phone). Each
   // feature runs a genuine request; the adversarial variant runs a flaggable

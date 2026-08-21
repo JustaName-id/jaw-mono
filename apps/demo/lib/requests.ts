@@ -1,3 +1,4 @@
+import { ANY_FN_SEL, ANY_TARGET } from '@jaw.id/core';
 import { getJaw } from './jaw';
 
 type JawProvider = NonNullable<ReturnType<typeof getJaw>>['provider'];
@@ -27,16 +28,13 @@ const FIFTH_USDC = 200000n;
 
 // Max uint256 — the "blank cheque" allowance keys renders as "Unlimited".
 const MAX_UINT256 = 2n ** 256n - 1n;
-// Permission-manager wildcards: keys renders these as "Any contract" / "Any
-// function" with a warning, the real signal of an unscoped grant.
-const ANY_TARGET = '0x3232323232323232323232323232323232323232';
-const ANY_FN_SELECTOR = '0x32323232';
 
-// 32-byte ABI word from an address or uint.
+// 32-byte ABI word from an address or uint. Strings must be full addresses:
+// silently left-padding a short/empty string would encode address(0).
 function word(v: bigint | string): string {
-  return typeof v === 'bigint'
-    ? v.toString(16).padStart(64, '0')
-    : v.toLowerCase().replace(/^0x/, '').padStart(64, '0');
+  if (typeof v === 'bigint') return v.toString(16).padStart(64, '0');
+  if (!/^0x[0-9a-fA-F]{40}$/.test(v)) throw new Error(`word(): not an address: "${v}"`);
+  return v.toLowerCase().slice(2).padStart(64, '0');
 }
 
 // ERC-20 approve(address,uint256) — selector 095ea7b3.
@@ -152,7 +150,7 @@ export function sendAgentGrantUnlimited(provider: JawProvider) {
         spender: AGENT,
         chainId: BASE_SEPOLIA_HEX,
         permissions: {
-          calls: [{ target: ANY_TARGET, selector: ANY_FN_SELECTOR }],
+          calls: [{ target: ANY_TARGET, selector: ANY_FN_SEL }],
           spends: [{ token: USDC, allowance: '0x5f5e100', unit: 'day', multiplier: 1 }],
         },
       },
@@ -215,6 +213,9 @@ export function featureRequest(
     case 2:
       return sendSplitsBatch(provider);
     case 3:
+      // The swap sends the WETH to the connected account; a missing account
+      // must fail here, not left-pad into recipient = address(0) in word().
+      if (!account) throw new Error('featureRequest: swap needs a connected account');
       return adversarial ? sendSwapUnlimited(provider, account) : sendSwapBatch(provider, account);
     case 4:
       return adversarial ? sendAgentGrantUnlimited(provider) : sendAgentGrant(provider);

@@ -1,8 +1,10 @@
-import type { NextConfig } from 'next';
+import { composePlugins, withNx } from '@nx/next';
+import type { WithNxOptions } from '@nx/next/plugins/with-nx';
 
-const nextConfig: NextConfig = {
+const nextConfig: WithNxOptions = {
+  nx: {},
   // @jaw.id/core ships workspace TS/ESM the app consumes directly.
   transpilePackages: ['@jaw.id/core'],
 };
 
-export default nextConfig;
+export default composePlugins(withNx)(nextConfig);
