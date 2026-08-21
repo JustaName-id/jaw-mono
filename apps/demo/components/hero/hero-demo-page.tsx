@@ -316,11 +316,11 @@ export function HeroDemoPage() {
       <main className="mx-auto grid w-full max-w-[1400px] flex-1 grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] items-start max-[1040px]:grid-cols-1 max-md:hidden">
         <div className="flex min-h-0 flex-col justify-start py-[26px] pb-10 pl-9 pr-16 max-[1040px]:px-6">
           <h1 className="mb-3 max-w-[24ch] text-balance text-[clamp(26px,2.4vw,34px)] font-semibold leading-[1.06] tracking-[-0.035em]">
-            Experience <span className="text-jaw-blue">your user&apos;s</span> journey
+            Experience <span className="text-jaw-blue">your users&apos;</span> journey
           </h1>
           <p className="text-ink-2 mb-[26px] max-w-[600px] text-pretty text-[17px] leading-[1.55]">
-            The app builds its own screens. JAW makes the action possible and supplies what users decide on: reviews,
-            confirmations, signatures.
+            A social feed, a bill split, an exchange, an AI agent. Four different designs, one invisible SDK. Every
+            action settles onchain.
           </p>
           <div className="relative mb-8 flex flex-col gap-2">
             {FEATS.map((f) => (
@@ -346,7 +346,7 @@ export function HeroDemoPage() {
               <div className="border-line group-hover:border-line-2 group-hover:bg-raise rounded-xl border px-4 py-[13px] transition-colors duration-200">
                 <div className="flex items-center gap-3">
                   <span className="text-ink-3 group-hover:text-jaw-blue shrink-0 whitespace-nowrap text-[16px] font-medium leading-[1.3] transition-colors duration-[220ms]">
-                    Everything else
+                    Run it yourself
                   </span>
                   <span className="text-ink-3 group-hover:text-jaw-blue ml-auto inline-flex min-w-0 items-center gap-[5px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] uppercase tracking-[.1em] transition-colors duration-[220ms]">
                     Playground <Icon.ArrowUR size={10} />
@@ -383,7 +383,7 @@ export function HeroDemoPage() {
             )}
             {!fin && (
               <a href="https://dashboard.jaw.id" className={btnPrimary}>
-                Get Started <Icon.Arrow size={12} />
+                Dashboard <Icon.Arrow size={12} />
               </a>
             )}
             <a href="https://docs.jaw.id" target="_blank" rel="noopener noreferrer" className={btnGhost}>

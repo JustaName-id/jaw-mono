@@ -37,7 +37,7 @@ export function SocialApp({ onCta }: { onCta: () => void }) {
               />
               <span className="min-w-0">
                 <span className="block text-[12.5px] font-[650] tracking-[-0.01em]">Ghadi</span>
-                <span className="text-ink-3 block font-mono text-[9.5px]">ghadii.justaname.eth</span>
+                <span className="text-ink-3 block font-mono text-[9.5px]">ghadi.nova.eth</span>
               </span>
               <span
                 className="ml-auto rounded-full border border-[rgba(8,81,255,.25)] px-[9px] py-[3px] text-[10px] font-semibold"
@@ -80,7 +80,7 @@ export function SocialApp({ onCta }: { onCta: () => void }) {
           your posts
         </div>
         <p className="text-ink-2 mx-auto mb-4 max-w-[280px] text-[14px] leading-normal">
-          Sign in with your face. Nova gives you a smart account and a name you keep, even if you leave.
+          One tap and you're in. Nova gives you an account and a name you keep, even if you leave.
         </p>
         <div className="mb-[18px] flex justify-center gap-[5px]">
           <span className="h-[5px] w-4 rounded-full" style={{ background: blue }} />
@@ -88,7 +88,7 @@ export function SocialApp({ onCta }: { onCta: () => void }) {
           <span className="bg-line-2 h-[5px] w-[5px] rounded-full" />
         </div>
         <CtaBtn label="Continue" color={blue} onClick={onCta} />
-        <div className="text-ink-3 mt-3 text-[12.5px]">New or returning, it is the same button.</div>
+        <div className="text-ink-3 mt-3 text-[12.5px]">Sign-In/Sign-Up</div>
       </div>
     </Screen>
   );

@@ -27,7 +27,7 @@ export function FinSheet({ onRestart }: { onRestart: () => void }) {
             href="https://dashboard.jaw.id"
             className="bg-ink flex items-center justify-center gap-2 rounded-[14px] px-[18px] py-3.5 text-[15px] font-semibold tracking-[-0.01em] text-white no-underline transition-transform duration-150 hover:-translate-y-px"
           >
-            Get Started <Icon.Arrow size={14} />
+            Dashboard <Icon.Arrow size={14} />
           </a>
           <a
             href="https://playground.jaw.id/"

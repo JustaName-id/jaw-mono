@@ -129,7 +129,7 @@ export function MobileMenu({
               rel="noopener noreferrer"
               className="border-line text-ink-3 mt-2 flex items-center justify-between rounded-xl border px-3.5 py-3 text-[14px] font-medium no-underline"
             >
-              Everything else
+              Run it yourself
               <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[.1em]">
                 Playground <Icon.ArrowUR size={10} />
               </span>
@@ -158,7 +158,7 @@ export function MobileMenu({
             </a>
             <div className="mt-4 flex gap-2">
               <a href="https://dashboard.jaw.id" className={`${btnPrimary} flex-1`}>
-                Get Started <Icon.Arrow size={12} />
+                Dashboard <Icon.Arrow size={12} />
               </a>
               <a href="https://docs.jaw.id" target="_blank" rel="noopener noreferrer" className={btnGhost}>
                 Docs <Icon.ArrowUR size={11} />

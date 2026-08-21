@@ -196,7 +196,7 @@ export function SplitsApp({ onCta }: { onCta: () => void }) {
         </div>
         <div className="flex flex-col gap-[7px] px-[18px] pb-2.5">
           <Row
-            name="Karim Nasr"
+            name="John Carter"
             slips="1 slip"
             amt="$42.50"
             c1="#64748B"
@@ -205,7 +205,7 @@ export function SplitsApp({ onCta }: { onCta: () => void }) {
             photo="https://randomuser.me/api/portraits/men/32.jpg"
           />
           <Row
-            name="Samira K."
+            name="Sarah Park"
             slips="1 slip"
             amt="$18.00"
             c1="#E4677B"

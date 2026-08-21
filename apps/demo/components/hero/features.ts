@@ -46,12 +46,12 @@ export const FEATS: Feat[] = [
       {
         key: 'happy',
         label: 'Happy path',
-        desc: 'One button for new and returning users. People are known by a name instead of an 0x address, keys never leave the device, and a Face ID prompt sets it all up with a gasless name and profile.',
+        desc: 'Onboarding is a single passkey prompt: it creates a hardware-secured account, claims a name, and signs the user in. No seed phrase, no extension, no ETH required.',
       },
       {
         key: 'adversarial',
         label: 'Adversarial',
-        desc: 'Same button, hostile payload. The sign-in message claims to be evil.com while the request comes from this site. JAW compares the two, flags the mismatch as phishing, and blocks one-tap signing until you accept the risk.',
+        desc: 'Same button, hostile payload. The sign-in message claims to be evil.com while the request comes from this site. JAW compares the two, flags the mismatch as phishing, and blocks one-tap signing unless you accept the risk.',
       },
     ],
   },
@@ -95,7 +95,7 @@ export const FEATS: Feat[] = [
       {
         key: 'happy',
         label: 'Happy path',
-        desc: 'Amount, recipient and fee in one currency, confirmed with one biometric tap. Each name is shown next to the address it resolves to, and the whole thing settles in seconds with no gas token to top up first.',
+        desc: 'Pay Sarah, John, and Youssef by name, in dollars, with one confirmation for all three. Fees are in dollars too. No gas token, no top-up.',
       },
     ],
   },
@@ -138,7 +138,7 @@ export const FEATS: Feat[] = [
         app: 'swap',
         appLabel: 'Exchange',
         accent: '#0F172A',
-        desc: 'Approve and swap collapse into one atomic call, decoded step by step before the tap rather than hidden behind a hash. If the swap fails the approval never happened, so no allowance is left sitting on the router afterwards.',
+        desc: 'Approve and swap execute as one atomic call, decoded in plain language before signing rather than hidden behind a hash. If the swap fails, the approval never happened, and no allowance is left on the router.',
       },
       {
         key: 'adversarial',
@@ -146,7 +146,7 @@ export const FEATS: Feat[] = [
         app: 'swap',
         appLabel: 'Exchange',
         accent: '#0F172A',
-        desc: 'The same swap, but the approval is unlimited instead of the exact amount. JAW decodes the approve so the blank cheque to the router is visible before signing, not buried behind a hash.',
+        desc: 'The same swap, but the approval is unlimited instead of the exact amount. JAW decodes the approve so the blank cheque to the router is visible before signing',
       },
     ],
   },
@@ -188,12 +188,12 @@ export const FEATS: Feat[] = [
       {
         key: 'happy',
         label: 'Happy path',
-        desc: 'Agents get scoped permissions, not keys: this token, this cap, this expiry. The cap is enforced onchain rather than in the app, so an agent that tries to spend past its limit simply reverts instead of asking again.',
+        desc: "An agent with your keys can do anything. An agent with a JAW permission can do exactly what you allowed: this token, this cap, this expiry. The limit lives onchain, in the account, so overspending isn't a risk to monitor. It's a transaction that reverts.",
       },
       {
         key: 'adversarial',
         label: 'Adversarial',
-        desc: 'A grant scoped to any contract and any function — effectively the whole account. JAW renders it as “Any contract / Any function” with a warning, so the blast radius is visible before the permission exists.',
+        desc: 'A grant scoped to any contract and any function, effectively the whole account. JAW renders it as “Any contract / Any function” with a warning, so the blast radius is visible before the permission exists.',
       },
     ],
   },

@@ -6,8 +6,8 @@ import { SocialApp } from '@/components/screens/social';
 const LINKS = [
   {
     href: 'https://dashboard.jaw.id',
-    title: 'Get Started',
-    desc: 'Create an account and your first key',
+    title: 'Dashboard',
+    desc: 'Create a workspace and get your API key',
     external: false,
   },
   {
@@ -19,7 +19,7 @@ const LINKS = [
   {
     href: 'https://playground.jaw.id/',
     title: 'Playground',
-    desc: 'Every capability, live on testnet',
+    desc: 'Test all capabilities and check code snippets',
     external: true,
   },
 ];
@@ -45,11 +45,11 @@ export function MobileIntro({ onLaunch }: { onLaunch: () => void }) {
 
       <div className="px-5">
         <h1 className="mb-2.5 text-balance text-[27px] font-semibold leading-[1.08] tracking-[-0.035em]">
-          Experience <span className="text-jaw-blue">your user&apos;s</span> journey
+          Experience <span className="text-jaw-blue">your users&apos;</span> journey
         </h1>
         <p className="text-ink-2 mb-5 text-pretty text-[14.5px] leading-[1.55]">
-          Four capabilities, each one inside a different app. Every app brings its own design, so the phone changes with
-          each step. What stays the same is JAW underneath: the reviews, confirmations, and signatures.
+          A social feed, a bill split, an exchange, an AI agent. Four different designs, one invisible SDK. Every action
+          settles onchain.
         </p>
       </div>
 
