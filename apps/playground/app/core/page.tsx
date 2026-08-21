@@ -8,7 +8,7 @@ import { ReactUIHandler } from '@jaw.id/ui';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { ThemePicker } from '../../components/theme-picker';
-import { ThemeToggle } from '../../components/theme-toggle';
+import { ShellHeader } from '../../components/shell/header';
 
 import { MethodCard } from '../../components/method-card';
 import { MethodModal } from '../../components/method-modal';
@@ -252,14 +252,19 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
     selectedCategory === 'all' ? RPC_METHODS : RPC_METHODS.filter((m) => m.category === selectedCategory);
 
   return (
-    <div className="bg-background min-h-screen p-4 md:p-8">
-      <div className="mx-auto max-w-6xl space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-foreground text-2xl font-bold md:text-3xl">JAW.id Playground - Core</h1>
-          <ThemeToggle />
-        </div>
-
+    <div className="bg-shell-canvas text-shell-ink flex min-h-screen flex-col">
+      <ShellHeader
+        sdk="core"
+        isConnected={isConnected}
+        onToggleConnect={() => {
+          const m = RPC_METHODS.find((m) => m.id === (isConnected ? 'wallet_disconnect' : 'wallet_connect'));
+          if (m) handleMethodClick(m);
+        }}
+        address={accounts[0]}
+        ensName={ensName}
+        chainId={chainId}
+      />
+      <div className="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-8">
         {/* Mode Toggle */}
         <Card className="p-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -356,105 +361,6 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
         {/* Theme Picker: AppSpecific applies via ReactUIHandler, CrossPlatform
             via provider.setTheme pushing to the keys dialog. */}
         <ThemePicker theme={theme} onThemeChange={handleThemeChange} />
-
-        {/* Connection Status */}
-        <Card className="p-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="mb-3 text-lg font-semibold">Connection Status</h2>
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Status:</span>
-                  <span className={`font-medium ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
-                    {isConnected ? 'Connected' : 'Disconnected'}
-                  </span>
-                </div>
-                {ensName && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">ENS:</span>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(ensName)}
-                      className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
-                      title="Click to copy"
-                    >
-                      {ensName}
-                    </button>
-                  </div>
-                )}
-                {accounts.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Account:</span>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(accounts[0] || '')}
-                      className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
-                      title="Click to copy"
-                    >
-                      {accounts[0]?.slice(0, 6)}...{accounts[0]?.slice(-4)}
-                      <svg
-                        className="text-muted-foreground h-3 w-3"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Chain:</span>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(String(chainId))}
-                    className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
-                    title="Click to copy"
-                  >
-                    {chainId}
-                    <svg
-                      className="text-muted-foreground h-3 w-3"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              {!isConnected ? (
-                <Button
-                  onClick={() => {
-                    const m = RPC_METHODS.find((m) => m.id === 'wallet_connect');
-                    if (m) handleMethodClick(m);
-                  }}
-                >
-                  Connect
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    const m = RPC_METHODS.find((m) => m.id === 'wallet_disconnect');
-                    if (m) handleMethodClick(m);
-                  }}
-                >
-                  Disconnect
-                </Button>
-              )}
-            </div>
-          </div>
-        </Card>
 
         {/* Category Filter */}
         <div className="flex flex-wrap gap-2">
