@@ -6,6 +6,8 @@ import { FeatRow } from './feature-row';
 import { SiteHeader } from './site-header';
 import { MobileMenu } from './mobile-menu';
 import { MobileIntro } from './mobile-intro';
+import { FundingOverlay } from './funding-overlay';
+import { fundAccount } from '@/lib/funding';
 import { FinSheet } from './fin-sheet';
 import { IOS_BEZEL, IOSDevice } from '@/components/ios-device';
 import { btnGhost, btnPrimary, Icon } from '@/components/ui';
@@ -94,6 +96,8 @@ export function HeroDemoPage() {
   // Mobile-only: the intro page is shown until the visitor launches the demo.
   // Desktop always renders the demo — its pitch lives beside the phone.
   const [started, setStarted] = useState(false);
+  // Post-sign-up hold while /api/fund tops the account up with testnet USDC.
+  const [funding, setFunding] = useState(false);
   const { areaRef, scale } = usePhoneScale();
   const isMobile = useIsMobile();
   // Live 0.2 USDC → ETH quote for the Swapr screen.
@@ -216,6 +220,19 @@ export function HeroDemoPage() {
         // risk and signs; hold a beat so the phishing warning they just
         // acknowledged doesn't vanish into the next screen.
         if (adversarial) await new Promise((r) => setTimeout(r, 1000));
+        // Fund the fresh account with testnet USDC so the send and swap
+        // features actually settle. The route skips accounts that already
+        // hold enough; a failure surfaces as the inline error banner (the
+        // outer catch) and keeps the user on this screen.
+        const funded = (await jaw.provider.request({ method: 'eth_accounts' })) as string[];
+        if (funded?.[0]) {
+          if (runRef.current === run) setFunding(true);
+          try {
+            await fundAccount(funded[0]);
+          } finally {
+            setFunding(false);
+          }
+        }
       } else {
         // Other screens reuse the session; connect only if there is none.
         if (!connected) {
@@ -260,6 +277,8 @@ export function HeroDemoPage() {
       />
 
       {fin && <FinSheet onRestart={() => pick(1)} />}
+
+      {funding && <FundingOverlay />}
 
       {err && !open && (
         <div

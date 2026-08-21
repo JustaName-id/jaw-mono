@@ -12,7 +12,7 @@ const tile = '#20242E';
 const chip = '#22242C';
 const line = '#2B303C';
 
-function UsdcLogo({ size = 22 }: { size?: number }) {
+export function UsdcLogo({ size = 22 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-label="USDC">
       <circle cx="12" cy="12" r="12" fill="#2775CA" />

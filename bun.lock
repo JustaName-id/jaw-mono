@@ -73,6 +73,7 @@
         "next": "~15.5.10",
         "react": "19.2.6",
         "react-dom": "19.2.6",
+        "viem": "^2.55.16",
       },
       "devDependencies": {
         "@eslint/eslintrc": "^3",

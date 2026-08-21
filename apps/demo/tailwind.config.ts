@@ -55,6 +55,11 @@ const config: Config = {
         'jd-spin': {
           to: { transform: 'rotate(360deg)' },
         },
+        // Coin flip for the funding overlay's USDC mark (needs a perspective
+        // on the parent to read as 3D).
+        'jd-coin': {
+          to: { transform: 'rotateY(360deg)' },
+        },
         'jd-pop': {
           from: { transform: 'scale(.6)', opacity: '0' },
           to: { transform: 'scale(1)', opacity: '1' },
@@ -94,6 +99,7 @@ const config: Config = {
       },
       animation: {
         'jd-spin': 'jd-spin .9s linear infinite',
+        'jd-coin': 'jd-coin 1.4s cubic-bezier(.45,.05,.55,.95) infinite',
         'jd-pop': 'jd-pop .45s cubic-bezier(.2,.7,.2,1.2) both',
         'jd-fade': 'jd-fade .35s ease both',
         'hd-live': 'hd-live 1.6s ease-in-out infinite',
