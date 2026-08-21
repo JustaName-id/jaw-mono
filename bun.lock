@@ -69,6 +69,7 @@
       "name": "@jaw-mono/demo",
       "version": "0.1.0",
       "dependencies": {
+        "@jaw.id/core": "workspace:*",
         "next": "15.5.10",
         "react": "19.2.6",
         "react-dom": "19.2.6",

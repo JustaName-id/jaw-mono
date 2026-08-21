@@ -98,6 +98,9 @@ export function HeroDemoPage() {
   const [screenEl, setScreenEl] = useState<HTMLDivElement | null>(null);
   useDialogEmbed(isMobile ? mobileEl : screenEl, isMobile ? 0 : 47 * scale);
   const cur = FEATS.find((f) => f.id === id) ?? FEATS[0];
+  // Latest feature for async callbacks that may outlive a navigation.
+  const curRef = useRef(cur);
+  curRef.current = cur;
   useEffect(() => {
     // Prewarm mounts the hidden keys iframe; the active feature's theme rides
     // the handshake on first load and a live SetTheme push on every switch.
@@ -111,19 +114,32 @@ export function HeroDemoPage() {
     // here lets a fresh one prewarm in the background while the user reads the
     // screen — so the tap itself opens the drawer with no teardown lag.
     if (cur.id !== 1) return;
+    let cancelled = false;
     (async () => {
       const jaw = getJaw();
       if (!jaw) return;
       const accounts = (await jaw.provider.request({ method: 'eth_accounts' })) as string[];
+      // If the user already moved to another screen, keep their session —
+      // the logout is only owed while Sign up is actually in front of them.
+      if (cancelled) return;
       if (accounts && accounts.length > 0) {
         await jaw.provider.disconnect();
-        resetJaw()?.provider.setTheme(cur.theme ?? DEFAULT_THEME);
+        // The teardown happened; rebuild + theme for wherever the user is NOW.
+        const active = curRef.current;
+        resetJaw()?.provider.setTheme(active.theme ?? DEFAULT_THEME);
       }
     })().catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [cur]);
 
   const v = cur.variants[vi] ?? cur.variants[0];
+  // Epoch for in-flight wallet requests: bumped on every navigation so a
+  // request resolving after the user moved on can no longer advance the tour.
+  const runRef = useRef(0);
   const pick = (n: number) => {
+    runRef.current++;
     setId(n);
     setVi(0);
     setOpen(false);
@@ -142,12 +158,12 @@ export function HeroDemoPage() {
     setFin(false);
     setMenu(false);
   };
-  const onDone = () => {
-    if (id === FEATS.length) {
+  const advanceFrom = (fromId: number) => {
+    if (fromId === FEATS.length) {
       setOpen(false);
       setFin(true);
     } else {
-      pick(id + 1);
+      pick(fromId + 1);
     }
   };
   const Base = BASE_APPS[v.app || cur.app];
@@ -158,8 +174,13 @@ export function HeroDemoPage() {
   // Every CTA opens the real keys.jaw.id dialog (contained in the phone).
   // v1 wires connect; per-feature requests (send/swap/delegate) come next.
   const onCta = async () => {
+    // One request at a time: the CTA stays clickable until the dialog paints,
+    // so a double-tap must not fire two wallet requests.
+    if (open) return;
     const jaw = getJaw();
     if (!jaw) return;
+    const run = ++runRef.current;
+    const fromId = cur.id;
     setOpen(true);
     try {
       // eth_accounts is silent + local: it reports the live session without
@@ -196,7 +217,8 @@ export function HeroDemoPage() {
           }
         }
       }
-      onDone();
+      // Only advance if the user hasn't navigated while the request ran.
+      if (runRef.current === run) advanceFrom(fromId);
     } catch {
       // dismissed or rejected — stay on the current feature
     } finally {
