@@ -28,6 +28,13 @@ export function useDialogEmbed(target: HTMLElement | null, radius: number) {
     let raf = 0;
     const tick = () => {
       const r = target.getBoundingClientRect();
+      // A hidden target (display:none, e.g. the desktop phone during the
+      // pre-hydration frame on mobile) measures 0x0 — never pin the dialog
+      // to a collapsed rect; keep the last good position instead.
+      if (r.width === 0 && r.height === 0) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
       const key = `${r.top},${r.left},${r.width},${r.height}`;
       if (key !== last) {
         last = key;
@@ -44,6 +51,9 @@ export function useDialogEmbed(target: HTMLElement | null, radius: number) {
     return () => {
       cancelAnimationFrame(raf);
       root.classList.remove('jaw-embed-active');
+      for (const v of ['top', 'left', 'w', 'h', 'radius']) {
+        root.style.removeProperty(`--jaw-embed-${v}`);
+      }
     };
   }, [target, radius]);
 }
