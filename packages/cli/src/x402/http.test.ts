@@ -321,6 +321,11 @@ describe('payAndFetch', () => {
     expect(result.refusedReason).toMatch(/payment signing failed/);
     expect(result.topUp).toEqual({ amount: '500000', batchId: '0xbatch9' });
     expect(fetchMock).toHaveBeenCalledTimes(1); // never retried
+    // Nothing was signed, so nothing can have been broadcast. Leaving
+    // attemptedPayment unset is what makes both front ends record this as
+    // 'refused' rather than 'failed', and only 'failed' draws down the session
+    // cap. A signing failure must not spend the user's budget.
+    expect(result.attemptedPayment).toBeUndefined();
   });
 
   it('caps an oversized response body instead of buffering it all (server DoS guard)', async () => {

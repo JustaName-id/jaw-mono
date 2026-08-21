@@ -86,19 +86,27 @@ export class Eip3009EoaPayer implements Payer {
     return buildExactPayment(requirement, this.address, sign, opts);
   }
 
-  /** True once the EOA carries an EIP-7702 delegation designator on-chain. */
+  /**
+   * True once the EOA carries an EIP-7702 delegation designator on-chain, which
+   * decides whether USDC will route this signature through ecrecover or
+   * EIP-1271, and so which of the two signatures to produce.
+   *
+   * Throws rather than guessing when the chain cannot be read. Guessing raw was
+   * the old default, from when a session was usually never delegated; a session
+   * is delegated from its first userOp now, so the guess is wrong nearly every
+   * time it is made. And the guess is not free: a raw signature against a
+   * delegated account is refused by the settlement endpoint, which reads as a
+   * failed payment, and a failed payment counts against the session cap on the
+   * grounds that the facilitator may have broadcast it anyway. It cannot have,
+   * since USDC rejects the signature, so guessing spends the user's budget on a
+   * payment that could never have settled. Refusing before signing costs a
+   * retry instead.
+   */
   private async isDelegated(network: string): Promise<boolean> {
     const asset = usdcForNetwork(network);
     if (!asset) return false;
-    try {
-      const code = await publicClientFor(asset.chainId).getCode({ address: this.address });
-      return (code ?? '0x').toLowerCase().startsWith(EIP7702_CODE_PREFIX);
-    } catch {
-      // Unreachable RPC: sign raw — the pre-delegation default. If the EOA is
-      // actually delegated the settlement fails with a clear signature error
-      // instead of this payer guessing.
-      return false;
-    }
+    const code = await publicClientFor(asset.chainId).getCode({ address: this.address });
+    return (code ?? '0x').toLowerCase().startsWith(EIP7702_CODE_PREFIX);
   }
 
   /** ERC-7739 wrapped signer for the delegated (EIP-1271) validation path. */
