@@ -11,8 +11,8 @@ import { usdcForNetwork } from '../x402/asset-registry.js';
 const JAW_ERC20_PAYMASTER_URL = 'https://api.justaname.id/proxy/v1/rpc/erc20-paymaster';
 
 /**
- * The paymaster to sponsor an auto-mode userOp, in precedence order: an explicit
- * url, then `config.paymasters` for the chain, then JAW's own.
+ * The paymaster an auto-mode userOp goes out with, in precedence order: an
+ * explicit url, then `config.paymasters` for the chain, then JAW's own.
  *
  * Falling through to JAW's is what makes the default path need no configuration.
  * Without it a fresh setup could not top up at all: the account has to prefund
@@ -21,9 +21,9 @@ const JAW_ERC20_PAYMASTER_URL = 'https://api.justaname.id/proxy/v1/rpc/erc20-pay
  * put the ERC-7677 app-developer role on someone who is just using the wallet,
  * and it asked them to sign up with the provider we already proxy and pay for.
  *
- * The ERC-20 paymaster takes its fee in USDC, so the account never needs a
- * native token, which is the point: gas comes out of the same balance the
- * payments do. `config.paymasters` still wins, so anyone bringing their own
+ * It takes its fee in USDC rather than sponsoring anything, so the account never
+ * needs a native token, which is the point: gas comes out of the same balance
+ * the payments do. `config.paymasters` still wins, so anyone bringing their own
  * keeps it.
  */
 function resolvePaymaster(
@@ -39,19 +39,19 @@ function resolvePaymaster(
   }
 
   // No api key means nothing to authenticate the proxy with, so there is no
-  // sponsorship to offer; leaving it unset keeps the old unsponsored behaviour.
+  // paymaster to engage and the account pays its gas in the native token.
   if (!options.apiKey) return {};
 
   // The ERC-20 paymaster has to be told which token it is being paid in: the SDK
   // sizes and emits the `approve` it needs from this address, and without it the
   // userOp reaches the paymaster with no allowance behind it and cannot settle.
   // A chain the registry does not cover has no token to name, so fall back to
-  // the unsponsored path rather than engaging a paymaster that must fail.
+  // sending with no paymaster rather than engaging one that must fail.
   const asset = usdcForNetwork(`eip155:${options.chainId}`);
   if (!asset) {
-    // Say so rather than falling through quietly: the userOp goes out
-    // unsponsored, and the failure the user eventually sees is about native
-    // funds and mentions none of this. stderr, so stdio MCP framing is untouched.
+    // Say so rather than falling through quietly: the userOp goes out with no
+    // paymaster, and the failure the user eventually sees is about native funds
+    // and mentions none of this. stderr, so stdio MCP framing is untouched.
     console.warn(
       `[jaw] No USDC in the x402 asset registry for chain ${options.chainId}, so no ERC-20 paymaster ` +
         'can be engaged. Gas will come out of the account\u2019s native balance. ' +

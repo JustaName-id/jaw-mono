@@ -20,10 +20,12 @@ import type { X402PaymentRequirement } from './types.js';
  * userOp, which is the permission's spender, and the spender is the payer: a
  * session is one address. So every refill carries `gasReserve` on top of what
  * the payment needs, leaving the fee something to come out of and the next
- * refill something to be charged for. The reserve doubles as a float, since
- * payments spend it too, so a run of prices well under it can drain it and put
- * a later refill back on the sponsored path. `SessionBridge` decides that, and
- * the first op of a session always takes it: nothing has funded the payer yet.
+ * refill something to be charged for. The first one is covered by the grant,
+ * which sends the same amount to the session when the permission is approved.
+ *
+ * The reserve doubles as a float, since payments spend it too. A long run of
+ * prices well under it can drain it, and the refill that follows is charged
+ * like any other: there is nothing left that would sponsor it instead.
  */
 
 /** The slice of the session auto-mode bridge the funder needs. */
@@ -146,8 +148,8 @@ export async function ensurePayerFunds(
   // ERC-20 paymaster charges, in postOp and right after this transfer lands.
   // Pulling only what the payment costs leaves nothing for the fee, so the fee
   // comes out of the payment and the payment itself lands short. The reserve
-  // rides along and stays behind, above the floor the fee takes it down to, so
-  // the next refill is charged rather than sponsored.
+  // rides along and stays behind, so the next refill has something to be
+  // charged against.
   let amount = (target - balance > shortfall ? target - balance : shortfall) + gasReserve(asset);
   // Never pre-fund the payer past what the caps still allow, and never let that
   // clamp cut into the shortfall: pulling a float the permission would reject

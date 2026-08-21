@@ -41,9 +41,11 @@ export async function whyOwnerCannotFundSession(check: OwnerFundingCheck): Promi
   try {
     held = await read(asset.wireNetwork, owner as `0x${string}`);
   } catch {
-    // An unreachable RPC is not a reason to refuse a grant. The wallet makes the
-    // same check with the money in front of it and skips the transfer, which
-    // costs a sponsored first operation rather than the whole session.
+    // An unreachable RPC is not a reason to refuse a grant. This check exists to
+    // fail early with a readable message; the wallet makes the same one against
+    // its own node before building the transfer, and skips it when the account
+    // cannot cover it. Losing the early warning costs a clearer error, not the
+    // guarantee.
     return null;
   }
 

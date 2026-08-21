@@ -247,7 +247,7 @@ describe('SessionBridge paymaster resolution', () => {
     expect(paymasterOf(bridge).paymasterUrl).toContain('api.justaname.id');
   });
 
-  // Nothing to authenticate the proxy with, so there is no sponsorship to offer.
+  // Nothing to authenticate the proxy with, so there is no paymaster to engage.
   it('leaves the paymaster unset when there is no api key', () => {
     const bridge = new SessionBridge({ apiKey: '', chainId: 84532 });
     expect(paymasterOf(bridge).paymasterUrl).toBeUndefined();
@@ -306,7 +306,7 @@ describe('SessionBridge paymaster token', () => {
   });
 
   // Engaging the ERC-20 paymaster without a token to name guarantees a failed
-  // userOp, which is strictly worse than the unsponsored path.
+  // userOp, which is strictly worse than sending with no paymaster at all.
   it('leaves the paymaster unset on a chain the registry does not cover', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 999999 });

@@ -34,8 +34,8 @@ describe('whyOwnerCannotFundSession', () => {
     expect(reason).toContain('0.1 USDC');
   });
 
-  // The wallet makes the same check with the money in front of it and skips the
-  // transfer, which costs a sponsored first operation rather than the session.
+  // The wallet makes the same check against its own node before building the
+  // transfer, so an RPC hiccup here costs a clearer error, not the guarantee.
   it('does not refuse over an unreachable RPC', async () => {
     const reason = await whyOwnerCannotFundSession({
       chainId: BASE_SEPOLIA,
