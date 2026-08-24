@@ -45,4 +45,4 @@ Join our [Telegram](https://t.me/+RsFLPfky7-YxZjVk) for questions and discussion
 
 ## License
 
-[MIT](./LICENSE.md)
+[Apache-2.0](LICENSE)

@@ -67,4 +67,4 @@ npx skills add JustaName-id/jaw-skills
 
 ## License
 
-[MIT](../../LICENSE.md)
+[Apache-2.0](./LICENSE)

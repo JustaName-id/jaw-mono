@@ -1,7 +1,7 @@
 {
   "name": "@jaw-mono/source",
   "version": "0.0.0",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "packageManager": "bun@latest",
   "scripts": {
     "prepare": "husky",
