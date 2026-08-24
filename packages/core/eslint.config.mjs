@@ -73,9 +73,20 @@ export default [
             'Do not stub viem/ox encoders in the signing layer. Assert the bytes that come out (decodeAbiParameters round-trips them) instead of asserting how viem was called.',
         },
         {
-          selector: `${MOCKS_A_BYTE_MODULE}[arguments.0.value=/^(ox\\/|viem\\/experimental\\/erc7739)/]`,
+          selector: `${MOCKS_A_BYTE_MODULE}[arguments.length>=2][arguments.0.value=/^(ox\\/|viem\\/experimental\\/erc7739)/]`,
           message:
             'Do not stub ox or the ERC-7739 helpers in the signing layer. These exist only to produce bytes and hashes, so replacing them removes the thing under test.',
+        },
+        // Without a factory there is no Property for the first selector to find
+        // and no path for the second, so `vi.mock('viem')` on its own read as
+        // clean while auto-mocking every encoder in ENCODERS to a `vi.fn()`
+        // returning undefined. The two selectors above are narrowed to calls
+        // that pass a factory so a bare one is reported here once, under the
+        // message that actually describes it.
+        {
+          selector: `${MOCKS_A_BYTE_MODULE}[arguments.length=1]`,
+          message:
+            'Do not auto-mock viem or ox in the signing layer. A bare vi.mock() replaces every encoder with a stub that returns undefined, which is the same mirror test the rule above bans, just written shorter. Mock the client or the network instead.',
         },
       ],
     },
