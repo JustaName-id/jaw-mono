@@ -1,8 +1,8 @@
 {
   "name": "@jaw.id/wagmi",
   "description": "Wagmi connector and React hooks for JAW.id.",
-  "version": "1.0.18",
-  "license": "MIT",
+  "version": "1.0.19",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -27,11 +27,13 @@
   },
   "files": [
     "dist",
+    "LICENSE",
+    "NOTICE",
     "cjs-error.cjs",
     "!**/*.tsbuildinfo"
   ],
   "dependencies": {
-    "@jaw.id/core": "1.2.2",
+    "@jaw.id/core": "1.2.3",
     "@wagmi/core": "^3.0.0",
     "tslib": "^2.3.0",
     "viem": "^2.55.16"
