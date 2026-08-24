@@ -593,12 +593,34 @@ export async function createSmartAccount(
 }
 
 /**
+ * Owner slots read per aggregate.
+ *
+ * The scan is bounded by `nextOwnerIndex`, which is a value an account we were
+ * handed reports about itself: `resolveSmartAccount` takes the address straight
+ * off `from`/`options.address`, so a dapp picks it. Building the whole scan up
+ * front would let that number decide how much we allocate, and a window keeps
+ * both the allocation and the request body bounded no matter what comes back.
+ *
+ * 256 is sized off the request rather than picked round: one window encodes to
+ * roughly 112 KB of JSON-RPC body, and it covers any account anyone has in one
+ * request.
+ */
+const OWNER_SCAN_WINDOW = 256;
+
+/**
  * Scan the owner slots of an account for `publicKey`, lowest index first.
  *
  * Bounded by `nextOwnerIndex`, not by `ownerCount`. `MultiOwnable` derives the
  * count as `nextOwnerIndex - removedOwnersCount` and never reuses or compacts a
  * removed slot, so after any removal the highest owners sit past the count.
- * Removed slots read back empty and simply do not match.
+ * Removed slots read back empty and simply do not match, which is a `delete` on
+ * the `s_ownerAtIndex` mapping (MultiOwnable.sol:304) rather than a revert, so
+ * the aggregate below can run with `allowFailure: false`.
+ *
+ * Reads a window at a time, aggregated where the chain has Multicall3. An
+ * account that has rotated owners often has far more slots than live owners, and
+ * this runs on every signing path, so the sequential read it replaces cost one
+ * round-trip per slot.
  *
  * @returns the index of the owner, or undefined if it holds none.
  */
@@ -610,54 +632,52 @@ async function scanOwnerIndex({ address, client, publicKey }: FindOwnerIndexPara
     });
 
     const slots = Number(nextOwnerIndex);
-    if (slots === 0) {
-        return undefined;
-    }
-
     const formatted = formatPublicKey(publicKey).toLowerCase();
-    const contracts = Array.from(
-        { length: slots },
-        (_, i) =>
-            ({
-                address,
-                abi,
-                functionName: 'ownerAtIndex',
-                args: [BigInt(i)],
-            }) as const
-    );
 
-    // `nextOwnerIndex` only ever grows, so an account that has rotated owners
-    // many times has a scan far longer than its live owner count, and this runs
-    // on every signing path. One aggregate3 keeps it at a single round-trip;
-    // viem chunks the batch by calldata size on its own.
-    //
-    // `allowFailure: false` is safe because a removed slot is a `delete` on the
-    // `s_ownerAtIndex` mapping (MultiOwnable.sol:304), so it reads back as empty
-    // bytes and simply does not match. Nothing here reverts.
-    //
     // Multicall3 is not deployed everywhere, and getBundlerClient builds its
     // public client from `SUPPORTED_CHAINS.find(...)`, which is undefined for a
     // chain the SDK does not know. Rather than turn an unknown chain into a
-    // failure, fall back to the sequential read, which also short-circuits on
-    // the first match.
+    // failure, fall back to the sequential read below.
     const multicallAddress = client.chain?.contracts?.multicall3?.address;
 
-    if (multicallAddress) {
-        const owners = await multicall(client, {
-            contracts,
-            allowFailure: false,
-            multicallAddress,
-        });
+    for (let start = 0; start < slots; start += OWNER_SCAN_WINDOW) {
+        const length = Math.min(OWNER_SCAN_WINDOW, slots - start);
+        const contracts = Array.from(
+            { length },
+            (_, i) =>
+                ({
+                    address,
+                    abi,
+                    functionName: 'ownerAtIndex',
+                    args: [BigInt(start + i)],
+                }) as const
+        );
 
-        const hit = owners.findIndex((owner) => owner.toLowerCase() === formatted);
-        return hit === -1 ? undefined : hit;
-    }
+        if (multicallAddress) {
+            const owners = await multicall(client, {
+                contracts,
+                allowFailure: false,
+                multicallAddress,
+                // viem chunks by calldata size, 1024 bytes by default, and one
+                // `ownerAtIndex` call is 36 of them. Left alone it would split a
+                // window into eleven requests. The window is already the bound,
+                // so send it as one.
+                batchSize: 0,
+            });
 
-    for (const [index, contract] of contracts.entries()) {
-        const owner = await readContract(client, contract);
+            const hit = owners.findIndex((owner) => owner.toLowerCase() === formatted);
+            if (hit !== -1) {
+                return start + hit;
+            }
+            continue;
+        }
 
-        if (owner.toLowerCase() === formatted) {
-            return index;
+        for (const [i, contract] of contracts.entries()) {
+            const owner = await readContract(client, contract);
+
+            if (owner.toLowerCase() === formatted) {
+                return start + i;
+            }
         }
     }
 

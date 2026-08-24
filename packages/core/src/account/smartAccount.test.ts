@@ -339,31 +339,86 @@ describe('how findOwnerIndex reads the owner slots', () => {
         vi.mocked(getCode).mockResolvedValue('0x1234' as Hex);
     });
 
-    it('folds every slot into one aggregate when the chain has Multicall3', async () => {
-        vi.mocked(readContract).mockResolvedValueOnce(300n); // nextOwnerIndex
-        const slots = Array.from({ length: 300 }, (_, i) =>
-            i === 297 ? MOCK_PUBLIC_KEY : (('0x' + 'aa'.repeat(20).padStart(64, '0')) as Hex)
-        );
-        vi.mocked(multicall).mockResolvedValue(slots as never);
+    /** Answers one window at a time, the way the aggregate is actually issued. */
+    function mockAggregatedSlots(slots: (Hex | undefined)[]) {
+        vi.mocked(readContract).mockResolvedValueOnce(BigInt(slots.length)); // nextOwnerIndex
+        vi.mocked(multicall).mockImplementation((async (_client: unknown, params: any) => {
+            const first = Number(params.contracts[0].args[0]);
+            return params.contracts.map((_: unknown, i: number) => slots[first + i] ?? '0x');
+        }) as any);
+    }
+
+    it('aggregates the slots instead of reading them one at a time', async () => {
+        const slots = Array.from({ length: 200 }, (_, i) => (i === 197 ? MOCK_PUBLIC_KEY : undefined));
+        mockAggregatedSlots(slots);
 
         await expect(
             findOwnerIndex({ address: MOCK_TARGET_ADDRESS, client: withMulticall3, publicKey: MOCK_PUBLIC_KEY })
-        ).resolves.toBe(297);
+        ).resolves.toBe(197);
 
-        // One read for the bound, one aggregate for the 300 slots.
+        // One read for the bound, one aggregate for all 200 slots.
         expect(readContract).toHaveBeenCalledTimes(1);
         expect(multicall).toHaveBeenCalledTimes(1);
+
         const [, params] = vi.mocked(multicall).mock.calls[0] as [unknown, any];
-        expect(params.contracts).toHaveLength(300);
+        expect(params.contracts).toHaveLength(200);
         expect(params.multicallAddress).toBe(MULTICALL3_ADDRESS);
+        // viem chunks by calldata size otherwise, which would split this into
+        // eleven requests and make the count above meaningless.
+        expect(params.batchSize).toBe(0);
+    });
+
+    // `nextOwnerIndex` is reported by whatever account we were handed, and
+    // `resolveSmartAccount` takes that address off `from`/`options.address`. So
+    // the scan has to stay windowed rather than building itself from that number:
+    // 50 million slots allocated up front exhausts the heap before a single
+    // request goes out.
+    it('never builds more than one window, whatever the account reports', async () => {
+        const slots = Array.from({ length: 700 }, (_, i) => (i === 690 ? MOCK_PUBLIC_KEY : undefined));
+        mockAggregatedSlots(slots);
+
+        await expect(
+            findOwnerIndex({ address: MOCK_TARGET_ADDRESS, client: withMulticall3, publicKey: MOCK_PUBLIC_KEY })
+        ).resolves.toBe(690);
+
+        const windows = vi.mocked(multicall).mock.calls.map(([, p]) => (p as any).contracts.length);
+        expect(windows).toEqual([256, 256, 188]);
+        expect(Math.max(...windows)).toBeLessThanOrEqual(256);
+    });
+
+    // The regression this window exists for. A hostile account reports a slot
+    // count no real account has; building the scan from it allocated the whole
+    // range up front, which exhausted a 4 GB heap at 50 million before any
+    // request went out. The window means we allocate 256 and go to the network.
+    it('answers from the first window when the account claims fifty million slots', async () => {
+        vi.mocked(readContract).mockResolvedValueOnce(50_000_000n); // nextOwnerIndex
+        vi.mocked(multicall).mockImplementation((async (_client: unknown, params: any) =>
+            params.contracts.map((_: unknown, i: number) => (i === 5 ? MOCK_PUBLIC_KEY : '0x'))) as any);
+
+        await expect(
+            findOwnerIndex({ address: MOCK_TARGET_ADDRESS, client: withMulticall3, publicKey: MOCK_PUBLIC_KEY })
+        ).resolves.toBe(5);
+
+        expect(multicall).toHaveBeenCalledTimes(1);
+        const [, params] = vi.mocked(multicall).mock.calls[0] as [unknown, any];
+        expect(params.contracts).toHaveLength(256);
+    });
+
+    it('stops at the window holding the match rather than scanning the rest', async () => {
+        const slots = Array.from({ length: 700 }, (_, i) => (i === 3 ? MOCK_PUBLIC_KEY : undefined));
+        mockAggregatedSlots(slots);
+
+        await expect(
+            findOwnerIndex({ address: MOCK_TARGET_ADDRESS, client: withMulticall3, publicKey: MOCK_PUBLIC_KEY })
+        ).resolves.toBe(3);
+        expect(multicall).toHaveBeenCalledTimes(1);
     });
 
     // `_removeOwnerAtIndex` deletes the mapping entry (MultiOwnable.sol:304), so a
     // removed slot reads back as empty bytes rather than reverting. That is what
     // makes `allowFailure: false` safe on the aggregate.
     it('reads a removed slot back as empty and keeps scanning', async () => {
-        vi.mocked(readContract).mockResolvedValueOnce(3n); // nextOwnerIndex
-        vi.mocked(multicall).mockResolvedValue(['0x', '0x', MOCK_PUBLIC_KEY] as never);
+        mockAggregatedSlots([undefined, undefined, MOCK_PUBLIC_KEY]);
 
         await expect(
             findOwnerIndex({ address: MOCK_TARGET_ADDRESS, client: withMulticall3, publicKey: MOCK_PUBLIC_KEY })
@@ -371,8 +426,7 @@ describe('how findOwnerIndex reads the owner slots', () => {
     });
 
     it('returns 0 when the aggregate holds no match', async () => {
-        vi.mocked(readContract).mockResolvedValueOnce(2n); // nextOwnerIndex
-        vi.mocked(multicall).mockResolvedValue(['0x', '0x'] as never);
+        mockAggregatedSlots([undefined, undefined]);
 
         await expect(
             findOwnerIndex({ address: MOCK_TARGET_ADDRESS, client: withMulticall3, publicKey: MOCK_PUBLIC_KEY })
