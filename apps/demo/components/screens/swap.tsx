@@ -73,10 +73,7 @@ function Pill({ sym, icon }: { sym: string; icon: ReactNode }) {
 export function SwapApp({ onCta, quote }: { onCta: () => void; quote: SwapQuote }) {
   return (
     <div className="flex h-full flex-col overflow-hidden font-sans text-slate-100" style={{ background: bg }}>
-      <div className="pt-[58px]">
-        <span className="mx-auto block h-1 w-[34px] rounded-full bg-white/20" />
-      </div>
-      <div className="flex items-center justify-between px-[22px] pb-3 pt-3.5">
+      <div className="flex items-center justify-between px-[22px] pb-3 pt-[76px]">
         <span className="text-[19px] font-semibold tracking-[-0.02em]">Swap</span>
         <svg
           width="19"
