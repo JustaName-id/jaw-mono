@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import Image from 'next/image';
-import type { JawTheme, JawThemeMode, JawBorderRadius, JawThemeColors } from '@jaw.id/core';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FileCode2 } from 'lucide-react';
+import type { JawTheme, JawThemeMode, JawBorderRadius, JawFontStack, JawThemeColors } from '@jaw.id/core';
 import {
   DEFAULT_LIGHT_PALETTE,
   DEFAULT_DARK_PALETTE,
   themeColorVar,
+  DialogShell,
+  AccountAvatar,
   resolveTheme,
   applyThemeToContainer,
   useColorScheme,
@@ -16,14 +18,42 @@ import { oklchChannelsToHex } from '../../lib/oklch-hex';
 
 type ColorKey = keyof JawThemeColors;
 
-/** The studio's quick-edit tokens (the full palette still comes via presets). */
-const SWATCH_KEYS: readonly ColorKey[] = [
-  'background',
-  'foreground',
-  'mutedForeground',
-  'border',
-  'primary',
-  'destructive',
+/**
+ * Every token in JawThemeColors, grouped so 33 swatches stay navigable. The
+ * groups are presentational only — each key is written straight into
+ * `theme.colors`, which is the modular hex API the SDK documents.
+ */
+const COLOR_GROUPS: readonly { label: string; keys: readonly ColorKey[] }[] = [
+  { label: 'Surfaces', keys: ['background', 'card', 'popover', 'secondary', 'muted', 'accent', 'input'] },
+  {
+    label: 'Text',
+    keys: [
+      'foreground',
+      'cardForeground',
+      'popoverForeground',
+      'secondaryForeground',
+      'mutedForeground',
+      'accentForeground',
+    ],
+  },
+  { label: 'Brand', keys: ['primary', 'primaryForeground'] },
+  {
+    label: 'Status',
+    keys: [
+      'destructive',
+      'destructiveForeground',
+      'destructiveHover',
+      'success',
+      'successForeground',
+      'warning',
+      'warningForeground',
+      'info',
+      'infoForeground',
+      'positive',
+      'negative',
+    ],
+  },
+  { label: 'Detail', keys: ['border', 'ring', 'scrim', 'halo', 'identiconTile', 'identiconRing', 'shadow'] },
 ];
 
 /** 'mutedForeground' → 'muted foreground', for row labels. */
@@ -42,6 +72,7 @@ const ACCENT_PRESETS = [
 ] as const;
 
 const RADIUS_OPTIONS: JawBorderRadius[] = ['sm', 'md', 'lg'];
+const FONT_OPTIONS: JawFontStack[] = ['system', 'rounded', 'mono'];
 const MODE_OPTIONS: JawThemeMode[] = ['light', 'dark', 'auto'];
 
 /**
@@ -89,9 +120,14 @@ function ControlRow({ label, hint, children }: { label: string; hint?: string; c
 export function ThemeStudioControls({
   theme,
   onThemeChange,
+  onSave,
+  dirty,
 }: {
   theme: JawTheme;
   onThemeChange: (theme: JawTheme) => void;
+  /** Commits the draft to the SDK — until then edits only move the mock previews. */
+  onSave: () => void;
+  dirty: boolean;
 }) {
   const effectiveMode: JawThemeMode = theme.mode ?? 'auto';
   const activePreset = activePresetLabel(theme);
@@ -184,6 +220,19 @@ export function ThemeStudioControls({
         ))}
       </ControlRow>
 
+      <ControlRow label="Font" hint="Dialog type stack">
+        {FONT_OPTIONS.map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => onThemeChange({ ...theme, fontStack: f })}
+            className={pillClass((theme.fontStack ?? 'system') === f)}
+          >
+            {f}
+          </button>
+        ))}
+      </ControlRow>
+
       <div className="bg-shell-line h-px" />
 
       <div className="flex flex-col gap-[9px]">
@@ -193,26 +242,37 @@ export function ThemeStudioControls({
             {activePreset ? `${activePreset} preset` : theme.colors ? 'Custom theme' : 'Defaults'}
           </span>
         </div>
-        <div className="flex flex-col gap-1.5">
-          {SWATCH_KEYS.map((key) => (
-            <label
-              key={key}
-              className="border-shell-line bg-shell-raise flex cursor-pointer items-center gap-[9px] rounded-[10px] border px-2.5 py-[7px]"
-            >
-              <input
-                type="color"
-                value={effectiveHex(key, theme)}
-                onChange={(e) => setColor(key, e.target.value)}
-                aria-label={`${fieldLabel(key)} color`}
-                className="border-shell-line-2 h-5 w-5 flex-none cursor-pointer rounded-md border bg-transparent p-0"
-              />
-              <span className="text-shell-ink-3 flex-1 text-[13px]">{fieldLabel(key)}</span>
-              <span
-                className={`font-mono text-[12.5px] ${theme.colors?.[key] ? 'text-shell-ink' : 'text-shell-ink-4'}`}
-              >
-                {effectiveHex(key, theme)}
-              </span>
-            </label>
+        <div className="flex flex-col gap-2">
+          {COLOR_GROUPS.map((group, i) => (
+            <details key={group.label} open={i === 0} className="group">
+              <summary className="text-shell-ink-3 hover:text-shell-ink-2 flex cursor-pointer list-none items-center gap-1.5 py-1 text-[12.5px] font-medium">
+                <span className="transition-transform group-open:rotate-90">&rsaquo;</span>
+                {group.label}
+                <span className="text-shell-ink-4">{group.keys.length}</span>
+              </summary>
+              <div className="mt-1 flex flex-col gap-1.5">
+                {group.keys.map((key) => (
+                  <label
+                    key={key}
+                    className="border-shell-line bg-shell-raise flex cursor-pointer items-center gap-[9px] rounded-[10px] border px-2.5 py-[7px]"
+                  >
+                    <input
+                      type="color"
+                      value={effectiveHex(key, theme)}
+                      onChange={(e) => setColor(key, e.target.value)}
+                      aria-label={`${fieldLabel(key)} color`}
+                      className="border-shell-line-2 h-5 w-5 flex-none cursor-pointer rounded-md border bg-transparent p-0"
+                    />
+                    <span className="text-shell-ink-3 flex-1 text-[13px]">{fieldLabel(key)}</span>
+                    <span
+                      className={`font-mono text-[12.5px] ${theme.colors?.[key] ? 'text-shell-ink' : 'text-shell-ink-4'}`}
+                    >
+                      {effectiveHex(key, theme)}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </details>
           ))}
         </div>
       </div>
@@ -235,19 +295,43 @@ export function ThemeStudioControls({
           {copied ? 'Copied' : 'Copy theme'}
         </button>
       </div>
+
+      {/* Save commits the draft to the SDK (uiHandler.setTheme + provider.setTheme).
+          Until then the edits above only move the mock previews. */}
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={!dirty}
+        // bg-shell-btn / text-shell-btn-ink is the shell's primary-button pair (see
+        // encode-panel, execute-panel). Not bg-shell-ink: that is a TEXT token and
+        // inverts per mode, so in dark it painted a white button whose label
+        // inherited the same white.
+        className={`sticky bottom-0 rounded-full px-3.5 py-[11px] text-[13.5px] font-semibold transition-colors ${
+          dirty
+            ? 'bg-shell-btn text-shell-btn-ink cursor-pointer border-0'
+            : 'border-shell-line-2 text-shell-ink-4 cursor-default border bg-transparent'
+        }`}
+      >
+        {dirty ? 'Save theme' : 'Saved'}
+      </button>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Dialog previews — faithful replicas of the real SDK dialogs (DialogShell
-// anatomy, type scale and button pattern from @jaw.id/ui), themed through the
-// REAL pipeline: resolveTheme → applyThemeToContainer → --jaw-* variables.
+// Dialog previews — the REAL SDK dialogs, not replicas. The shell is the
+// exported DialogShell from @jaw.id/ui and every inner element carries the same
+// classes the real ConnectDialog / TransactionDialog / PermissionDialog emit, so
+// these cannot drift from what ships in the iframe.
+//
+// Two things make that possible and are easy to break:
+//   1. `data-jaw-ui` on the container. Every utility @jaw.id/ui ships compiles to
+//      `[data-jaw-ui] .foo` (see ReactUIHandler), so without this wrapper none of
+//      the classes below resolve and the cards render unstyled.
+//   2. The stylesheet itself arrives as a side-effect of importing @jaw.id/ui
+//      (packages/ui/src/index.ts does `import './styles.css'`), which this file
+//      already does — there is nothing extra to import.
 // ---------------------------------------------------------------------------
-
-/** oklch(var(--jaw-color-<name>)) reference for replica inline styles. */
-const jaw = (name: string, alpha?: number) =>
-  alpha !== undefined ? `oklch(var(--jaw-color-${name}) / ${alpha})` : `oklch(var(--jaw-color-${name}))`;
 
 /** Container that runs the SDK's own theme resolution on its DOM node. */
 function ThemedFrame({ theme, children }: { theme: JawTheme; children: ReactNode }) {
@@ -272,206 +356,202 @@ function ThemedFrame({ theme, children }: { theme: JawTheme; children: ReactNode
     return () => observer.disconnect();
   }, [theme, systemScheme]);
 
+  // data-jaw-ui: see note (1) above — the package's utilities are scoped to it.
   return (
-    <div ref={ref} className="flex justify-center">
+    <div ref={ref} data-jaw-ui className="flex justify-center">
       {children}
     </div>
   );
 }
 
-/** DialogShell replica: 1.5px border ring, 400px popover surface, close X. */
-function ShellReplica({ children }: { children: ReactNode }) {
+/**
+ * The shell renders its close X only when given a handler, and every real dialog
+ * passes one — so the previews do too, inertly, to keep the card identical.
+ */
+const noop = () => undefined;
+
+/** USDC mark, inlined — the live dialog fetches this from the token-icon API. */
+function UsdcLogo({ className }: { className: string }) {
   return (
-    <div className="relative w-full max-w-[400px] p-[1.5px]" style={{ background: jaw('border'), borderRadius: 16.5 }}>
-      <div
-        className="relative flex min-h-[234px] flex-col overflow-hidden shadow-xl"
-        style={{
-          background: jaw('popover'),
-          color: jaw('popover-foreground'),
-          border: `1px solid ${jaw('border')}`,
-          borderRadius: 16.5,
-        }}
-      >
-        {children}
+    <svg viewBox="0 0 24 24" className={className} aria-label="USDC">
+      <circle cx="12" cy="12" r="12" fill="#2775CA" />
+      <path d="M9.2 3.9a8.6 8.6 0 0 0 0 16.2" fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M14.8 3.9a8.6 8.6 0 0 1 0 16.2" fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" />
+      <path
+        d="M14.6 9.2c-.2-1.1-1.1-1.8-2.6-1.8-1.6 0-2.6.8-2.6 2 0 3 5.4 1.4 5.4 4.5 0 1.3-1.1 2.1-2.8 2.1-1.6 0-2.6-.8-2.8-2"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path d="M12 5.4v1.9M12 16.6v1.9" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Stable seeds so each preview's identicon is deterministic, like a real account's. */
+const SEED_FROM = '0x3c8a0000000000000000000000000000000091f0';
+const USDC_ADDRESS = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
+
+/** The real dialogs' mono field label. */
+function FieldLabel({ children }: { children: ReactNode }) {
+  return <span className="text-muted-foreground text-label block font-mono uppercase">{children}</span>;
+}
+
+/** PartyRow: avatar + mono label + truncated address, as TransactionDialog renders it. */
+function PartyRow({ label, value, seed }: { label: string; value: string; seed: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <span className="relative inline-flex flex-none">
+        <AccountAvatar seed={seed} size={32} className="size-8 rounded-full" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <FieldLabel>{label}</FieldLabel>
+        <div className="mt-1 flex min-w-0 items-center gap-1.5">
+          <p className="text-foreground text-value truncate font-mono">{value}</p>
+        </div>
       </div>
-      <span
-        aria-hidden="true"
-        className="absolute right-5 top-6 z-[2] flex h-7 w-7 items-center justify-center rounded-full"
-        style={{ background: jaw('secondary'), border: `1px solid ${jaw('border')}`, color: jaw('muted-foreground') }}
-      >
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2.2}
-          strokeLinecap="round"
-        >
-          <path d="M6 6l12 12M18 6L6 18" />
-        </svg>
-      </span>
     </div>
   );
 }
 
-const titleXl: CSSProperties = { fontSize: 26, lineHeight: 1.2, fontWeight: 700, letterSpacing: '-0.03em' };
-const monoLabel: CSSProperties = {
-  fontFamily: 'var(--font-mono), ui-monospace, monospace',
-  fontSize: 11,
-  fontWeight: 500,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase',
-};
-const buttonBase: CSSProperties = {
-  height: 40,
-  fontSize: 13,
-  fontWeight: 600,
-  borderRadius: 'var(--jaw-radius)',
-  border: 0,
-  cursor: 'default',
-};
+// Button's cva base, merged with what the dialogs pass. Spelled out rather than
+// importing Button so the preview stays inert — twMerge resolves these exactly
+// as the real component does (rounded-box over rounded-md, text-button over
+// text-sm, font-semibold over font-medium).
+const btnBase =
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors rounded-box text-button font-semibold shadow-sm';
 
-function FooterButtons({
-  cancel,
-  confirm,
-  destructive = false,
-}: {
-  cancel: string;
-  confirm: string;
-  destructive?: boolean;
-}) {
+/** The pinned Cancel/Confirm pair — 44/56 split, exactly as the real footers. */
+function Actions({ cancel, confirm }: { cancel: string; confirm: string }) {
   return (
-    <div className="flex gap-2 px-6 pb-5 pt-3" style={{ borderTop: `1px solid ${jaw('border', 0.4)}` }}>
-      <span
-        className="flex items-center justify-center"
-        style={{ ...buttonBase, flex: 44, background: jaw('secondary'), color: jaw('secondary-foreground') }}
-      >
-        {cancel}
-      </span>
-      <span
-        className="flex items-center justify-center"
-        style={{
-          ...buttonBase,
-          flex: 56,
-          background: destructive ? jaw('destructive') : jaw('primary'),
-          color: destructive ? jaw('destructive-foreground') : jaw('primary-foreground'),
-        }}
-      >
-        {confirm}
-      </span>
+    <div className="flex gap-2">
+      <span className={`${btnBase} bg-secondary text-secondary-foreground h-10 flex-[44]`}>{cancel}</span>
+      <span className={`${btnBase} bg-primary text-primary-foreground h-10 flex-[56]`}>{confirm}</span>
     </div>
   );
 }
 
-function FeeRow({ value }: { value: string }) {
-  return (
-    <div className="flex items-center justify-between px-6 py-2.5">
-      <span style={{ ...monoLabel, color: jaw('muted-foreground') }}>Network fee</span>
-      <span className="text-[13px] font-medium">{value}</span>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      className="flex items-center justify-between gap-3 py-2"
-      style={{ borderTop: `1px solid ${jaw('border', 0.4)}` }}
-    >
-      <span style={{ ...monoLabel, color: jaw('muted-foreground') }}>{label}</span>
-      <span className="truncate text-[13px] font-medium">{value}</span>
-    </div>
-  );
-}
-
+/** OnboardingDialog's welcome-back view (eth_requestAccounts). */
 function WelcomeBackPreview() {
   return (
-    <ShellReplica>
-      <div className="flex flex-1 flex-col p-6">
-        <h2 style={titleXl}>Welcome back.</h2>
-        <p className="mt-2 text-sm" style={{ color: jaw('muted-foreground') }}>
-          Pick up where you left off.
-        </p>
-        <div
-          className="mt-6 flex items-center gap-3 p-3"
-          style={{ background: jaw('primary'), color: jaw('primary-foreground'), borderRadius: 12 }}
-        >
-          <span
-            className="flex h-10 w-10 flex-none items-center justify-center"
-            style={{ background: `oklch(var(--jaw-color-primary-foreground) / 0.1)`, borderRadius: 12 }}
-          >
-            <Image src="/jaw-logo.png" alt="" width={18} height={20} className="opacity-80" />
+    <DialogShell onClose={noop}>
+      <div className="flex flex-col p-6">
+        <h2 className="text-foreground text-title-xl leading-none">Welcome back.</h2>
+        <p className="text-muted-foreground text-body mt-2">Pick up where you left off.</p>
+
+        <div className="bg-primary rounded-box mt-6 flex items-center gap-3 p-3 text-left">
+          <AccountAvatar seed={SEED_FROM} size={40} className="rounded-box h-10 w-10 flex-none" />
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="text-primary-foreground/60 text-label font-mono uppercase">Last used</span>
+            <span className="text-primary-foreground truncate text-[15px] font-semibold">leo.jaw.id</span>
           </span>
-          <span className="flex min-w-0 flex-col gap-1">
-            <span style={{ ...monoLabel, color: jaw('primary-foreground', 0.6) }}>Last used</span>
-            <span className="truncate text-sm font-semibold">leo.jaw.id</span>
-          </span>
+          <ChevronRight className="text-primary-foreground/70 h-4 w-4 flex-none" />
         </div>
-        <div className="mt-auto flex items-center gap-3 pt-5">
-          <span className="h-px flex-1" style={{ background: jaw('border') }} />
-          <span style={{ ...monoLabel, color: jaw('muted-foreground') }}>New to JAW?</span>
-          <span className="h-px flex-1" style={{ background: jaw('border') }} />
+
+        {/* MonoDivider — local to OnboardingDialog, so its markup is mirrored here. */}
+        <div className="my-5 flex items-center gap-3">
+          <span className="bg-border h-px flex-1" />
+          <span className="text-muted-foreground text-label font-mono uppercase">or</span>
+          <span className="bg-border h-px flex-1" />
         </div>
-        <span
-          className="mt-4 flex items-center justify-center"
-          style={{ ...buttonBase, background: jaw('secondary'), color: jaw('secondary-foreground') }}
-        >
-          Create new account
-        </span>
+
+        <span className={`${btnBase} bg-secondary text-secondary-foreground h-11 w-full`}>Show more accounts</span>
+        <span className="text-muted-foreground mx-auto mt-4 text-xs font-medium">Create new account</span>
       </div>
-    </ShellReplica>
+    </DialogShell>
   );
 }
 
+/** TransactionDialog, ERC-20 transfer shape (eth_sendTransaction). */
 function SendingPreview() {
   return (
-    <ShellReplica>
-      <div className="flex flex-1 flex-col">
-        <div className="p-6 pb-3">
-          <h2 style={titleXl}>You&rsquo;re Sending</h2>
-          <div className="mt-5 text-[34px] font-bold tracking-[-0.03em]">0.01 ETH</div>
-          <div className="text-sm" style={{ color: jaw('muted-foreground') }}>
-            ≈ $24.10
+    <DialogShell onClose={noop} contentClassName="min-h-[510px]">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex-none px-6 pt-6">
+          <h2 className="text-foreground text-title-xl truncate pr-9">Review Transaction</h2>
+        </div>
+
+        <div className="jaw-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-6 pb-3 pt-6">
+          {/* From -> To. The recipient of an ERC-20 transfer is the token contract. */}
+          <div className="border-border rounded-box flex flex-col gap-3 border p-3">
+            <PartyRow label="From" value="0x3c8a...91f0" seed={SEED_FROM} />
+            <div className="flex items-center">
+              <div className="bg-border h-px flex-1" />
+              <ArrowDown className="text-muted-foreground mx-1.5 size-3 flex-none" strokeWidth={2} />
+              <div className="bg-border h-px flex-1" />
+            </div>
+            <PartyRow label="To" value="0x8335...2913" seed={USDC_ADDRESS} />
+          </div>
+
+          {/* Asset changes — the simulated balance delta. */}
+          <div className="flex items-stretch gap-3">
+            <div className="border-border rounded-box min-w-0 flex-1 overflow-hidden border">
+              <div className="border-border/40 bg-secondary/40 flex items-center gap-2 border-b p-3">
+                <ArrowUp className="text-negative size-3 flex-none" strokeWidth={2.7} />
+                <span className="text-foreground text-heading">You send</span>
+              </div>
+              <div className="flex flex-col gap-3 p-2">
+                <div className="flex min-h-[34px] flex-row items-center gap-1.5">
+                  <UsdcLogo className="size-token flex-none rounded-full" />
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="text-foreground text-symbol truncate">USDC</span>
+                    <span className="text-muted-foreground text-body-xs flex min-w-0 flex-row items-center gap-1 font-mono">
+                      <span className="truncate">0x8335...2913</span>
+                    </span>
+                  </div>
+                  <div className="flex flex-none flex-col items-end">
+                    <span className="text-value text-negative break-all text-right font-mono">&minus;25</span>
+                    <span className="text-muted-foreground text-body-xs">$25.00</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Decoded calldata row (collapsed, as the dialog opens it). */}
+          <div className="border-border rounded-box overflow-hidden border">
+            <div className="flex items-center gap-3 p-3">
+              <span className="border-border bg-secondary rounded-chip flex size-7 flex-none items-center justify-center border">
+                <FileCode2 className="text-secondary-foreground size-3.5" strokeWidth={1.5} />
+              </span>
+              <span className="flex min-w-0 flex-col items-start">
+                <FieldLabel>Calldata</FieldLabel>
+                <span className="text-foreground text-value mt-1 truncate">transfer(address, uint256)</span>
+              </span>
+              <ChevronDown className="text-muted-foreground ml-auto size-4 flex-none" strokeWidth={2} />
+            </div>
           </div>
         </div>
-        <div className="mt-auto px-6 pb-2">
-          <InfoRow label="To" value="vitalik.eth" />
-          <InfoRow label="Network" value="Base Sepolia" />
-        </div>
-        <FeeRow value="~0.0002 ETH" />
-        <FooterButtons cancel="Cancel" confirm="Confirm" />
-      </div>
-    </ShellReplica>
-  );
-}
 
-function PermissionPreview() {
-  return (
-    <ShellReplica>
-      <div className="flex flex-1 flex-col">
-        <div className="p-6 pb-3">
-          <h2 style={{ ...titleXl, fontSize: 24 }}>Requesting Permission</h2>
-          <p className="mt-2 text-sm" style={{ color: jaw('muted-foreground') }}>
-            playground.jaw.id wants to spend within these limits without asking again.
-          </p>
+        <div className="border-border/40 flex-none space-y-2 border-t px-6 pb-5 pt-3">
+          <div className="border-border rounded-box border p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <FieldLabel>Network fee</FieldLabel>
+                <div className="mt-1">
+                  <p className="font-mono leading-tight">
+                    <span className="text-foreground text-amount">0.0004 ETH</span>
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-none flex-col items-end gap-1.5">
+                <div className="text-muted-foreground text-body-xs flex items-center gap-1 font-mono">
+                  <span className="truncate">Base Sepolia</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <Actions cancel="Cancel" confirm="Confirm" />
         </div>
-        <div className="mt-auto px-6 pb-2">
-          <InfoRow label="Spender" value="0x1f9A…C4e2" />
-          <InfoRow label="Spend limit" value="0.1 ETH / day" />
-          <InfoRow label="Expiry" value="24 hours" />
-        </div>
-        <FeeRow value="Sponsored" />
-        <FooterButtons cancel="Cancel" confirm="Grant" />
       </div>
-    </ShellReplica>
+    </DialogShell>
   );
 }
 
 const PREVIEWS = [
   { name: 'eth_requestAccounts', kind: 'Sign in', node: <WelcomeBackPreview /> },
   { name: 'eth_sendTransaction', kind: 'Transaction', node: <SendingPreview /> },
-  { name: 'wallet_grantPermissions', kind: 'Permission', node: <PermissionPreview /> },
 ];
 
 /** Main-pane preview grid + the theme.json block. */
@@ -485,8 +565,8 @@ export function DialogPreviews({ theme }: { theme: JawTheme }) {
         <div>
           <h1 className="m-0 text-[30px] font-medium tracking-[-0.035em]">Dialog previews</h1>
           <p className="text-shell-ink-3 mt-2.5 max-w-[70ch] text-[14.5px] leading-relaxed">
-            The three core dialogs, rendered with the tokens on the left through the SDK&rsquo;s own theme resolution.
-            Changes apply here as you make them.
+            These are mocks, rendered with the tokens on the left through the SDK&rsquo;s own theme resolution. Save,
+            then try the real dialogs in the methods below.
           </p>
         </div>
         <span className="text-shell-ink-3 whitespace-nowrap text-[13px]">{previewMeta}</span>

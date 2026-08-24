@@ -76,6 +76,11 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
   const [prefChain, setPrefChain] = useState(defaultChainId);
 
   const [theme, setTheme] = useState<JawTheme>({ mode: 'auto' });
+  // Draft the studio edits. The mock previews read this immediately; only Save
+  // pushes it into the SDK (handleThemeChange), so the live dialogs below keep
+  // the last saved theme while you experiment.
+  const [draftTheme, setDraftTheme] = useState<JawTheme>({ mode: 'auto' });
+  const themeDirty = JSON.stringify(draftTheme) !== JSON.stringify(theme);
   const uiHandlerRef = useRef<ReactUIHandler>(new ReactUIHandler({ theme }));
   const [sdk, setSdk] = useState(() => buildSdk(mode, uiHandlerRef.current, undefined, theme, transportMode));
   const [pmConfig, setPmConfig] = useState<PaymasterApplyConfig | undefined>();
@@ -327,14 +332,19 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
           ) : (
             /* Theme controls: AppSpecific applies via ReactUIHandler, CrossPlatform
                via provider.setTheme pushing to the keys dialog. */
-            <ThemeStudioControls theme={theme} onThemeChange={handleThemeChange} />
+            <ThemeStudioControls
+              theme={draftTheme}
+              onThemeChange={setDraftTheme}
+              onSave={() => handleThemeChange(draftTheme)}
+              dirty={themeDirty}
+            />
           )}
         </ShellSidebar>
 
         <main className="flex min-h-0 flex-col overflow-y-auto">
           <div className="flex flex-1 flex-col gap-6 px-6 py-6 md:px-9 md:py-[30px]">
             {view === 'theme' ? (
-              <DialogPreviews theme={theme} />
+              <DialogPreviews theme={draftTheme} />
             ) : activeMethod ? (
               <>
                 {/* Interim: ConfigSnippet moves to its shell home in a later step. */}
