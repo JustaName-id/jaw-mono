@@ -29,15 +29,22 @@ const BASE_APPS: Record<PhoneAppKey, (props: BaseAppProps) => React.ReactElement
   agent: ({ onCta }) => <AgentApp onCta={onCta} />,
 };
 
-// Screen width of the mock phone; the rendered frame adds the bezel. Height is
-// responsive — see usePhoneFit.
-const PW = 360;
-const FRAME_W = PW + IOS_BEZEL * 2;
-// Screen-height range. PH_MAX is the size the phone wants to be and the size it
-// renders at at rest; it only gives height back when the window genuinely
-// cannot fit it, rather than being clipped.
+// Screen size of the mock phone at rest; the rendered frame adds the bezel.
+// Both are responsive — see usePhoneFit — and the pair holds the original
+// 360x700 proportion (660 / 340 = 1.94) at every size, so shrinking the window
+// never leaves the phone stubby.
+const PW_MAX = 340;
 const PH_MAX = 660;
-const PH_MIN = 500;
+const ASPECT = PH_MAX / PW_MAX;
+// Narrowest the screen may get. Below 300px the mock app screens and the real
+// keys dialog start to crowd, so the phone stops shrinking and the page scrolls
+// instead. The height floor follows from it, keeping the ratio exact.
+const PW_MIN = 300;
+const PH_MIN = Math.round(PW_MIN * ASPECT);
+// Scale is measured against the widest the frame can ever be, so it depends
+// only on the column width. Deriving it from the live width would couple it to
+// the height it feeds, and the two would chase each other on resize.
+const FRAME_W_MAX = PW_MAX + IOS_BEZEL * 2;
 // Cap at 1 (native size) so text never upscales blurry; otherwise fill the container.
 const MAX_SCALE = 1;
 const MIN_SCALE = 0.45;
@@ -50,6 +57,7 @@ function usePhoneFit() {
   const areaRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(MAX_SCALE);
   const [phoneH, setPhoneH] = useState(PH_MAX);
+  const [phoneW, setPhoneW] = useState(PW_MAX);
   useLayoutEffect(() => {
     const el = areaRef.current;
     if (!el) return;
@@ -60,11 +68,14 @@ function usePhoneFit() {
     // oversized next to the mock app. Changing the screen height instead keeps
     // the phone at 1:1 while still fitting a non-maximised window.
     const measure = () => {
-      const byWidth = el.clientWidth / FRAME_W;
+      const byWidth = el.clientWidth / FRAME_W_MAX;
       const next = Math.max(MIN_SCALE, Math.min(MAX_SCALE, byWidth));
       setScale(next);
       const avail = (window.innerHeight - el.getBoundingClientRect().top - STAGE_GAP) / next;
-      setPhoneH(Math.round(Math.max(PH_MIN, Math.min(PH_MAX, avail - IOS_BEZEL * 2))));
+      const h = Math.round(Math.max(PH_MIN, Math.min(PH_MAX, avail - IOS_BEZEL * 2)));
+      setPhoneH(h);
+      // Width follows height so the proportion is fixed, not just the rest size.
+      setPhoneW(Math.round(h / ASPECT));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -75,7 +86,7 @@ function usePhoneFit() {
       window.removeEventListener('resize', measure);
     };
   }, []);
-  return { areaRef, scale, phoneH };
+  return { areaRef, scale, phoneH, phoneW };
 }
 
 // On phones the visitor's device IS the phone: render the demo full-bleed,
@@ -110,8 +121,9 @@ export function HeroDemoPage() {
   const [started, setStarted] = useState(false);
   // Post-sign-up hold while /api/fund tops the account up with testnet USDC.
   const [funding, setFunding] = useState(false);
-  const { areaRef, scale, phoneH } = usePhoneFit();
+  const { areaRef, scale, phoneH, phoneW } = usePhoneFit();
   const frameH = phoneH + IOS_BEZEL * 2;
+  const frameW = phoneW + IOS_BEZEL * 2;
   const isMobile = useIsMobile();
   // Live 0.2 USDC → ETH quote for the Swapr screen.
   const quote = useEthQuote(0.2);
@@ -406,9 +418,9 @@ export function HeroDemoPage() {
               Tap the button to continue
             </span>
             <div ref={areaRef} className="flex w-full justify-center">
-              <div className="shrink-0" style={{ width: FRAME_W * scale, height: frameH * scale }}>
+              <div className="shrink-0" style={{ width: frameW * scale, height: frameH * scale }}>
                 <div className="origin-top-left" style={{ transform: `scale(${scale})` }}>
-                  <IOSDevice width={PW} height={phoneH} dark={darkScreen} screenRef={setScreenEl}>
+                  <IOSDevice width={phoneW} height={phoneH} dark={darkScreen} screenRef={setScreenEl}>
                     {!isMobile && demo}
                   </IOSDevice>
                 </div>

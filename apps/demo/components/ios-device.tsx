@@ -17,8 +17,8 @@ export const IOS_RADIUS = 44;
 export function IOSStatusBar({ dark = false, time = '9:41' }: { dark?: boolean; time?: string }) {
   const c = dark ? '#fff' : '#000';
   return (
-    <div className="relative z-20 flex w-full items-center justify-center gap-[154px] px-6 pb-[19px] pt-[21px]">
-      <div className="flex h-[22px] flex-1 items-center justify-center pt-[1.5px]">
+    <div className="relative z-20 flex w-full items-center justify-between px-6 pb-[19px] pt-[21px]">
+      <div className="flex h-[22px] items-center pt-[1.5px]">
         <span
           className="text-[17px] leading-[22px]"
           style={{ fontFamily: '-apple-system, "SF Pro", system-ui', fontWeight: 590, color: c }}
@@ -26,7 +26,7 @@ export function IOSStatusBar({ dark = false, time = '9:41' }: { dark?: boolean; 
           {time}
         </span>
       </div>
-      <div className="flex h-[22px] flex-1 items-center justify-center gap-[7px] pr-px pt-px">
+      <div className="flex h-[22px] items-center gap-[7px] pr-px pt-px">
         <svg width="19" height="12" viewBox="0 0 19 12">
           <rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill={c} />
           <rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill={c} />
@@ -84,7 +84,7 @@ export function IOSDevice({
         }}
       >
         {/* dynamic island */}
-        <div className="absolute left-1/2 top-[11px] z-50 h-[37px] w-[126px] -translate-x-1/2 rounded-3xl bg-black" />
+        <div className="absolute left-1/2 top-[9px] z-50 h-[28px] w-[98px] -translate-x-1/2 rounded-full bg-black" />
         {/* status bar */}
         <div className="absolute inset-x-0 top-0 z-10">
           <IOSStatusBar dark={dark} />
