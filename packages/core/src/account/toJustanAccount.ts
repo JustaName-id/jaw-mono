@@ -466,7 +466,7 @@ export function wrapSignature(parameters: { ownerIndex?: number | undefined; sig
                 components: [
                     {
                         name: 'ownerIndex',
-                        type: 'uint8',
+                        type: 'uint256',
                     },
                     {
                         name: 'signatureData',
@@ -478,7 +478,10 @@ export function wrapSignature(parameters: { ownerIndex?: number | undefined; sig
         ],
         [
             {
-                ownerIndex,
+                // uint256 in the struct, so a bigint here. Narrower than the
+                // struct is not free: a uint8 declaration makes viem refuse to
+                // encode past 255, and `MultiOwnable` never reuses an index.
+                ownerIndex: BigInt(ownerIndex),
                 signatureData,
             },
         ]

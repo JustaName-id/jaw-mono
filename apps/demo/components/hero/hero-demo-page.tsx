@@ -9,7 +9,7 @@ import { MobileIntro } from './mobile-intro';
 import { FundingOverlay } from './funding-overlay';
 import { fundAccount } from '@/lib/funding';
 import { FinSheet } from './fin-sheet';
-import { IOS_BEZEL, IOSDevice } from '@/components/ios-device';
+import { IOS_BEZEL, IOS_RADIUS, IOSDevice } from '@/components/ios-device';
 import { btnGhost, btnPrimary, Icon } from '@/components/ui';
 import { SocialApp } from '@/components/screens/social';
 import { DEMO_CHAIN_ID, getJaw, prewarmJaw, resetJaw, transportMode } from '@/lib/jaw';
@@ -31,30 +31,53 @@ const BASE_APPS: Record<PhoneAppKey, (props: BaseAppProps) => React.ReactElement
   agent: ({ onCta }) => <AgentApp onCta={onCta} />,
 };
 
-// Screen size of the mock phone; the rendered frame adds the bezel.
-const PW = 360;
-const PH = 700;
-const FRAME_W = PW + IOS_BEZEL * 2;
-const FRAME_H = PH + IOS_BEZEL * 2;
+// Screen size of the mock phone at rest; the rendered frame adds the bezel.
+// Both are responsive — see usePhoneFit — and the pair holds the original
+// 360x700 proportion (660 / 340 = 1.94) at every size, so shrinking the window
+// never leaves the phone stubby.
+const PW_MAX = 340;
+const PH_MAX = 660;
+const ASPECT = PH_MAX / PW_MAX;
+// Narrowest the screen may get. Below 300px the mock app screens and the real
+// keys dialog start to crowd, so the phone stops shrinking and the page scrolls
+// instead. The height floor follows from it, keeping the ratio exact.
+const PW_MIN = 300;
+const PH_MIN = Math.round(PW_MIN * ASPECT);
+// Scale is measured against the widest the frame can ever be, so it depends
+// only on the column width. Deriving it from the live width would couple it to
+// the height it feeds, and the two would chase each other on resize.
+const FRAME_W_MAX = PW_MAX + IOS_BEZEL * 2;
 // Cap at 1 (native size) so text never upscales blurry; otherwise fill the container.
 const MAX_SCALE = 1;
 const MIN_SCALE = 0.45;
+// Stage padding below the phone. Kept tight so the phone holds PH_MAX until the
+// window really is too short — a larger gap makes it shrink while space remains.
+const STAGE_GAP = 24;
 
-// Fit the phone to its container width and the viewport height.
-function usePhoneScale() {
+// Fit the phone to its container width and the window height.
+function usePhoneFit() {
   const areaRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(MAX_SCALE);
+  const [phoneH, setPhoneH] = useState(PH_MAX);
+  const [phoneW, setPhoneW] = useState(PW_MAX);
   useLayoutEffect(() => {
     const el = areaRef.current;
     if (!el) return;
-    // Width-fit only, no height shrink: the embedded keys iframe renders at
-    // native pixels (it cannot be transform-scaled without tripping keys'
-    // visibility guard), so any scale < 1 makes the real dialog look oversized
-    // next to the scaled-down mock app. Keep the phone at 1:1 whenever the
-    // column is wide enough and let the page scroll on short windows.
+    // Width drives the transform; height is answered by resizing the phone for
+    // real, not by scaling it down. The embedded keys iframe renders at native
+    // pixels (it cannot be transform-scaled without tripping keys' visibility
+    // guard), so a height shrink via transform would make the real dialog look
+    // oversized next to the mock app. Changing the screen height instead keeps
+    // the phone at 1:1 while still fitting a non-maximised window.
     const measure = () => {
-      const byWidth = el.clientWidth / FRAME_W;
-      setScale(Math.max(MIN_SCALE, Math.min(MAX_SCALE, byWidth)));
+      const byWidth = el.clientWidth / FRAME_W_MAX;
+      const next = Math.max(MIN_SCALE, Math.min(MAX_SCALE, byWidth));
+      setScale(next);
+      const avail = (window.innerHeight - el.getBoundingClientRect().top - STAGE_GAP) / next;
+      const h = Math.round(Math.max(PH_MIN, Math.min(PH_MAX, avail - IOS_BEZEL * 2)));
+      setPhoneH(h);
+      // Width follows height so the proportion is fixed, not just the rest size.
+      setPhoneW(Math.round(h / ASPECT));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -65,7 +88,7 @@ function usePhoneScale() {
       window.removeEventListener('resize', measure);
     };
   }, []);
-  return { areaRef, scale };
+  return { areaRef, scale, phoneH, phoneW };
 }
 
 // On phones the visitor's device IS the phone: render the demo full-bleed,
@@ -123,7 +146,9 @@ export function HeroDemoPage() {
   const [started, setStarted] = useState(false);
   // Post-sign-up hold while /api/fund tops the account up with testnet USDC.
   const [funding, setFunding] = useState(false);
-  const { areaRef, scale } = usePhoneScale();
+  const { areaRef, scale, phoneH, phoneW } = usePhoneFit();
+  const frameH = phoneH + IOS_BEZEL * 2;
+  const frameW = phoneW + IOS_BEZEL * 2;
   const isMobile = useIsMobile();
   // `isMobile` is resolved in an effect (SSR can't know the viewport), so hold
   // the first analytics event until after mount — otherwise the opening event
@@ -137,7 +162,7 @@ export function HeroDemoPage() {
   // desktop, the full-bleed demo area on mobile.
   const [mobileEl, setMobileEl] = useState<HTMLDivElement | null>(null);
   const [screenEl, setScreenEl] = useState<HTMLDivElement | null>(null);
-  useDialogEmbed(isMobile ? mobileEl : screenEl, isMobile ? 0 : 47 * scale, open);
+  useDialogEmbed(isMobile ? mobileEl : screenEl, isMobile ? 0 : IOS_RADIUS * scale, open);
   const cur = FEATS.find((f) => f.id === id) ?? FEATS[0];
   // Latest feature for async callbacks that may outlive a navigation.
   const curRef = useRef(cur);
@@ -344,6 +369,23 @@ export function HeroDemoPage() {
         <Base onCta={onCta} quote={quote} />
       </div>
 
+      {/* Mobile-only "where am I" chip, taken from the design's .hdm-bar live
+          state: step counter + the capability on screen. The design renders a
+          full-width opaque bar with back/next/menu chrome; here it is a single
+          floating pill matching the menu button, so it reads as a quiet hint
+          over the app rather than app chrome. Same visibility rule as that
+          button, so it clears out for dialogs and the finale. */}
+      {!open && !fin && (
+        <div className="absolute left-3.5 top-3.5 z-[35] inline-flex max-w-[calc(100%-4.5rem)] items-center gap-2 rounded-full border border-black/10 bg-white/75 px-3 py-1.5 shadow-[0_2px_10px_rgba(15,23,42,.12)] backdrop-blur-md md:hidden">
+          <span className="text-ink shrink-0 font-mono text-[10px] tracking-[.06em]">
+            {String(cur.id).padStart(2, '0')}
+            <span className="text-ink-4">/{String(FEATS.length).padStart(2, '0')}</span>
+          </span>
+          <span className="bg-line-2 h-[11px] w-px shrink-0" />
+          <span className="text-ink truncate text-[12.5px] font-medium tracking-[-0.01em]">{cur.title}</span>
+        </div>
+      )}
+
       <MobileMenu
         showButton={!open && !fin}
         open={menu}
@@ -451,40 +493,58 @@ export function HeroDemoPage() {
               </div>
             </a>
           </div>
+          {/* Mirror the rows' [24px_1fr] grid with an empty gutter cell so the
+              CTAs line up with the boxes, not the step numbers, and stay lined
+              up if that column geometry ever changes. */}
+          <div className="grid grid-cols-[24px_1fr] gap-[18px]">
+            <div aria-hidden />
+            <div className="flex flex-wrap items-center gap-3" data-analytics-surface="stage">
+              {fin && (
+                <span className="animate-jd-fade text-ink-2 text-[14px]">
+                  Still not convinced? The docs will change that.
+                </span>
+              )}
+              {!fin && (
+                <a href="https://dashboard.jaw.id" className={btnPrimary}>
+                  Dashboard <Icon.Arrow size={12} />
+                </a>
+              )}
+              <a href="https://docs.jaw.id" target="_blank" rel="noopener noreferrer" className={btnGhost}>
+                Docs <Icon.ArrowUR size={11} />
+              </a>
+            </div>
+          </div>
         </div>
 
-        <div className="sticky top-5 mb-7 mr-7 mt-[26px] flex flex-col gap-4 max-[1040px]:static max-[1040px]:mx-6 max-[1040px]:mb-6 max-[1040px]:mt-0">
+        <div className="sticky top-3 mb-7 mr-7 mt-1.5 flex flex-col gap-4 max-[1040px]:static max-[1040px]:mx-6 max-[1040px]:mb-6 max-[1040px]:mt-0">
           <div
-            className="bg-raise flex flex-col items-center justify-center rounded-[28px] px-8 py-8"
+            className="bg-raise flex flex-col items-center justify-center rounded-[28px] px-8 py-6"
             style={{
               backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(15,23,42,.07) 1px, transparent 0)',
               backgroundSize: '22px 22px',
             }}
           >
+            {/* Hint above the phone. It fades rather than unmounts: dropping it
+                would change the stage height and make usePhoneFit re-measure,
+                resizing the phone every time a dialog opens. */}
+            <span
+              aria-hidden={open || fin || undefined}
+              className={`border-line text-ink-2 mb-3 inline-flex items-center gap-[7px] rounded-full border bg-white px-3.5 py-[7px] font-mono text-[9.5px] uppercase tracking-[.14em] transition-opacity duration-300 ${
+                open || fin ? 'opacity-0' : 'opacity-100'
+              }`}
+            >
+              <span className="animate-hd-live bg-jaw-blue h-[5px] w-[5px] rounded-full" />
+              Tap the button to continue
+            </span>
             <div ref={areaRef} className="flex w-full justify-center">
-              <div className="shrink-0" style={{ width: FRAME_W * scale, height: FRAME_H * scale }}>
+              <div className="shrink-0" style={{ width: frameW * scale, height: frameH * scale }}>
                 <div className="origin-top-left" style={{ transform: `scale(${scale})` }}>
-                  <IOSDevice width={PW} height={PH} dark={darkScreen} screenRef={setScreenEl}>
+                  <IOSDevice width={phoneW} height={phoneH} dark={darkScreen} screenRef={setScreenEl}>
                     {!isMobile && demo}
                   </IOSDevice>
                 </div>
               </div>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-3" data-analytics-surface="stage">
-            {fin && (
-              <span className="animate-jd-fade text-ink-2 text-[14px]">
-                Still not convinced? The docs will change that.
-              </span>
-            )}
-            {!fin && (
-              <a href="https://dashboard.jaw.id" className={btnPrimary}>
-                Dashboard <Icon.Arrow size={12} />
-              </a>
-            )}
-            <a href="https://docs.jaw.id" target="_blank" rel="noopener noreferrer" className={btnGhost}>
-              Docs <Icon.ArrowUR size={11} />
-            </a>
           </div>
         </div>
       </main>

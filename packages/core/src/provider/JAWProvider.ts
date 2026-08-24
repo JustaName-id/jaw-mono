@@ -315,7 +315,14 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             return result as T;
         } catch (error) {
             const { code } = error as { code?: number };
-            if (code === standardErrorCodes.provider.unauthorized) {
+            // 4100 means two different things here. From a live signer it means
+            // the session died, and tearing it down locally is right. From the
+            // no-session branch above it just means "connect first", and there
+            // is nothing to tear down: disconnecting would emit accountsChanged
+            // and disconnect on a provider that was never connected, log the
+            // passkey session out, and drop the iframe. A dapp that probes with
+            // personal_sign before connecting would pay for it.
+            if (code === standardErrorCodes.provider.unauthorized && this.signer) {
                 await this.disconnect();
             }
             return Promise.reject(serializeError(error));

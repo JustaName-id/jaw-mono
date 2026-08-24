@@ -38,4 +38,4 @@ jobs:
 
       - uses: nrwl/nx-set-shas@v4
 
-      - run: bunx nx affected -t lint test typecheck build
+      - run: bunx nx affected -t lint test typecheck build api-check

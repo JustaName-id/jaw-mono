@@ -7,14 +7,18 @@ import type { ReactNode, Ref } from 'react';
 // positioning against the screen, never the viewport.
 
 // Bezel thickness around the screen; the rendered frame is
-// (width + 2*IOS_BEZEL) x (height + 2*IOS_BEZEL).
-export const IOS_BEZEL = 5;
+// (width + 2*IOS_BEZEL) x (height + 2*IOS_BEZEL). No device body: the frame is
+// a plain 1px border around the screen.
+export const IOS_BEZEL = 1;
+// Screen corner radius. The keys dialog is pinned to the screen rect and has to
+// match it, so both sides read this instead of repeating the number.
+export const IOS_RADIUS = 44;
 
 export function IOSStatusBar({ dark = false, time = '9:41' }: { dark?: boolean; time?: string }) {
   const c = dark ? '#fff' : '#000';
   return (
-    <div className="relative z-20 flex w-full items-center justify-center gap-[154px] px-6 pb-[19px] pt-[21px]">
-      <div className="flex h-[22px] flex-1 items-center justify-center pt-[1.5px]">
+    <div className="relative z-20 flex w-full items-center justify-between px-6 pb-[19px] pt-[21px]">
+      <div className="flex h-[22px] items-center pt-[1.5px]">
         <span
           className="text-[17px] leading-[22px]"
           style={{ fontFamily: '-apple-system, "SF Pro", system-ui', fontWeight: 590, color: c }}
@@ -22,7 +26,7 @@ export function IOSStatusBar({ dark = false, time = '9:41' }: { dark?: boolean; 
           {time}
         </span>
       </div>
-      <div className="flex h-[22px] flex-1 items-center justify-center gap-[7px] pr-px pt-px">
+      <div className="flex h-[22px] items-center gap-[7px] pr-px pt-px">
         <svg width="19" height="12" viewBox="0 0 19 12">
           <rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill={c} />
           <rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill={c} />
@@ -50,16 +54,6 @@ export function IOSStatusBar({ dark = false, time = '9:41' }: { dark?: boolean; 
   );
 }
 
-// Hardware side keys sticking out of the bezel.
-function SideKey({ side, top, h }: { side: 'left' | 'right'; top: number; h: number }) {
-  return (
-    <span
-      className={`absolute w-[3.5px] bg-[#26262a] ${side === 'left' ? '-left-[3px] rounded-l-[2px]' : '-right-[3px] rounded-r-[2px]'}`}
-      style={{ top, height: h, boxShadow: 'inset 0 1px 1px rgba(255,255,255,.18), inset 0 -1px 1px rgba(0,0,0,.4)' }}
-    />
-  );
-}
-
 export function IOSDevice({
   children,
   width = 402,
@@ -76,30 +70,21 @@ export function IOSDevice({
 }) {
   return (
     <div className="relative" style={{ width: width + IOS_BEZEL * 2, height: height + IOS_BEZEL * 2 }}>
-      {/* hardware keys: mute + volume on the left, power on the right */}
-      <SideKey side="left" top={118} h={26} />
-      <SideKey side="left" top={162} h={48} />
-      <SideKey side="left" top={220} h={48} />
-      <SideKey side="right" top={176} h={72} />
-      {/* titanium body */}
-      <div className="absolute inset-0 rounded-[52px] bg-[#0d0d10] shadow-[0_40px_80px_rgba(0,0,0,.25),0_4px_14px_rgba(0,0,0,.18)]">
-        {/* rim highlight */}
-        <span className="pointer-events-none absolute inset-px rounded-[51px] border border-white/20" />
-        <span className="pointer-events-none absolute inset-0 rounded-[52px] border border-black/60" />
-      </div>
+      {/* frame: a plain border, no device body */}
+      <div className="border-line-2 absolute inset-0 border" style={{ borderRadius: IOS_RADIUS + IOS_BEZEL }} />
       {/* screen */}
       <div
         ref={screenRef}
         className="absolute overflow-hidden antialiased"
         style={{
           inset: IOS_BEZEL,
-          borderRadius: 47,
+          borderRadius: IOS_RADIUS,
           background: dark ? '#000' : '#F2F2F7',
           fontFamily: '-apple-system, system-ui, sans-serif',
         }}
       >
         {/* dynamic island */}
-        <div className="absolute left-1/2 top-[11px] z-50 h-[37px] w-[126px] -translate-x-1/2 rounded-3xl bg-black" />
+        <div className="absolute left-1/2 top-[9px] z-50 h-[28px] w-[98px] -translate-x-1/2 rounded-full bg-black" />
         {/* status bar */}
         <div className="absolute inset-x-0 top-0 z-10">
           <IOSStatusBar dark={dark} />

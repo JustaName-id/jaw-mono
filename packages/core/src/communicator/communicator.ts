@@ -458,7 +458,7 @@ export class Communicator {
     /**
      * Reject every in-flight dApp request with UserRejectedRequest (4001) and
      * clear the pending state. Used both when the user dismisses the dialog
-     * (via the transport `onDismiss` bridge) and on full {@link disconnect}.
+     * (via the transport `onDismiss` bridge) and on full {@link Communicator.disconnect}.
      * Each reject() cleans up its own listener via cleanup().
      */
     private rejectPendingRequests(): void {

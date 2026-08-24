@@ -149,10 +149,7 @@ export function FeatRow({
           </span>
         </div>
         <Fold open={on} delay={70} contentKey={v.key}>
-          <p
-            key={v.key}
-            className="text-ink-2 box-content min-h-[124px] text-pretty pt-2.5 text-[15.5px] leading-[1.6]"
-          >
+          <p key={v.key} className="text-ink-2 text-pretty pt-2.5 text-[15.5px] leading-[1.6]">
             {v.desc}
           </p>
           {f.variants.length > 1 && <VariantPills variants={f.variants} vi={vi} setVi={setVi} />}
