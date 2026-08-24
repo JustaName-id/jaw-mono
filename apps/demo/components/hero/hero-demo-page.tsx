@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { FEATS, type PhoneAppKey } from './features';
+import { FEATS, type Feat, type PhoneAppKey, type Variant } from './features';
 import { FeatRow } from './feature-row';
 import { SiteHeader } from './site-header';
 import { MobileMenu } from './mobile-menu';
@@ -12,7 +12,9 @@ import { FinSheet } from './fin-sheet';
 import { IOS_BEZEL, IOS_RADIUS, IOSDevice } from '@/components/ios-device';
 import { btnGhost, btnPrimary, Icon } from '@/components/ui';
 import { SocialApp } from '@/components/screens/social';
-import { getJaw, prewarmJaw, resetJaw } from '@/lib/jaw';
+import { DEMO_CHAIN_ID, getJaw, prewarmJaw, resetJaw, transportMode } from '@/lib/jaw';
+import { getAnalyticsClient } from '@/lib/analytics';
+import type { FeatureContext, SurfaceName } from '@/lib/analytics/events/types';
 import { connectVariant, featureRequest } from '@/lib/requests';
 import { useEthQuote, type SwapQuote } from '@/lib/use-eth-quote';
 import { useDialogEmbed } from '@/lib/use-dialog-embed';
@@ -107,6 +109,29 @@ function useIsMobile() {
 // defaults, so a themed feature never leaks its palette into the next screen.
 const DEFAULT_THEME = { mode: 'light' } as const;
 
+// Analytics context for the screen an event belongs to. Captured at the start
+// of an async flow so a request resolving after a navigation still reports the
+// feature it was fired from.
+const featureCtx = (feat: Feat, variant: Variant): FeatureContext => ({
+  feature: feat.analytics,
+  featureId: feat.id,
+  variant: variant.key,
+  adversarial: variant.key === 'adversarial',
+});
+
+const errMessage = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Unknown error');
+
+// WALLET_CONNECTED is the same event name and shape playground fires, so
+// "connected a JAW account" is ONE funnel across both apps — the `app`
+// super-property says which one it happened in.
+const trackConnected = (analytics: ReturnType<typeof getAnalyticsClient>) =>
+  analytics.track('WALLET_CONNECTED', {
+    sdk: 'core',
+    mode: 'cross-platform',
+    transportMode: transportMode(),
+    chainId: DEMO_CHAIN_ID,
+  });
+
 export function HeroDemoPage() {
   const [id, setId] = useState(1);
   const [vi, setVi] = useState(0);
@@ -125,6 +150,12 @@ export function HeroDemoPage() {
   const frameH = phoneH + IOS_BEZEL * 2;
   const frameW = phoneW + IOS_BEZEL * 2;
   const isMobile = useIsMobile();
+  // `isMobile` is resolved in an effect (SSR can't know the viewport), so hold
+  // the first analytics event until after mount — otherwise the opening event
+  // of every mobile session is mislabelled `desktop`.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const surface: SurfaceName = isMobile ? 'mobile' : 'desktop';
   // Live 0.2 USDC → ETH quote for the Swapr screen.
   const quote = useEthQuote(0.2);
   // Elements the real keys.jaw.id dialog gets pinned to: the phone screen on
@@ -170,6 +201,19 @@ export function HeroDemoPage() {
   }, [cur]);
 
   const v = cur.variants[vi] ?? cur.variants[0];
+
+  useEffect(() => {
+    // On mobile nothing is on screen until the visitor launches the demo; on
+    // desktop the phone is always visible, so the first feature counts as seen.
+    if (!mounted || (isMobile && !started)) return;
+    getAnalyticsClient().track('DEMO_FEATURE_VIEWED', {
+      feature: cur.analytics,
+      featureId: cur.id,
+      variant: v.key,
+      surface,
+    });
+  }, [mounted, isMobile, started, surface, cur, v]);
+
   // Epoch for in-flight wallet requests: bumped on every navigation so a
   // request resolving after the user moved on can no longer advance the tour.
   const runRef = useRef(0);
@@ -183,6 +227,17 @@ export function HeroDemoPage() {
     setErr(null);
   };
   const pickVariant = (i: number) => {
+    const picked = cur.variants[i];
+    // Only the deliberate toggle in the feature list lands here — how many
+    // visitors go looking for the adversarial payload is the clearest read on
+    // whether the security story lands.
+    if (picked) {
+      getAnalyticsClient().track('DEMO_VARIANT_SELECTED', {
+        feature: cur.analytics,
+        featureId: cur.id,
+        variant: picked.key,
+      });
+    }
     runRef.current++;
     setVi(i);
     setOpen(false);
@@ -207,6 +262,7 @@ export function HeroDemoPage() {
     } else {
       setOpen(false);
       setFin(true);
+      getAnalyticsClient().track('DEMO_COMPLETED', { surface });
     }
   };
   const Base = BASE_APPS[v.app || cur.app];
@@ -226,6 +282,11 @@ export function HeroDemoPage() {
     const run = ++runRef.current;
     const fromId = cur.id;
     const adversarial = v.key === 'adversarial';
+    // Snapshot the screen this action started on: the request can outlive a
+    // navigation and must still report the feature that fired it.
+    const analytics = getAnalyticsClient();
+    const ctx = featureCtx(cur, v);
+    analytics.track('DEMO_ACTION_STARTED', ctx);
     setErr(null);
     setOpen(true);
     try {
@@ -241,6 +302,7 @@ export function HeroDemoPage() {
           resetJaw()?.provider.setTheme(cur.theme ?? DEFAULT_THEME);
         }
         await connectVariant(getJaw()!.provider, adversarial);
+        trackConnected(analytics);
         // The adversarial SIWE dialog closes the instant the user accepts the
         // risk and signs; hold a beat so the phishing warning they just
         // acknowledged doesn't vanish into the next screen.
@@ -251,9 +313,18 @@ export function HeroDemoPage() {
         // outer catch) and keeps the user on this screen.
         const funded = (await jaw.provider.request({ method: 'eth_accounts' })) as string[];
         if (funded?.[0]) {
+          analytics.identify(funded[0]);
           if (runRef.current === run) setFunding(true);
           try {
-            await fundAccount(funded[0]);
+            const funding = await fundAccount(funded[0]);
+            analytics.track('DEMO_FUNDING_SETTLED', { outcome: funding.skipped ? 'skipped' : 'funded' });
+          } catch (e) {
+            // Rethrown: funding is the demo's one server dependency and a
+            // failure still belongs in the inline banner. Tracked separately
+            // because "the tour broke at the funding step" and "the wallet
+            // request failed" need telling apart.
+            analytics.track('DEMO_FUNDING_FAILED', { message: errMessage(e) });
+            throw e;
           } finally {
             setFunding(false);
           }
@@ -262,10 +333,13 @@ export function HeroDemoPage() {
         // Other screens reuse the session; connect only if there is none.
         if (!connected) {
           await jaw.provider.request({ method: 'eth_requestAccounts' });
+          trackConnected(analytics);
         }
         const addrs = (await jaw.provider.request({ method: 'eth_accounts' })) as string[];
+        if (addrs?.[0]) analytics.identify(addrs[0]);
         await featureRequest(jaw.provider, cur.id, adversarial, addrs?.[0] ?? '');
       }
+      analytics.track('DEMO_ACTION_COMPLETED', ctx);
       // Only advance if the user hasn't navigated while the request ran.
       if (runRef.current === run) advanceFrom(fromId);
     } catch (e) {
@@ -274,6 +348,11 @@ export function HeroDemoPage() {
       // normal path, stay silent. Everything else (unfunded account, missing
       // API key, paymaster rejection…) gets an inline banner.
       const code = (e as { code?: number } | null)?.code;
+      if (code === 4001) {
+        analytics.track('DEMO_ACTION_REJECTED', ctx);
+      } else {
+        analytics.track('DEMO_ACTION_FAILED', { ...ctx, code, message: errMessage(e) });
+      }
       if (code !== 4001 && runRef.current === run) {
         setErr(e instanceof Error && e.message ? e.message : 'The wallet request failed. See the console for details.');
       }
@@ -301,7 +380,14 @@ export function HeroDemoPage() {
         onPickVariant={pickFeatVariant}
       />
 
-      {fin && <FinSheet onRestart={() => pick(1)} />}
+      {fin && (
+        <FinSheet
+          onRestart={() => {
+            getAnalyticsClient().track('DEMO_RESTARTED', { surface });
+            pick(1);
+          }}
+        />
+      )}
 
       {funding && <FundingOverlay />}
 
@@ -334,7 +420,17 @@ export function HeroDemoPage() {
           frame. The intro page fronts it; the keys iframe prewarms while the
           visitor reads, so launching opens the first dialog with no lag. */}
       <div ref={setMobileEl} className="relative min-h-0 flex-1 overflow-hidden bg-white md:hidden">
-        {isMobile && (started ? demo : <MobileIntro onLaunch={() => setStarted(true)} />)}
+        {isMobile &&
+          (started ? (
+            demo
+          ) : (
+            <MobileIntro
+              onLaunch={() => {
+                getAnalyticsClient().track('DEMO_LAUNCHED', { surface: 'mobile' });
+                setStarted(true);
+              }}
+            />
+          ))}
       </div>
 
       {/* desktop / tablet: framed phone on the stage */}
@@ -347,7 +443,7 @@ export function HeroDemoPage() {
             A social feed, a bill split, an exchange, an AI agent. Four different designs, one invisible SDK. Every
             action settles onchain.
           </p>
-          <div className="relative mb-8 flex flex-col gap-2">
+          <div className="relative mb-8 flex flex-col gap-2" data-analytics-surface="feature-list">
             {FEATS.map((f) => (
               <FeatRow
                 key={f.id}
@@ -380,7 +476,7 @@ export function HeroDemoPage() {
               </div>
             </a>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3" data-analytics-surface="stage">
             {fin && (
               <span className="animate-jd-fade text-ink-2 text-[14px]">
                 Still not convinced? The docs will change that.

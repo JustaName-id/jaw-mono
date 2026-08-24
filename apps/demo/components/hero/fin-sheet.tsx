@@ -9,7 +9,7 @@ const finFade = 'animate-hd-fin-fade [animation-delay:220ms]';
 // Finale sheet shown inside the phone after the fourth feature completes.
 export function FinSheet({ onRestart }: { onRestart: () => void }) {
   return (
-    <div className="absolute inset-0 z-[60] flex items-end">
+    <div className="absolute inset-0 z-[60] flex items-end" data-analytics-surface="finale">
       <div className="animate-hd-fin-fade absolute inset-0 bg-[rgba(15,23,42,.4)] backdrop-blur-[3px]" />
       <div className="animate-hd-fin-up relative w-full rounded-t-[26px] bg-white px-6 pb-[34px] pt-[26px] text-center shadow-[0_-24px_60px_-24px_rgba(15,23,42,.5)]">
         <span className={`bg-line-2 mx-auto mb-5 block h-[5px] w-[38px] rounded-full ${finFade}`} />
@@ -18,9 +18,9 @@ export function FinSheet({ onRestart }: { onRestart: () => void }) {
         >
           <Icon.Logo size={24} />
         </span>
-        <div className={`mb-[7px] text-[20px] font-semibold tracking-[-0.025em] ${finFade}`}>One account, any app</div>
+        <div className={`mb-[7px] text-[20px] font-semibold tracking-[-0.025em] ${finFade}`}>Now build yours</div>
         <p className={`text-ink-2 mx-auto mb-[22px] max-w-[250px] text-[13.5px] leading-[1.55] ${finFade}`}>
-          Four of the things a JAW account can do. The playground has many more, all on the same account.
+          Onboarding, payments, swaps, agent permissions. Embedded and self-custodial, in your design, under your brand.
         </p>
         <div className={`flex flex-col gap-[9px] ${finFade}`}>
           <a
