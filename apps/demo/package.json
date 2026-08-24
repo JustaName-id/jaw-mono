@@ -1,0 +1,19 @@
+{
+  "name": "@jaw-mono/demo",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@jaw.id/core": "workspace:*",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "next": "~15.5.10",
+    "posthog-js": "^1.187.2",
+    "viem": "^2.55.16"
+  },
+  "devDependencies": {
+    "tailwindcss": "3",
+    "eslint": "^9",
+    "eslint-config-next": "~15.5.10",
+    "@eslint/eslintrc": "^3"
+  }
+}

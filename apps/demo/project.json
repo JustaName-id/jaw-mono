@@ -1,0 +1,17 @@
+{
+  "name": "@jaw-mono/demo",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/demo/app",
+  "projectType": "application",
+  "tags": ["npm:private"],
+  "targets": {
+    "dev": {
+      "continuous": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "bunx next dev"
+      }
+    }
+  }
+}

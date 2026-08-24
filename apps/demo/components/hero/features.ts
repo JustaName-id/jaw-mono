@@ -1,0 +1,207 @@
+'use client';
+
+import type { JawTheme } from '@jaw.id/core';
+import type { FeatureName } from '@/lib/analytics/events/types';
+
+export type PhoneAppKey = 'social' | 'splits' | 'swap' | 'agent';
+
+export type Variant = {
+  key: string;
+  label: string;
+  desc: string;
+  app?: PhoneAppKey;
+  appLabel?: string;
+  accent?: string;
+};
+
+export type Feat = {
+  id: number;
+  /** Stable analytics name — decoupled from `title` so copy edits keep funnels intact. */
+  analytics: FeatureName;
+  app: PhoneAppKey;
+  appLabel: string;
+  accent: string;
+  title: string;
+  teaser: string;
+  variants: Variant[];
+  /** Theme pushed to the keys dialog while this feature is active. */
+  theme?: JawTheme;
+};
+
+// Four features; some have variants the user can switch between.
+export const FEATS: Feat[] = [
+  {
+    id: 1,
+    analytics: 'sign-in',
+    app: 'social',
+    appLabel: 'Social app',
+    accent: 'rgb(8,81,255)',
+    title: 'Sign in / Sign up',
+    teaser: 'A passkey. Face ID or fingerprint, no seed phrase.',
+    theme: {
+      mode: 'light',
+      colors: {
+        primary: '#0851FF',
+        primaryForeground: '#FFFFFF',
+        ring: '#0851FF',
+      },
+    },
+    variants: [
+      {
+        key: 'happy',
+        label: 'Happy path',
+        desc: 'Onboarding is a single passkey prompt: it creates a hardware-secured account, claims a name, and signs the user in. No seed phrase, no extension, no ETH required.',
+      },
+      {
+        key: 'adversarial',
+        label: 'Adversarial',
+        desc: 'Same button, hostile payload. The sign-in message claims to be evil.com while the request comes from this site. JAW compares the two, flags the mismatch as phishing, and blocks one-tap signing unless you accept the risk.',
+      },
+    ],
+  },
+  {
+    id: 2,
+    analytics: 'send',
+    app: 'splits',
+    appLabel: 'Splitos',
+    accent: '#C29A34',
+    title: 'Send',
+    teaser: 'Amount and fee in one token, no gas token to top up.',
+    // Unlike sign-in's single accent swap, splits dresses the dialog like the
+    // app's own Settle Up sheet: cream drawer surface (popover is what the
+    // sheet is painted with), white inner cards, navy type, gold actions.
+    theme: {
+      mode: 'light',
+      borderRadius: 'lg',
+      colors: {
+        background: '#F4F5F7',
+        foreground: '#16233F',
+        card: '#FFFFFF',
+        cardForeground: '#16233F',
+        popover: '#F4F5F7',
+        popoverForeground: '#16233F',
+        primary: '#C29A34',
+        primaryForeground: '#FFFFFF',
+        secondary: '#E9EBEF',
+        secondaryForeground: '#16233F',
+        muted: '#E9EBEF',
+        mutedForeground: '#5A6379',
+        accent: '#E9EBEF',
+        accentForeground: '#16233F',
+        border: '#DDE0E6',
+        input: '#DDE0E6',
+        ring: '#C29A34',
+        positive: '#1E7A45',
+        negative: '#C81E33',
+        scrim: '#16233F',
+      },
+    },
+    variants: [
+      {
+        key: 'happy',
+        label: 'Happy path',
+        desc: 'Pay Sarah, John, and Youssef by name, in dollars, with one confirmation for all three. Fees are in dollars too. No gas token, no top-up.',
+      },
+    ],
+  },
+  {
+    id: 3,
+    analytics: 'swap',
+    app: 'swap',
+    appLabel: 'Exchange',
+    accent: '#0F172A',
+    title: 'Swap',
+    teaser: 'Approve and swap in one signature.',
+    // Swapr goes graphite black (Uniswap-web dark) with the screen's pink
+    // CTA as primary.
+    theme: {
+      mode: 'dark',
+      colors: {
+        background: '#0D0E12',
+        foreground: '#F5F5F5',
+        card: '#20242E',
+        cardForeground: '#F5F5F5',
+        popover: '#0D0E12',
+        popoverForeground: '#F5F5F5',
+        primary: '#F43FA6',
+        primaryForeground: '#FFFFFF',
+        secondary: '#4A2138',
+        secondaryForeground: '#FF8ACD',
+        muted: '#20242E',
+        mutedForeground: '#85888F',
+        accent: '#4A2138',
+        accentForeground: '#FF8ACD',
+        border: '#2B303C',
+        input: '#3A4353',
+        ring: '#F43FA6',
+        scrim: '#000000',
+      },
+    },
+    variants: [
+      {
+        key: 'swap',
+        label: 'Swap',
+        app: 'swap',
+        appLabel: 'Exchange',
+        accent: '#0F172A',
+        desc: 'Approve and swap execute as one atomic call, decoded in plain language before signing rather than hidden behind a hash. If the swap fails, the approval never happened, and no allowance is left on the router.',
+      },
+      {
+        key: 'adversarial',
+        label: 'Adversarial',
+        app: 'swap',
+        appLabel: 'Exchange',
+        accent: '#0F172A',
+        desc: 'The same swap, but the approval is unlimited instead of the exact amount. JAW decodes the approve so the blank cheque to the router is visible before signing',
+      },
+    ],
+  },
+  {
+    id: 4,
+    analytics: 'agent-delegation',
+    app: 'agent',
+    appLabel: 'AI agent',
+    accent: '#5FE0A0',
+    title: 'Agent delegation',
+    teaser: 'Scoped limits on amount and duration.',
+    // The copy-edit design paints Agens deep green ("ox"): the dialog follows
+    // with green chat surfaces and the emerald primary.
+    theme: {
+      mode: 'dark',
+      colors: {
+        background: '#10312A',
+        foreground: '#EAF7F1',
+        card: '#18443B',
+        cardForeground: '#EAF7F1',
+        popover: '#10312A',
+        popoverForeground: '#EAF7F1',
+        primary: '#10B981',
+        primaryForeground: '#04110C',
+        secondary: '#1B4A40',
+        secondaryForeground: '#A9F0D7',
+        muted: '#18443B',
+        mutedForeground: '#9DB8AE',
+        accent: '#1B4A40',
+        accentForeground: '#6EE7B7',
+        border: '#2A574C',
+        input: '#336357',
+        ring: '#10B981',
+        success: '#10B981',
+        positive: '#34D399',
+        scrim: '#04110C',
+      },
+    },
+    variants: [
+      {
+        key: 'happy',
+        label: 'Happy path',
+        desc: "An agent with your keys can do anything. An agent with a JAW permission can do exactly what you allowed: this token, this cap, this expiry. The limit lives onchain, in the account, so overspending isn't a risk to monitor. It's a transaction that reverts.",
+      },
+      {
+        key: 'adversarial',
+        label: 'Adversarial',
+        desc: 'A grant scoped to any contract and any function, effectively the whole account. JAW renders it as “Any contract / Any function” with a warning, so the blast radius is visible before the permission exists.',
+      },
+    ],
+  },
+];
