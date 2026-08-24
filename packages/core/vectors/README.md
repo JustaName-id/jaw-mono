@@ -44,6 +44,52 @@ git submodule update --init contracts/justanaccount
 cd contracts/justanaccount && git submodule update --init lib/solady
 ```
 
+`contracts/permissions/src/JustaPermissionManager.sol:225`
+
+```solidity
+struct CallPermission {
+    address target;
+    bytes4 selector;
+    address checker;
+}
+
+struct SpendLimit {
+    address token;
+    uint160 allowance;
+    PeriodUnit unit;
+    uint16 multiplier;
+}
+
+struct Permission {
+    address account;
+    address spender;
+    uint48 start;
+    uint48 end;
+    uint256 salt;
+    CallPermission[] calls;
+    SpendLimit[] spends;
+}
+```
+
+`executeBatch` takes that tuple plus `BaseAccount.Call[]`, which comes from
+ERC-4337 rather than from our own contracts,
+`contracts/permissions/lib/justanaccount/lib/account-abstraction/contracts/core/BaseAccount.sol:21`:
+
+```solidity
+struct Call {
+    address target;
+    uint256 value;
+    bytes data;
+}
+```
+
+That one is two submodules deep:
+
+```bash
+cd contracts/permissions && git submodule update --init lib/justanaccount
+cd lib/justanaccount && git submodule update --init lib/account-abstraction
+```
+
 ## Re-deriving a vector
 
 `signature-wrap.json`, first entry:
@@ -78,11 +124,50 @@ cast abi-encode "f((bytes,bytes,uint256,uint256,bytes32,bytes32))" \
 identical in ABI encoding, both being dynamic byte arrays, and the hex form
 avoids having to quote a JSON string containing commas through a shell.
 
+`permission-calls.json` is `cast calldata` rather than `cast abi-encode`, so the
+four-byte selector is pinned too. That matters here: the selector is a hash of
+the whole signature, so retyping or reordering a field inside the `Permission`
+tuple moves it even on a call whose arrays are empty.
+
+The tuple is long enough to be worth naming once:
+
+```bash
+PERM='(address,address,uint48,uint48,uint256,(address,bytes4,address)[],(address,uint160,uint8,uint16)[])'
+```
+
+Third entry, `buildRevokePermissionCall`:
+
+```bash
+cast calldata "revoke($PERM)" \
+  "(0x1111111111111111111111111111111111111111,0x2222222222222222222222222222222222222222,\
+1700000000,2000000000,42,[(0x3333333333333333333333333333333333333333,0xa9059cbb,\
+0x0000000000000000000000000000000000000000)],[(0x4444444444444444444444444444444444444444,1000000,2,7)])"
+```
+
+Fourth entry, `encodeExecuteBatchWithPermission`, same permission plus two calls:
+
+```bash
+cast calldata "executeBatch($PERM,(address,uint256,bytes)[])" \
+  "<the permission above>" \
+  "[(0x5555555555555555555555555555555555555555,0,0xa9059cbb$(printf '0%.0s' {1..24})7777777777777777777777777777777777777777$(printf '0%.0s' {1..58})f4240),\
+(0x6666666666666666666666666666666666666666,1000000000000000000,0x)]"
+```
+
+The two grant entries carry a `start` and no salt because
+`apiPermissionsToPermission` stamps `start` from `Date.now()` and draws the salt
+from `Math.random()`. The test freezes the clock and pins `Math.random` to 0, so
+those vectors are generated with `start` at the frozen value and salt 0. The
+period is the other thing to watch: `unit: 'year'` has no enum member, so the
+second entry is generated as `Month` with the multiplier times twelve.
+
 To read a vector back:
 
 ```bash
 cast abi-decode --input "f((uint256,bytes))" 0x<expected>
 ```
+
+For a `permission-calls.json` entry, drop the leading four bytes first, or use
+`cast 4byte-decode`.
 
 ## Two things worth knowing
 
