@@ -1,6 +1,6 @@
 import { encodeFunctionData, erc20Abi, type Address, type Hex } from 'viem';
 import { NATIVE_TOKEN } from '../rpc/permissions.js';
-import type { PermissionsDetail } from '../rpc/permissions.js';
+import type { PermissionsDetail, SpendPermissionDetail } from '../rpc/permissions.js';
 
 /**
  * The spender of a permission sends every userOp that permission authorises, and
@@ -31,13 +31,49 @@ import type { PermissionsDetail } from '../rpc/permissions.js';
  * covers the paymaster charging at `maxFeePerGas` while this prices at the
  * current one.
  *
- * Not more than roughly that, because the multiplier is not free everywhere: the
- * same budget is a fraction of a cent on Base and tens of dollars on mainnet,
- * and all of it moves to the session address. Not less either, because the op
- * has to land. After it does, the spender is topped up by refills rather than by
- * this.
+ * Not less than roughly that, because the op has to land. After it does, the
+ * spender is topped up by refills rather than by this. What keeps it from being
+ * too much on a chain where gas is expensive is the ceiling below, not this
+ * number.
  */
 const PREFUND_GAS = 2_000_000n;
+
+/**
+ * The ceiling on what the prefund may move, and the reason it is the
+ * permission's own allowance rather than a number.
+ *
+ * `PREFUND_GAS` prices in gas, which is what the fee is denominated in, and that
+ * is right until gas is expensive. The same multiplier is a fraction of a cent
+ * on Base and tens of dollars on mainnet, and all of it lands on the session
+ * address, outside the permission, where nothing meters it any more.
+ *
+ * A fixed cap in the token cannot be written down once: a tenth is $0.10 in
+ * USDC and three hundred in WETH, which is the reason the amount is priced in
+ * gas to begin with. A cap in native value has the same problem across chains,
+ * since a unit of ETH and a unit of POL are not the same money.
+ *
+ * The permission already carries a number in the right token: what it lets the
+ * session spend in a period. Sending more than that to the spender funds it past
+ * anything it could do with the authority it was given, so that is the ceiling.
+ * It needs no table, it moves when the grant moves, and it is a figure the user
+ * approved on the same screen.
+ *
+ * A clamped prefund can be too small to cover the first operation on an
+ * expensive chain. That operation is then sponsored, which is what happened for
+ * every session before this transfer existed, so the failure mode is the old
+ * behaviour rather than a broken grant.
+ */
+function ceilingFor(spend: SpendPermissionDetail): bigint | null {
+    try {
+        const allowance = BigInt(spend.allowance);
+        return allowance > 0n ? allowance : null;
+    } catch {
+        // The allowance reaches here from the grant request, so it is a number
+        // the requester wrote. Null like every other unreadable input in this
+        // module: a ceiling we cannot size is one we cannot hold to.
+        return null;
+    }
+}
 
 /** Opt-in for the grant. Off by default: a wallet does not move funds unasked. */
 export interface GrantPermissionsOptions {
@@ -90,16 +126,21 @@ export interface PrefundArgs {
 export async function buildSpenderPrefundCall(
     args: PrefundArgs
 ): Promise<{ to: Address; value: bigint; data: Hex } | null> {
-    const token = firstErc20Spend(args.permissions);
+    const spend = firstErc20Spend(args.permissions);
     // A permission that authorises no ERC-20 spend has no token to prefund in,
     // and picking one ourselves would move funds the permission never mentioned.
-    if (!token) return null;
+    if (!spend) return null;
+    const token = spend.token;
+
+    const ceiling = ceilingFor(spend);
+    if (ceiling === null) return null;
 
     // `exchangeRate` is wei to the token's smallest unit, so this reads as
     // "what PREFUND_GAS costs, in this token, at this moment, on this chain".
     const exchangeRate = await args.read.exchangeRate(token);
     if (exchangeRate === null) return null;
-    const amount = (PREFUND_GAS * (await args.read.gasPrice()) * exchangeRate) / 10n ** 18n;
+    const priced = (PREFUND_GAS * (await args.read.gasPrice()) * exchangeRate) / 10n ** 18n;
+    const amount = priced < ceiling ? priced : ceiling;
     if (amount === 0n) return null;
 
     // Re-granting to the same spender, which the CLI does whenever a session is
@@ -146,13 +187,13 @@ function paymasterFeeIn(token: Address, context?: Record<string, unknown>): bigi
     }
 }
 
-/** The first token the permission authorises spending, native ones aside. */
-function firstErc20Spend(permissions: PermissionsDetail): Address | null {
+/** The first ERC-20 spend the permission authorises, native ones aside. */
+function firstErc20Spend(permissions: PermissionsDetail): SpendPermissionDetail | null {
     for (const spend of permissions.spends ?? []) {
         const token = spend.token?.trim();
         if (!token) continue;
         if (token.toLowerCase() === NATIVE_TOKEN.toLowerCase()) continue;
-        return token as Address;
+        return { ...spend, token: token as Address };
     }
     return null;
 }

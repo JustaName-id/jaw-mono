@@ -48,15 +48,78 @@ describe('buildSpenderPrefundCall', () => {
     // $0.10 in USDC and three hundred in WETH. It comes off the rate now, so the
     // token's decimals no longer decide it.
     it('takes the amount from the rate rather than from the token', async () => {
+        // A permission wide enough that its allowance is not what decides the
+        // amount here: the point of this one is the rate.
+        const wide: PermissionsDetail = {
+            spends: [{ token: USDC, allowance: (10n ** 30n).toString(), unit: 'day' as never }],
+        };
         const call = await buildSpenderPrefundCall({
             account: ACCOUNT,
             spender: SPENDER,
-            permissions: usdcSpend,
+            permissions: wide,
             read: reader({ [ACCOUNT]: 10n ** 18n }, { exchangeRate: async () => 10n ** 18n }),
         });
 
         const decoded = decodeFunctionData({ abi: erc20Abi, data: call!.data });
         expect(decoded.args).toEqual([SPENDER, 2_000_000n * GAS_PRICE]);
+    });
+
+    // On an expensive chain the gas price alone puts the priced amount far above
+    // anything the session could spend with the authority it was granted. What
+    // it does not spend sits on the session address, outside the permission.
+    it('never sends more than the permission lets the session spend in a period', async () => {
+        const mainnetGas = 30_000_000_000n; // 30 gwei
+        const call = await buildSpenderPrefundCall({
+            account: ACCOUNT,
+            spender: SPENDER,
+            permissions: usdcSpend, // 10 USDC per day
+            read: reader({ [ACCOUNT]: 10n ** 12n }, { gasPrice: async () => mainnetGas }),
+        });
+
+        const priced = (2_000_000n * mainnetGas * RATE) / 10n ** 18n;
+        expect(priced).toBeGreaterThan(10_000_000n); // the clamp is doing work
+        const decoded = decodeFunctionData({ abi: erc20Abi, data: call!.data });
+        expect(decoded.args).toEqual([SPENDER, 10_000_000n]);
+    });
+
+    it('leaves the amount alone when the allowance is above it', async () => {
+        const call = await buildSpenderPrefundCall({
+            account: ACCOUNT,
+            spender: SPENDER,
+            permissions: usdcSpend,
+            read: reader({ [ACCOUNT]: 5_000_000n }),
+        });
+
+        const decoded = decodeFunctionData({ abi: erc20Abi, data: call!.data });
+        expect(decoded.args).toEqual([SPENDER, PREFUND]);
+    });
+
+    it('declines rather than guessing when the allowance cannot be read', async () => {
+        const unreadable: PermissionsDetail = {
+            spends: [{ token: USDC, allowance: 'ten dollars', unit: 'day' as never }],
+        };
+        const call = await buildSpenderPrefundCall({
+            account: ACCOUNT,
+            spender: SPENDER,
+            permissions: unreadable,
+            read: reader({ [ACCOUNT]: 5_000_000n }),
+        });
+
+        expect(call).toBeNull();
+    });
+
+    it('declines on a zero allowance, which authorises no spend to fund', async () => {
+        const zero: PermissionsDetail = {
+            spends: [{ token: USDC, allowance: '0', unit: 'day' as never }],
+        };
+        const call = await buildSpenderPrefundCall({
+            account: ACCOUNT,
+            spender: SPENDER,
+            permissions: zero,
+            read: reader({ [ACCOUNT]: 5_000_000n }),
+        });
+
+        expect(call).toBeNull();
     });
 
     // Sending it would leave the spender holding something it cannot pay a fee
