@@ -1,6 +1,6 @@
 import { encodeFunctionData, erc20Abi, type Address, type Hex } from 'viem';
 import { NATIVE_TOKEN } from '../rpc/permissions.js';
-import type { PermissionsDetail, SpendPermissionDetail } from '../rpc/permissions.js';
+import type { PermissionsDetail } from '../rpc/permissions.js';
 
 /**
  * The spender of a permission sends every userOp that permission authorises, and
@@ -58,21 +58,35 @@ const PREFUND_GAS = 2_000_000n;
  * It needs no table, it moves when the grant moves, and it is a figure the user
  * approved on the same screen.
  *
+ * A permission may carry several periods for one token, and the contract applies
+ * every one of them, so "a period" is not a single number. The widest is the
+ * ceiling: over a long enough window that is the most this permission can ever
+ * put through, which is the amount funding past would be funding past. Taking
+ * the first instead would make the result depend on the order the requester
+ * happened to write them in.
+ *
  * A clamped prefund can be too small to cover the first operation on an
  * expensive chain. That operation is then sponsored, which is what happened for
  * every session before this transfer existed, so the failure mode is the old
  * behaviour rather than a broken grant.
  */
-function ceilingFor(spend: SpendPermissionDetail): bigint | null {
-    try {
-        const allowance = BigInt(spend.allowance);
-        return allowance > 0n ? allowance : null;
-    } catch {
-        // The allowance reaches here from the grant request, so it is a number
-        // the requester wrote. Null like every other unreadable input in this
-        // module: a ceiling we cannot size is one we cannot hold to.
-        return null;
+function ceilingFor(permissions: PermissionsDetail, token: Address): bigint | null {
+    let widest = 0n;
+    for (const spend of permissions.spends ?? []) {
+        if (spend.token?.trim().toLowerCase() !== token.toLowerCase()) continue;
+        try {
+            const allowance = BigInt(spend.allowance);
+            if (allowance > widest) widest = allowance;
+        } catch {
+            // The allowance reaches here from the grant request, so it is a
+            // number the requester wrote. Null like every other unreadable input
+            // in this module: a ceiling we cannot size is one we cannot hold to,
+            // and skipping just the unreadable entry would silently widen the
+            // ceiling to whatever the readable ones say.
+            return null;
+        }
     }
+    return widest > 0n ? widest : null;
 }
 
 /** Opt-in for the grant. Off by default: a wallet does not move funds unasked. */
@@ -126,13 +140,12 @@ export interface PrefundArgs {
 export async function buildSpenderPrefundCall(
     args: PrefundArgs
 ): Promise<{ to: Address; value: bigint; data: Hex } | null> {
-    const spend = firstErc20Spend(args.permissions);
+    const token = firstErc20Spend(args.permissions);
     // A permission that authorises no ERC-20 spend has no token to prefund in,
     // and picking one ourselves would move funds the permission never mentioned.
-    if (!spend) return null;
-    const token = spend.token;
+    if (!token) return null;
 
-    const ceiling = ceilingFor(spend);
+    const ceiling = ceilingFor(args.permissions, token);
     if (ceiling === null) return null;
 
     // `exchangeRate` is wei to the token's smallest unit, so this reads as
@@ -187,13 +200,13 @@ function paymasterFeeIn(token: Address, context?: Record<string, unknown>): bigi
     }
 }
 
-/** The first ERC-20 spend the permission authorises, native ones aside. */
-function firstErc20Spend(permissions: PermissionsDetail): SpendPermissionDetail | null {
+/** The first token the permission authorises spending, native ones aside. */
+function firstErc20Spend(permissions: PermissionsDetail): Address | null {
     for (const spend of permissions.spends ?? []) {
         const token = spend.token?.trim();
         if (!token) continue;
         if (token.toLowerCase() === NATIVE_TOKEN.toLowerCase()) continue;
-        return { ...spend, token: token as Address };
+        return token as Address;
     }
     return null;
 }

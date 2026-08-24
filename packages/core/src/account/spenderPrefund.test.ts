@@ -94,6 +94,51 @@ describe('buildSpenderPrefundCall', () => {
         expect(decoded.args).toEqual([SPENDER, PREFUND]);
     });
 
+    // The contract applies every limit configured for a token, so a permission
+    // can carry more than one period for the same one. The ceiling must not
+    // depend on which of them the requester wrote first.
+    it('takes the widest allowance when a token carries several periods', async () => {
+        const mainnetGas = 30_000_000_000n;
+        const tightFirst: PermissionsDetail = {
+            spends: [
+                { token: USDC, allowance: '1000000', unit: 'minute' as never },
+                { token: USDC, allowance: '50000000', unit: 'day' as never },
+            ],
+        };
+        const looseFirst: PermissionsDetail = {
+            spends: [
+                { token: USDC, allowance: '50000000', unit: 'day' as never },
+                { token: USDC, allowance: '1000000', unit: 'minute' as never },
+            ],
+        };
+        const read = reader({ [ACCOUNT]: 10n ** 12n }, { gasPrice: async () => mainnetGas });
+
+        const a = await buildSpenderPrefundCall({ account: ACCOUNT, spender: SPENDER, permissions: tightFirst, read });
+        const b = await buildSpenderPrefundCall({ account: ACCOUNT, spender: SPENDER, permissions: looseFirst, read });
+
+        expect(decodeFunctionData({ abi: erc20Abi, data: a!.data }).args).toEqual([SPENDER, 50_000_000n]);
+        expect(a!.data).toEqual(b!.data);
+    });
+
+    // Skipping only the unreadable entry would widen the ceiling to whatever the
+    // readable ones happen to say, which is the opposite of declining.
+    it('declines when any allowance for the token cannot be read', async () => {
+        const mixed: PermissionsDetail = {
+            spends: [
+                { token: USDC, allowance: '10000000', unit: 'day' as never },
+                { token: USDC, allowance: 'whatever', unit: 'minute' as never },
+            ],
+        };
+        const call = await buildSpenderPrefundCall({
+            account: ACCOUNT,
+            spender: SPENDER,
+            permissions: mixed,
+            read: reader({ [ACCOUNT]: 5_000_000n }),
+        });
+
+        expect(call).toBeNull();
+    });
+
     it('declines rather than guessing when the allowance cannot be read', async () => {
         const unreadable: PermissionsDetail = {
             spends: [{ token: USDC, allowance: 'ten dollars', unit: 'day' as never }],
