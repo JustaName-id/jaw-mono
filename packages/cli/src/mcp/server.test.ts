@@ -185,8 +185,8 @@ describe('jaw_rpc session mode', () => {
   it('honors the JAW_SESSION env var', async () => {
     process.env['JAW_SESSION'] = 'true';
     const client = await connectClient();
-    await client.callTool({ name: 'jaw_rpc', arguments: { method: 'personal_sign', params: ['hello'] } });
-    expect(sessionRequestMock).toHaveBeenCalledWith('personal_sign', ['hello']);
+    await client.callTool({ name: 'jaw_rpc', arguments: { method: 'eth_accounts' } });
+    expect(sessionRequestMock).toHaveBeenCalledWith('eth_accounts', undefined);
     expect(getBridgeMock).not.toHaveBeenCalled();
   });
 
@@ -195,11 +195,26 @@ describe('jaw_rpc session mode', () => {
     const client = await connectClient();
     await client.callTool({
       name: 'jaw_rpc',
-      arguments: { method: 'personal_sign', params: ['hello'], session: false },
+      arguments: { method: 'eth_accounts', session: false },
     });
     expect(getBridgeMock).toHaveBeenCalled();
     expect(sessionRequestMock).not.toHaveBeenCalled();
   });
+
+  it.each(['personal_sign', 'eth_signTypedData_v4'])(
+    'refuses %s in session mode without reaching the bridge',
+    async (method) => {
+      const client = await connectClient();
+      const result = await client.callTool({
+        name: 'jaw_rpc',
+        arguments: { method, params: ['hello'], session: true },
+      });
+      expect(result.isError).toBe(true);
+      expect(toolText(result)).toContain('not supported in session mode');
+      expect(sessionRequestMock).not.toHaveBeenCalled();
+      expect(getBridgeMock).not.toHaveBeenCalled();
+    }
+  );
 
   it('rate-limits a burst of autonomous signing calls (bounds silent allowance drain)', async () => {
     const client = await connectClient();

@@ -56,6 +56,8 @@ vi.mock('@jaw.id/core', () => ({
   },
 }));
 
+const USDC_BASE_SEPOLIA = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+
 const { SessionBridge } = await import('./session-bridge.js');
 const { Account } = await import('@jaw.id/core');
 
@@ -99,17 +101,42 @@ describe('SessionBridge', () => {
     expect(mockGetCallStatus).toHaveBeenCalledWith('0xBatchId');
   });
 
-  it('personal_sign forwards message', async () => {
+  it('personal_sign is refused, and nothing is signed', async () => {
     const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
-    await bridge.request('personal_sign', ['Hello', '0xAddr']);
-    expect(mockSignMessage).toHaveBeenCalledWith('Hello');
+    await expect(bridge.request('personal_sign', ['Hello', '0xAddr'])).rejects.toThrow(/not available in auto mode/);
+    expect(mockSignMessage).not.toHaveBeenCalled();
   });
 
-  it('eth_signTypedData_v4 forwards typed data', async () => {
+  it('eth_signTypedData_v4 is refused, and nothing is signed', async () => {
     const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
     const typedData = { domain: {}, types: {}, message: {} };
-    await bridge.request('eth_signTypedData_v4', ['0xAddr', JSON.stringify(typedData)]);
-    expect(mockSignTypedData).toHaveBeenCalledWith(typedData);
+    await expect(bridge.request('eth_signTypedData_v4', ['0xAddr', JSON.stringify(typedData)])).rejects.toThrow(
+      /not available in auto mode/
+    );
+    expect(mockSignTypedData).not.toHaveBeenCalled();
+  });
+
+  // The shape that motivated the refusal: an EIP-3009 authorization over the
+  // session's own USDC is a plain typed-data request, indistinguishable from any
+  // other until it settles, and it never passes a spend cap on the way out.
+  it('refuses an EIP-3009 authorization over the payer balance', async () => {
+    const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
+    const transferAuth = {
+      domain: { name: 'USDC', version: '2', chainId: 84532, verifyingContract: USDC_BASE_SEPOLIA },
+      primaryType: 'TransferWithAuthorization',
+      types: {
+        TransferWithAuthorization: [
+          { name: 'from', type: 'address' },
+          { name: 'to', type: 'address' },
+          { name: 'value', type: 'uint256' },
+        ],
+      },
+      message: { from: '0xSession', to: '0xAttacker', value: '100000000' },
+    };
+    await expect(bridge.request('eth_signTypedData_v4', ['0xSession', transferAuth])).rejects.toThrow(
+      /not available in auto mode/
+    );
+    expect(mockSignTypedData).not.toHaveBeenCalled();
   });
 
   it('wallet_grantPermissions throws with helpful message', async () => {

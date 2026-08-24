@@ -27,13 +27,14 @@ function envSessionEnabled(): boolean {
   return value === '1' || value === 'true';
 }
 
-// Autonomous (session) signing has no per-call human confirmation, so a
-// prompt-injected agent could burst signing calls and silently drain the
-// session key's on-chain allowance. A small client-side rate limit on signing
-// methods bounds that; the on-chain permission scope remains the hard cap.
+// Autonomous sends have no per-call human confirmation, so a prompt-injected
+// agent could burst them. The window slows that down; it is not what bounds it.
+// The bound is `JustaPermissionManager`, which meters every send against the
+// period allowance on chain. Being per-process, a second server or a restart
+// starts a fresh window, which is another reason not to read this as a cap.
 const SIGN_RATE_WINDOW_MS = 60_000;
 const MAX_SIGNS_PER_WINDOW = 5;
-const SESSION_SIGNING_METHODS = ['wallet_sendCalls', 'personal_sign', 'eth_signTypedData_v4'];
+const SESSION_SIGNING_METHODS = ['wallet_sendCalls'];
 
 export function registerRpcTool(server: McpServer): void {
   // Per-server (per-process) sliding window over recent autonomous signs.

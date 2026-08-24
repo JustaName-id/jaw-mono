@@ -217,17 +217,14 @@ export class SessionBridge {
         return account.getCallStatus(batchId as `0x${string}`);
       }
 
-      case 'personal_sign': {
-        const message = Array.isArray(params) ? params[0] : params;
-        return account.signMessage(message as string);
-      }
-
-      case 'eth_signTypedData_v4': {
-        const asArray = Array.isArray(params) ? params : [params];
-        const raw = asArray.length > 1 ? asArray[1] : asArray[0];
-        const typedData = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        return account.signTypedData(typedData);
-      }
+      // Refused rather than absent, so the reason is on screen instead of a
+      // caller reading "not supported in auto mode" and looking for a flag. See
+      // `supportsSessionMode` in rpc-classifier.ts for why.
+      case 'personal_sign':
+      case 'eth_signTypedData_v4':
+        throw new Error(
+          `${method} is not available in auto mode: a signature the session makes is not a call, so it never reaches the spend caps or the ledger. Run it through the browser instead.`
+        );
 
       case 'wallet_grantPermissions':
         throw new Error('Requires browser — run `jaw session setup`.');
