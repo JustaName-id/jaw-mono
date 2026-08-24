@@ -369,6 +369,23 @@ export function HeroDemoPage() {
         <Base onCta={onCta} quote={quote} />
       </div>
 
+      {/* Mobile-only "where am I" chip, taken from the design's .hdm-bar live
+          state: step counter + the capability on screen. The design renders a
+          full-width opaque bar with back/next/menu chrome; here it is a single
+          floating pill matching the menu button, so it reads as a quiet hint
+          over the app rather than app chrome. Same visibility rule as that
+          button, so it clears out for dialogs and the finale. */}
+      {!open && !fin && (
+        <div className="absolute left-3.5 top-3.5 z-[35] inline-flex max-w-[calc(100%-4.5rem)] items-center gap-2 rounded-full border border-black/10 bg-white/75 px-3 py-1.5 shadow-[0_2px_10px_rgba(15,23,42,.12)] backdrop-blur-md md:hidden">
+          <span className="text-ink shrink-0 font-mono text-[10px] tracking-[.06em]">
+            {String(cur.id).padStart(2, '0')}
+            <span className="text-ink-4">/{String(FEATS.length).padStart(2, '0')}</span>
+          </span>
+          <span className="bg-line-2 h-[11px] w-px shrink-0" />
+          <span className="text-ink truncate text-[12.5px] font-medium tracking-[-0.01em]">{cur.title}</span>
+        </div>
+      )}
+
       <MobileMenu
         showButton={!open && !fin}
         open={menu}
@@ -476,20 +493,26 @@ export function HeroDemoPage() {
               </div>
             </a>
           </div>
-          <div className="flex flex-wrap items-center gap-3" data-analytics-surface="stage">
-            {fin && (
-              <span className="animate-jd-fade text-ink-2 text-[14px]">
-                Still not convinced? The docs will change that.
-              </span>
-            )}
-            {!fin && (
-              <a href="https://dashboard.jaw.id" className={btnPrimary}>
-                Dashboard <Icon.Arrow size={12} />
+          {/* Mirror the rows' [24px_1fr] grid with an empty gutter cell so the
+              CTAs line up with the boxes, not the step numbers, and stay lined
+              up if that column geometry ever changes. */}
+          <div className="grid grid-cols-[24px_1fr] gap-[18px]">
+            <div aria-hidden />
+            <div className="flex flex-wrap items-center gap-3" data-analytics-surface="stage">
+              {fin && (
+                <span className="animate-jd-fade text-ink-2 text-[14px]">
+                  Still not convinced? The docs will change that.
+                </span>
+              )}
+              {!fin && (
+                <a href="https://dashboard.jaw.id" className={btnPrimary}>
+                  Dashboard <Icon.Arrow size={12} />
+                </a>
+              )}
+              <a href="https://docs.jaw.id" target="_blank" rel="noopener noreferrer" className={btnGhost}>
+                Docs <Icon.ArrowUR size={11} />
               </a>
-            )}
-            <a href="https://docs.jaw.id" target="_blank" rel="noopener noreferrer" className={btnGhost}>
-              Docs <Icon.ArrowUR size={11} />
-            </a>
+            </div>
           </div>
         </div>
 
