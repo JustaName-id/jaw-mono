@@ -32,20 +32,20 @@ function envSessionEnabled(): boolean {
 // The bound is `JustaPermissionManager`, which meters every send against the
 // period allowance on chain. Being per-process, a second server or a restart
 // starts a fresh window, which is another reason not to read this as a cap.
-const SIGN_RATE_WINDOW_MS = 60_000;
-const MAX_SIGNS_PER_WINDOW = 5;
-const SESSION_SIGNING_METHODS = ['wallet_sendCalls'];
+const SEND_RATE_WINDOW_MS = 60_000;
+const MAX_SENDS_PER_WINDOW = 5;
+const RATE_LIMITED_SESSION_METHODS = ['wallet_sendCalls'];
 
 export function registerRpcTool(server: McpServer): void {
-  // Per-server (per-process) sliding window over recent autonomous signs.
-  const recentSigns: number[] = [];
-  function assertUnderSignLimit(): void {
+  // Per-server (per-process) sliding window over recent autonomous sends.
+  const recentSends: number[] = [];
+  function assertUnderSendLimit(): void {
     const now = Date.now();
-    while (recentSigns.length && now - recentSigns[0] > SIGN_RATE_WINDOW_MS) recentSigns.shift();
-    if (recentSigns.length >= MAX_SIGNS_PER_WINDOW) {
-      throw new Error('Autonomous signing rate limit reached, retry shortly or call again with session: false.');
+    while (recentSends.length && now - recentSends[0] > SEND_RATE_WINDOW_MS) recentSends.shift();
+    if (recentSends.length >= MAX_SENDS_PER_WINDOW) {
+      throw new Error('Autonomous send rate limit reached, retry shortly or call again with session: false.');
     }
-    recentSigns.push(now);
+    recentSends.push(now);
   }
 
   server.registerTool(
@@ -78,8 +78,8 @@ export function registerRpcTool(server: McpServer): void {
                 'Call again with session: false to route through the browser bridge.'
             );
           }
-          if (SESSION_SIGNING_METHODS.includes(params.method)) {
-            assertUnderSignLimit();
+          if (RATE_LIMITED_SESSION_METHODS.includes(params.method)) {
+            assertUnderSendLimit();
           }
           bridge = new SessionBridge({ apiKey, chainId });
         } else {
