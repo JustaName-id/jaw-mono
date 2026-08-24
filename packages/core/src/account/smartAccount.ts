@@ -659,9 +659,9 @@ async function scanOwnerIndex({ address, client, publicKey }: FindOwnerIndexPara
                 allowFailure: false,
                 multicallAddress,
                 // viem chunks by calldata size, 1024 bytes by default, and one
-                // `ownerAtIndex` call is 36 of them. Left alone it would split a
-                // window into eleven requests. The window is already the bound,
-                // so send it as one.
+                // `ownerAtIndex` call is 36 of them, so left alone it would send
+                // a full window as ten requests. The window is already the
+                // bound, so send it as one.
                 batchSize: 0,
             });
 

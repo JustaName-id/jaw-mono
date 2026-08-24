@@ -436,6 +436,19 @@ describe('how findOwnerIndex reads the owner slots', () => {
     // getBundlerClient resolves its chain through `SUPPORTED_CHAINS.find(...)`,
     // which is undefined for a chain the SDK does not know, and viem cannot
     // aggregate without the address. The sequential read has to stay.
+    // The aggregate twin of this is covered above, and the two derive the index
+    // differently: that one offsets a findIndex result, this one offsets a loop
+    // counter. Getting it wrong here wraps the signature for a different owner,
+    // on exactly the chains that have no Multicall3 to fall back from.
+    it('offsets the index by the window on the sequential path too', async () => {
+        mockAccountWithRemovedOwner(Array.from({ length: 300 }, (_, i) => (i === 260 ? MOCK_PUBLIC_KEY : undefined)));
+
+        await expect(
+            findOwnerIndex({ address: MOCK_TARGET_ADDRESS, client: MOCK_BUNDLER_CLIENT, publicKey: MOCK_PUBLIC_KEY })
+        ).resolves.toBe(260);
+        expect(multicall).not.toHaveBeenCalled();
+    });
+
     it('reads slot by slot when the chain carries no Multicall3 address', async () => {
         mockAccountWithRemovedOwner([undefined, MOCK_PUBLIC_KEY, undefined]);
 
