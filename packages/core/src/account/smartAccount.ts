@@ -15,7 +15,7 @@ import {
     encodeFunctionData,
     decodeFunctionResult,
 } from 'viem';
-import { call, getCode, getGasPrice, readContract } from 'viem/actions';
+import { call, getCode, getGasPrice, multicall, readContract } from 'viem/actions';
 import {
     abi,
     factoryAbi,
@@ -91,7 +91,18 @@ export type BundledTransactionResult = {
     chainId: number;
 };
 
-export const MAINNET_CHAINS = [
+/**
+ * The chain lists are annotated rather than inferred on purpose. Without the
+ * annotation TypeScript keeps the full literal type of every viem chain, down
+ * to each explorer URL, which is not a contract we want to publish: it made the
+ * api-extractor report 14988 lines, of which these four exports were 90%, and
+ * any viem minor that edits chain metadata rewrote thousands of report lines on
+ * a PR that changed nothing here.
+ *
+ * `readonly` because these are module-level constants shared by every consumer.
+ * Mutating one in place would corrupt chain resolution process-wide.
+ */
+export const MAINNET_CHAINS: readonly ViemChain[] = [
     mainnet,
     base,
     optimism,
@@ -108,7 +119,7 @@ export const MAINNET_CHAINS = [
     soneium,
 ];
 
-export const TESTNET_CHAINS = [
+export const TESTNET_CHAINS: readonly ViemChain[] = [
     sepolia,
     baseSepolia,
     optimismSepolia,
@@ -118,7 +129,7 @@ export const TESTNET_CHAINS = [
     arcTestnet,
 ];
 
-export const SUPPORTED_CHAINS = [...MAINNET_CHAINS, ...TESTNET_CHAINS];
+export const SUPPORTED_CHAINS: readonly ViemChain[] = [...MAINNET_CHAINS, ...TESTNET_CHAINS];
 
 /**
  * Get supported chains based on testnet preference.
@@ -126,7 +137,7 @@ export const SUPPORTED_CHAINS = [...MAINNET_CHAINS, ...TESTNET_CHAINS];
  * @param showTestnets - Whether to include testnet chains (default: false)
  * @returns Array of supported chains
  */
-export function getSupportedChains(showTestnets = false) {
+export function getSupportedChains(showTestnets = false): readonly ViemChain[] {
     return showTestnets ? SUPPORTED_CHAINS : MAINNET_CHAINS;
 }
 
@@ -150,11 +161,17 @@ export const getBundlerClient = (
     const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chain.id);
 
     // Deliberately no `batch: { multicall: true }` here, unlike the store's client in
-    // store/chain-clients/utils.ts. Nothing issues an eth_call through this one: the
-    // account implementation and findOwnerIndex both read through the bundler client
-    // below, and all this client is asked for is estimateFeesPerGas/getGasPrice. Setting
-    // it would only put a Multicall3 hop and a setTimeout(0) defer on the userOp path
-    // for no round-trip saved.
+    // store/chain-clients/utils.ts. That option folds eth_calls that happen to be issued
+    // in the same tick, and nothing on this path fans out that way: the account
+    // implementation and scanOwnerIndex read through the bundler client below, and this
+    // one is asked for estimateFeesPerGas/getGasPrice. scanOwnerIndex does aggregate its
+    // owner reads, but it calls the multicall action outright rather than relying on the
+    // scheduler, so the option would buy nothing and would add a Multicall3 hop and a
+    // setTimeout(0) defer to the userOp path.
+    //
+    // It does still matter that `viemChain` carries the Multicall3 address, which is why
+    // scanOwnerIndex reads it off the chain and falls back when it is missing: an
+    // unlisted chain resolves to `undefined` here.
     const publicClient = createPublicClient({
         chain: viemChain,
         transport: http(chain.rpcUrl),
@@ -575,6 +592,98 @@ export async function createSmartAccount(
     });
 }
 
+/**
+ * Owner slots read per aggregate.
+ *
+ * The scan is bounded by `nextOwnerIndex`, which is a value an account we were
+ * handed reports about itself: `resolveSmartAccount` takes the address straight
+ * off `from`/`options.address`, so a dapp picks it. Building the whole scan up
+ * front would let that number decide how much we allocate, and a window keeps
+ * both the allocation and the request body bounded no matter what comes back.
+ *
+ * 256 is sized off the request rather than picked round: one window encodes to
+ * roughly 112 KB of JSON-RPC body, and it covers any account anyone has in one
+ * request.
+ */
+const OWNER_SCAN_WINDOW = 256;
+
+/**
+ * Scan the owner slots of an account for `publicKey`, lowest index first.
+ *
+ * Bounded by `nextOwnerIndex`, not by `ownerCount`. `MultiOwnable` derives the
+ * count as `nextOwnerIndex - removedOwnersCount` and never reuses or compacts a
+ * removed slot, so after any removal the highest owners sit past the count.
+ * Removed slots read back empty and simply do not match, which is a `delete` on
+ * the `s_ownerAtIndex` mapping (MultiOwnable.sol:304) rather than a revert, so
+ * the aggregate below can run with `allowFailure: false`.
+ *
+ * Reads a window at a time, aggregated where the chain has Multicall3. An
+ * account that has rotated owners often has far more slots than live owners, and
+ * this runs on every signing path, so the sequential read it replaces cost one
+ * round-trip per slot.
+ *
+ * @returns the index of the owner, or undefined if it holds none.
+ */
+async function scanOwnerIndex({ address, client, publicKey }: FindOwnerIndexParams): Promise<number | undefined> {
+    const nextOwnerIndex = await readContract(client, {
+        address,
+        abi,
+        functionName: 'nextOwnerIndex',
+    });
+
+    const slots = Number(nextOwnerIndex);
+    const formatted = formatPublicKey(publicKey).toLowerCase();
+
+    // Multicall3 is not deployed everywhere, and getBundlerClient builds its
+    // public client from `SUPPORTED_CHAINS.find(...)`, which is undefined for a
+    // chain the SDK does not know. Rather than turn an unknown chain into a
+    // failure, fall back to the sequential read below.
+    const multicallAddress = client.chain?.contracts?.multicall3?.address;
+
+    for (let start = 0; start < slots; start += OWNER_SCAN_WINDOW) {
+        const length = Math.min(OWNER_SCAN_WINDOW, slots - start);
+        const contracts = Array.from(
+            { length },
+            (_, i) =>
+                ({
+                    address,
+                    abi,
+                    functionName: 'ownerAtIndex',
+                    args: [BigInt(start + i)],
+                }) as const
+        );
+
+        if (multicallAddress) {
+            const owners = await multicall(client, {
+                contracts,
+                allowFailure: false,
+                multicallAddress,
+                // viem chunks by calldata size, 1024 bytes by default, and one
+                // `ownerAtIndex` call is 36 of them, so left alone it would send
+                // a full window as ten requests. The window is already the
+                // bound, so send it as one.
+                batchSize: 0,
+            });
+
+            const hit = owners.findIndex((owner) => owner.toLowerCase() === formatted);
+            if (hit !== -1) {
+                return start + hit;
+            }
+            continue;
+        }
+
+        for (const [i, contract] of contracts.entries()) {
+            const owner = await readContract(client, contract);
+
+            if (owner.toLowerCase() === formatted) {
+                return start + i;
+            }
+        }
+    }
+
+    return undefined;
+}
+
 export async function findOwnerIndex({ address, client, publicKey }: FindOwnerIndexParams): Promise<number> {
     const code = await getCode(client, {
         address,
@@ -585,35 +694,12 @@ export async function findOwnerIndex({ address, client, publicKey }: FindOwnerIn
         return 0;
     }
 
-    try {
-        const ownerCount = await readContract(client, {
-            address,
-            abi,
-            functionName: 'ownerCount',
-        });
-
-        // Iterate from lowest index up and return early when found
-        for (let i = 0; i < Number(ownerCount); i++) {
-            const owner = await readContract(client, {
-                address,
-                abi,
-                functionName: 'ownerAtIndex',
-                args: [BigInt(i)],
-            });
-
-            const formatted = formatPublicKey(publicKey);
-            if (owner.toLowerCase() === formatted.toLowerCase()) {
-                return i;
-            }
-        }
-    } catch (error) {
-        // If reading contract fails, return 0
-        console.warn('Failed to read owner information:', error);
-        return 0;
-    }
-
-    // Owner not found, return 0
-    return 0;
+    // Deliberately not wrapped in a try/catch. The `!code` guard above is what
+    // the old catch was really covering, and everything that reaches here is a
+    // live RPC failure. Swallowing one and returning 0 wraps the signature for
+    // whoever holds slot 0, which the account rejects on chain with an opaque
+    // revert. Letting it propagate makes it a diagnosable error at the call site.
+    return (await scanOwnerIndex({ address, client, publicKey })) ?? 0;
 }
 
 /**
@@ -644,33 +730,22 @@ export async function createSmartAccountForAddress(
         throw standardErrors.rpc.invalidParams(`Account ${targetAddress} is not deployed`);
     }
 
-    const ownerCount = await readContract(bundlerClient, {
+    const ownerIndex = await scanOwnerIndex({
         address: targetAddress,
-        abi,
-        functionName: 'ownerCount',
+        client: bundlerClient,
+        publicKey: ownerBytes,
     });
 
-    const formatted = formatPublicKey(ownerBytes);
-
-    for (let i = 0; i < Number(ownerCount); i++) {
-        const owner = await readContract(bundlerClient, {
-            address: targetAddress,
-            abi,
-            functionName: 'ownerAtIndex',
-            args: [BigInt(i)],
-        });
-
-        if ((owner as string).toLowerCase() === formatted.toLowerCase()) {
-            return await toJustanAccount({
-                client: bundlerClient,
-                owners: [account, PERMISSIONS_MANAGER_ADDRESS],
-                ownerIndex: i,
-                address: targetAddress,
-            });
-        }
+    if (ownerIndex === undefined) {
+        throw standardErrors.rpc.invalidParams(`Signer is not an owner on account ${targetAddress}`);
     }
 
-    throw standardErrors.rpc.invalidParams(`Signer is not an owner on account ${targetAddress}`);
+    return await toJustanAccount({
+        client: bundlerClient,
+        owners: [account, PERMISSIONS_MANAGER_ADDRESS],
+        ownerIndex,
+        address: targetAddress,
+    });
 }
 
 export async function createSmartAccountEip7702(

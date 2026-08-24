@@ -167,3 +167,31 @@ export type { JawTheme, JawThemeColors, JawThemeMode, JawBorderRadius, JawFontSt
 
 /** Method policy (silent vs interactive RPC classification) **/
 export { SILENT_METHODS, INTERACTIVE_METHODS, isSilentMethod, requiresInteraction } from './method-policy.js';
+
+/**
+ * Symbols the published surface already reached but could not name.
+ *
+ * `standardErrors` is exported below and every one of its members returns an
+ * `EthereumRpcError` built from an `EthErrorsArg` or a `ServerErrorOptions`, so
+ * a consumer typing a catch or a wrapper was already holding these. They had no
+ * importable name, and api-extractor recorded each one as a warning carrying
+ * `src/errors/errors.ts:<line>`. Those coordinates put the committed report at
+ * the mercy of edits that change no API at all: a doc comment above the
+ * declaration shifts the line and reddens `api-check`, which trains everyone to
+ * regenerate the report without reading it.
+ *
+ * Exporting them removes the coordinates and makes the commitment explicit
+ * rather than accidental. The two classes ship runtime, so `instanceof` on them
+ * is now something we support.
+ */
+export {
+    type EthereumErrorOptions,
+    type EthErrorsArg,
+    type ServerErrorOptions,
+    type CustomErrorArg,
+    EthereumRpcError,
+    EthereumProviderError,
+} from './errors/errors.js';
+export type { CallPermission, SpendLimit } from './rpc/permissions.js';
+export type { SendCallsVersion } from './rpc/sendCallsParams.js';
+export type { Address } from './provider/interface.js';

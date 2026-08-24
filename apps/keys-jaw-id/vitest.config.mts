@@ -21,6 +21,8 @@ export default defineConfig({
     watch: false,
     globals: true,
     environment: 'node',
+    // Repairs the `localStorage` global on Node 25+. See the file for why.
+    setupFiles: ['../../vitest.setup.localstorage.ts'],
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     exclude: ['**/node_modules/**', '**/.next/**'],
   },

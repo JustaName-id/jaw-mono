@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+
+  "mainEntryPointFilePath": "<projectFolder>/dist/index.d.ts",
+
+  /**
+   * The committed report of everything this package exports. A change to any
+   * public signature shows up as a diff here, so a breaking change cannot land
+   * without someone seeing it in the PR.
+   *
+   * Regenerate after an intentional change: bunx nx api-update @jaw.id/core
+   * (that target rebuilds first; running api-extractor by hand against a stale
+   * dist/ writes a report describing the previous API).
+   */
+  "apiReport": {
+    "enabled": true,
+    "reportFolder": "<projectFolder>/etc/",
+    "reportFileName": "core.api.md",
+    /** `tmp/` is already gitignored, `temp/` (the default) is not. */
+    "reportTempFolder": "<projectFolder>/tmp/"
+  },
+
+  "docModel": { "enabled": false },
+  "dtsRollup": { "enabled": false },
+  "tsdocMetadata": { "enabled": false },
+
+  "messages": {
+    "compilerMessageReporting": {
+      "default": { "logLevel": "warning" }
+    },
+    "extractorMessageReporting": {
+      "default": { "logLevel": "warning" },
+      /** We do not use release tags, so their absence is not a finding. */
+      "ae-missing-release-tag": { "logLevel": "none" }
+    },
+    "tsdocMessageReporting": {
+      "default": { "logLevel": "none" }
+    }
+  }
+}

@@ -5,12 +5,8 @@ import type { AccountHintData } from '../messages/configMessage.js';
 /**
  * Paymaster configuration for a chain
  */
-export type PaymasterConfig = {
-    /** The paymaster RPC URL */
-    url: string;
-    /** Optional context to pass to paymaster calls (e.g., sponsorshipPolicyId for Pimlico) */
-    context?: Record<string, unknown>;
-};
+import type { PaymasterConfig } from '../provider/interface.js';
+export type { PaymasterConfig };
 
 export type Chain = {
     id: number;

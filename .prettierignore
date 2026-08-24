@@ -16,6 +16,8 @@ coverage
 **/next-env.d.ts
 packages/*/CHANGELOG.md
 apps/docs/docs/dist
+# api-extractor reports: formatting them breaks the comparison against tmp/
+packages/*/etc
 
 # Vite/vitest temp
 vite.config.*.timestamp*
