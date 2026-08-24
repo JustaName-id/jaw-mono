@@ -237,3 +237,7 @@ The daemon also writes runtime state to `~/.jaw/`:
 | `bridge.json`  | Active daemon connection info (port, token, pid) |
 | `session.json` | Cached session state                             |
 | `daemon.log`   | Daemon stdout/stderr for debugging               |
+
+## License
+
+[Apache-2.0](./LICENSE)

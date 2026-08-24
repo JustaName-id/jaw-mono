@@ -1,3 +1,17 @@
+## 1.3.3 (2026-08-20)
+
+### 🩹 Fixes
+
+- **repo:** relicense under apache-2.0 and drop dos chain ([#287](https://github.com/JustaName-id/jaw-mono/pull/287))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.2.3
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 1.3.2 (2026-08-19)
 
 ### 🩹 Fixes

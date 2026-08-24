@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* JAW Hero Demo design tokens (source: JAW-Landing design project).
+   Utility color/font/animation names live in tailwind.config.ts. */
+:root {
+  --bg: #ffffff;
+  --bg-raise: #fafaf9;
+  --bg-raise-2: #f4f4f2;
+  --line: #e7e5e4;
+  --line-2: #d6d3d1;
+  --ink: #0f172a;
+  --ink-2: #475569;
+  --ink-3: #94a3b8;
+  --ink-4: #cbd5e1;
+  --acc: #0f172a;
+  --acc-deep: #020617;
+  --acc-soft: rgba(15, 23, 42, 0.06);
+  --jaw-blue: rgb(8, 81, 255);
+  --amber: #d97706;
+  --amber-bg: #fffbeb;
+  --amber-line: #fde68a;
+  --red: #dc2626;
+  --red-bg: #fef2f2;
+  --red-line: #fecaca;
+  --green: #059669;
+}
+
+::selection {
+  background: var(--acc);
+  color: var(--bg);
+}
+
+/* Contain the CrossPlatform keys.jaw.id dialog inside the demo phone.
+   core's iframe transport appends a top-layer <dialog data-jaw> to
+   document.body with inline fixed/inset-0 styles — there is no container
+   option, so we pin it to the phone screen's rect (published as CSS vars by
+   useDialogEmbed) with !important. The iframe flips from fixed to absolute so
+   the dialog becomes its containing block; no transforms here or keys'
+   visibility guard would shield the frame. */
+html.jaw-embed-active dialog[data-jaw] {
+  position: fixed !important;
+  inset: auto !important;
+  top: var(--jaw-embed-top, 0) !important;
+  left: var(--jaw-embed-left, 0) !important;
+  width: var(--jaw-embed-w, 100vw) !important;
+  height: var(--jaw-embed-h, 100vh) !important;
+  max-width: none !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  border-radius: var(--jaw-embed-radius, 0) !important;
+  background: rgba(15, 23, 42, 0.35) !important;
+}
+html.jaw-embed-active dialog[data-jaw] > iframe {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
