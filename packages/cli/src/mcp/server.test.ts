@@ -201,6 +201,15 @@ describe('jaw_rpc session mode', () => {
     expect(sessionRequestMock).not.toHaveBeenCalled();
   });
 
+  // The way out the refusal points at. Without this, nothing would notice if the
+  // browser route for these ever stopped working and the refusal became a dead end.
+  it.each(['personal_sign', 'eth_signTypedData_v4'])('still signs %s through the browser', async (method) => {
+    const client = await connectClient();
+    await client.callTool({ name: 'jaw_rpc', arguments: { method, params: ['hello'], session: false } });
+    expect(getBridgeMock).toHaveBeenCalled();
+    expect(sessionRequestMock).not.toHaveBeenCalled();
+  });
+
   it.each(['personal_sign', 'eth_signTypedData_v4'])(
     'refuses %s in session mode without reaching the bridge',
     async (method) => {
