@@ -21,34 +21,63 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 
+import type { Address, Hex } from 'viem';
+
 import {
     buildGrantPermissionCall,
     buildRevokePermissionCall,
     encodeExecuteBatchWithPermission,
     type Permission,
     type PermissionsDetail,
+    type SpendPeriod,
     type StorePermissionApiResponse,
 } from './permissions.js';
+
+type JsonSpend = { token: Address; allowance: string; unit: SpendPeriod; multiplier: number };
+type JsonPermission = {
+    account: Address;
+    spender: Address;
+    start: number;
+    end: number;
+    salt: Hex;
+    calls: Array<{ target: Address; selector: Hex; checker: Address }>;
+    spends: JsonSpend[];
+};
+
+/**
+ * Discriminated on `encoder` so a vector cannot quietly reach the wrong builder.
+ * The alternative, one loose `input` bag, made a typo in that field fall through
+ * to whichever branch came last and fail somewhere unrelated.
+ */
+type Vector = { description: string; expected: Hex } & (
+    | {
+          encoder: 'buildGrantPermissionCall';
+          input: { account: Address; spender: Address; expiry: number; start: number; permissions: PermissionsDetail };
+      }
+    | { encoder: 'buildRevokePermissionCall'; input: { relayPermission: StorePermissionApiResponse } }
+    | {
+          encoder: 'encodeExecuteBatchWithPermission';
+          input: { permission: JsonPermission; calls: Array<{ target: Address; value: string; data: Hex }> };
+      }
+);
 
 /** Read rather than imported, so the vectors stay plain data with no build wiring. */
 const vectors: Vector[] = JSON.parse(
     readFileSync(new URL('../../vectors/permission-calls.json', import.meta.url), 'utf8')
 );
 
-type Vector = { description: string; encoder: string; input: Record<string, any>; expected: string };
-
 /**
  * `apiPermissionsToPermission` stamps `start` from the clock and draws `salt`
  * from `Math.random`, so the grant vectors pin those two sources rather than the
  * encoder. Everything downstream of them stays real.
  */
-function withFixedStartAndSalt(start: number, run: () => void) {
+function withFixedStartAndSalt<T>(start: number, run: () => T): T {
     vi.useFakeTimers();
     vi.setSystemTime(start * 1000);
-    // 64 nibbles of Math.random(), floored, so a constant 0 gives salt 0.
+    // The salt is 64 nibbles of Math.random(), floored, so a constant 0 gives 0.
     const random = vi.spyOn(Math, 'random').mockReturnValue(0);
     try {
-        run();
+        return run();
     } finally {
         random.mockRestore();
         vi.useRealTimers();
@@ -59,42 +88,36 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-function encode(vector: Vector): string {
-    const { encoder, input } = vector;
+/** The JSON carries bigints as strings, since it has to survive a round trip. */
+function toPermission(permission: JsonPermission): Permission {
+    return {
+        ...permission,
+        salt: BigInt(permission.salt),
+        spends: permission.spends.map((spend) => ({ ...spend, allowance: BigInt(spend.allowance) })),
+    };
+}
 
-    if (encoder === 'buildGrantPermissionCall') {
-        let data = '';
-        withFixedStartAndSalt(input.start, () => {
-            data = buildGrantPermissionCall(
-                input.account,
-                input.spender,
-                input.expiry,
-                input.permissions as PermissionsDetail
-            ).data;
-        });
-        return data;
+function encode(vector: Vector): Hex {
+    switch (vector.encoder) {
+        case 'buildGrantPermissionCall': {
+            const { account, spender, expiry, start, permissions } = vector.input;
+            return withFixedStartAndSalt(
+                start,
+                () => buildGrantPermissionCall(account, spender, expiry, permissions).data
+            );
+        }
+        case 'buildRevokePermissionCall':
+            return buildRevokePermissionCall(vector.input.relayPermission).data;
+        case 'encodeExecuteBatchWithPermission': {
+            const calls = vector.input.calls.map((call) => ({ ...call, value: BigInt(call.value) }));
+            return encodeExecuteBatchWithPermission(toPermission(vector.input.permission), calls);
+        }
+        default:
+            // The union above is compile-time only, and the vectors arrive
+            // through JSON.parse. Say which name is wrong rather than letting a
+            // typo return undefined and fail as a byte mismatch.
+            throw new Error(`Unknown encoder in permission-calls.json: ${(vector as Vector).encoder}`);
     }
-
-    if (encoder === 'buildRevokePermissionCall') {
-        return buildRevokePermissionCall(input.relayPermission as StorePermissionApiResponse).data;
-    }
-
-    const permission = {
-        ...input.permission,
-        salt: BigInt(input.permission.salt),
-        spends: input.permission.spends.map((spend: { allowance: string }) => ({
-            ...spend,
-            allowance: BigInt(spend.allowance),
-        })),
-    } as Permission;
-
-    const calls = input.calls.map((call: { target: string; value: string; data: string }) => ({
-        target: call.target as `0x${string}`,
-        value: BigInt(call.value),
-        data: call.data as `0x${string}`,
-    }));
-
-    return encodeExecuteBatchWithPermission(permission, calls);
 }
 
 describe('the permission calldata, against vectors from the contract signature', () => {

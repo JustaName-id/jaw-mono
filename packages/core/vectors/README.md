@@ -129,36 +129,50 @@ four-byte selector is pinned too. That matters here: the selector is a hash of
 the whole signature, so retyping or reordering a field inside the `Permission`
 tuple moves it even on a call whose arrays are empty.
 
-The tuple is long enough to be worth naming once:
+The tuple and the permission value are both long, and all three entries reuse
+them, so name them once:
 
 ```bash
 PERM='(address,address,uint48,uint48,uint256,(address,bytes4,address)[],(address,uint160,uint8,uint16)[])'
+
+PERMVAL='(0x1111111111111111111111111111111111111111,0x2222222222222222222222222222222222222222,1700000000,2000000000,42,[(0x3333333333333333333333333333333333333333,0xa9059cbb,0x0000000000000000000000000000000000000000)],[(0x4444444444444444444444444444444444444444,1000000,2,7)])'
 ```
 
 Third entry, `buildRevokePermissionCall`:
 
 ```bash
-cast calldata "revoke($PERM)" \
-  "(0x1111111111111111111111111111111111111111,0x2222222222222222222222222222222222222222,\
-1700000000,2000000000,42,[(0x3333333333333333333333333333333333333333,0xa9059cbb,\
-0x0000000000000000000000000000000000000000)],[(0x4444444444444444444444444444444444444444,1000000,2,7)])"
+cast calldata "revoke($PERM)" "$PERMVAL"
 ```
 
-Fourth entry, `encodeExecuteBatchWithPermission`, same permission plus two calls:
+Fourth entry, `encodeExecuteBatchWithPermission`, the same permission plus two
+calls. The first call's `data` is itself a `transfer`, derived rather than
+written out, because hand-counting the zero padding is how you end up deriving
+something one nibble short and concluding the vector is broken:
 
 ```bash
-cast calldata "executeBatch($PERM,(address,uint256,bytes)[])" \
-  "<the permission above>" \
-  "[(0x5555555555555555555555555555555555555555,0,0xa9059cbb$(printf '0%.0s' {1..24})7777777777777777777777777777777777777777$(printf '0%.0s' {1..58})f4240),\
+XFER=$(cast calldata "transfer(address,uint256)" 0x7777777777777777777777777777777777777777 1000000)
+
+cast calldata "executeBatch($PERM,(address,uint256,bytes)[])" "$PERMVAL" \
+  "[(0x5555555555555555555555555555555555555555,0,$XFER),\
 (0x6666666666666666666666666666666666666666,1000000000000000000,0x)]"
 ```
 
-The two grant entries carry a `start` and no salt because
-`apiPermissionsToPermission` stamps `start` from `Date.now()` and draws the salt
-from `Math.random()`. The test freezes the clock and pins `Math.random` to 0, so
-those vectors are generated with `start` at the frozen value and salt 0. The
-period is the other thing to watch: `unit: 'year'` has no enum member, so the
-second entry is generated as `Month` with the multiplier times twelve.
+Fifth entry, every dynamic array empty, which is where a head/tail offset
+mistake shows and where only the selector is left to catch a retyped field:
+
+```bash
+cast calldata "executeBatch($PERM,(address,uint256,bytes)[])" \
+  '(0x1111111111111111111111111111111111111111,0x2222222222222222222222222222222222222222,0,281474976710655,0,[],[])' \
+  '[]'
+```
+
+The two grant entries are the ones that need care. `apiPermissionsToPermission`
+stamps `start` from `Date.now()` and draws the salt from `Math.random()`, so the
+test freezes the clock at the `start` recorded in the vector and pins
+`Math.random` to 0, which makes the salt 0. Generate them with those two values,
+not with the 42 the other entries use. The period is the other thing to watch:
+`unit: 'year'` has no enum member, so the second entry encodes as `Month` with
+the multiplier times twelve.
 
 To read a vector back:
 
