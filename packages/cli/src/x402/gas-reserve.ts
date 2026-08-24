@@ -9,9 +9,10 @@ import type { UsdcAsset } from './asset-registry.js';
  * permission manager as a co-owner, cost 0.0094 USDC on Base Sepolia. A tenth of
  * a token leaves ten times that.
  *
- * The grant seeds the same amount, so the two move together. @jaw.id/core owns
- * that constant in `account/spenderPrefund.ts`; this mirrors it rather than
- * importing it, because the CLI lazy-loads core to keep it off startup.
+ * The grant seeds the session too, but it prices its own amount off the
+ * paymaster's rate for the token (`account/spenderPrefund.ts` in @jaw.id/core),
+ * so this is no longer a copy of that number and the two do not have to match.
+ * All that is asked of either is that it covers an operation.
  *
  * It costs the granted allowance 0.10 once per session and not once per refill:
  * a refill fills the payer to price plus reserve, the payment takes the price,

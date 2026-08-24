@@ -1588,9 +1588,10 @@ describe('Account — prefunding the spender in the grant', () => {
     const SPENDER = '0x2222222222222222222222222222222222222222' as `0x${string}`;
     const PERMISSIONS = { spends: [{ token: TOKEN, allowance: '10000000', unit: 'day' }] };
 
-    async function grant(options?: { prefundSpender?: boolean }, balance = 5_000_000n) {
+    async function grant(options?: { prefundSpender?: boolean }, balance = 5_000_000n, paymasterUrlOverride?: string) {
         const { createSmartAccount } = await import('./smartAccount.js');
         const { grantPermissions } = await import('../rpc/permissions.js');
+        const { fetchTokenQuotes } = await import('./erc20Paymaster.js');
 
         vi.mocked(createSmartAccount).mockResolvedValue({
             address: '0x1234567890123456789012345678901234567890',
@@ -1601,11 +1602,15 @@ describe('Account — prefunding the spender in the grant', () => {
         // The spender is empty, which is the case the prefund exists for. Both
         // balances answering the same number made it look already funded.
         vi.mocked(createPublicClient).mockReturnValue({
-            readContract: vi.fn(async ({ functionName, args }: { functionName: string; args?: unknown[] }) => {
-                if (functionName === 'decimals') return 6;
-                return (args?.[0] as string)?.toLowerCase() === SPENDER.toLowerCase() ? 0n : balance;
-            }),
+            readContract: vi.fn(async ({ args }: { args?: unknown[] }) =>
+                (args?.[0] as string)?.toLowerCase() === SPENDER.toLowerCase() ? 0n : balance
+            ),
+            // 0.001 gwei, the order Base charges.
+            getGasPrice: vi.fn().mockResolvedValue(1_000_000n),
         } as never);
+        // The paymaster's rate is what turns an amount of gas into an amount of
+        // this token. Three thousand a coin, six decimals.
+        vi.mocked(fetchTokenQuotes).mockResolvedValue([{ exchangeRate: 3_000_000_000n }] as never);
         vi.mocked(grantPermissions).mockResolvedValue({ permissionId: '0xperm' } as never);
 
         const account = await Account.fromLocalAccount(
@@ -1617,12 +1622,14 @@ describe('Account — prefunding the spender in the grant', () => {
             9999999999,
             SPENDER,
             PERMISSIONS as never,
-            undefined,
+            paymasterUrlOverride,
             undefined,
             undefined,
             options
         );
-        return vi.mocked(grantPermissions).mock.calls.at(-1)?.[8] ?? [];
+        const prepended = vi.mocked(grantPermissions).mock.calls.at(-1)?.[8] ?? [];
+        // The parameter also takes a lone call, which this path never sends.
+        return Array.isArray(prepended) ? prepended : [prepended];
     }
 
     beforeEach(() => {
@@ -1642,7 +1649,22 @@ describe('Account — prefunding the spender in the grant', () => {
         expect(prepended[0].data).toBeDefined();
         const decoded = decodeFunctionData({ abi: erc20Abi, data: prepended[0].data as `0x${string}` });
         expect(decoded.functionName).toBe('transfer');
-        expect(decoded.args).toEqual([SPENDER, 100_000n]);
+        // PREFUND_GAS at that price and that rate: 0.006 USDC.
+        expect(decoded.args).toEqual([SPENDER, 6_000n]);
+    });
+
+    // The rate decides how much leaves the account, and `paymasterService` lets
+    // the requester name the server that answers with it. The destination and
+    // the token are already the wallet's to choose; so is the amount.
+    it('prices the transfer against its own paymaster, not the one the request named', async () => {
+        const { fetchTokenQuotes } = await import('./erc20Paymaster.js');
+
+        await grant({ prefundSpender: true }, 5_000_000n, 'https://paymaster.the-requester-chose');
+
+        for (const call of vi.mocked(fetchTokenQuotes).mock.calls) {
+            expect(call[0]).toBe(PAYMASTER_URL);
+        }
+        expect(vi.mocked(fetchTokenQuotes)).toHaveBeenCalled();
     });
 
     // Losing the grant to a reverted transfer is worse than the sponsored op it

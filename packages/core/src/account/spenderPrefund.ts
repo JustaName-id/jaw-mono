@@ -18,14 +18,26 @@ import type { PermissionsDetail } from '../rpc/permissions.js';
  */
 
 /**
- * What a session's first operation is left to pay its fee with, as a fraction of
- * one whole token (a tenth, so 0.10 USDC).
+ * The gas a session's first operation is left able to pay for.
  *
- * @jaw.id/cli mirrors this in `x402/gas-reserve.ts` rather than importing it,
- * because the CLI lazy-loads this package to keep it off startup. Keep the two
- * in step.
+ * Gas rather than an amount of token: a tenth of a token is $0.10 in USDC and
+ * three hundred in WETH, and the permission's spend token is whatever the
+ * requester wrote. The paymaster's exchange rate turns this into that token.
+ *
+ * Sized against that first op, the most expensive one a session sends, since it
+ * carries the EIP-7702 authorization and bootstraps the permission manager as a
+ * co-owner: something under a million of gas in limits, so this is roughly three
+ * times it. That covers the market moving between this grant and that op, and
+ * covers the paymaster charging at `maxFeePerGas` while this prices at the
+ * current one.
+ *
+ * Not more than roughly that, because the multiplier is not free everywhere: the
+ * same budget is a fraction of a cent on Base and tens of dollars on mainnet,
+ * and all of it moves to the session address. Not less either, because the op
+ * has to land. After it does, the spender is topped up by refills rather than by
+ * this.
  */
-const PREFUND_DIVISOR = 10n;
+const PREFUND_GAS = 2_000_000n;
 
 /** Opt-in for the grant. Off by default: a wallet does not move funds unasked. */
 export interface GrantPermissionsOptions {
@@ -38,8 +50,16 @@ export interface GrantPermissionsOptions {
 
 /** Reads this needs, injected so the caller owns the client and the caching. */
 export interface PrefundReader {
-    decimals(token: Address): Promise<number>;
     balanceOf(token: Address, owner: Address): Promise<bigint>;
+    /** Price per gas on this chain right now, in wei. */
+    gasPrice(): Promise<bigint>;
+    /**
+     * The paymaster's rate for this token, wei to its smallest unit, or null
+     * when the paymaster does not take it. Null is also an answer: a token the
+     * paymaster will not accept cannot pay the spender's fee, so sending it
+     * would not do what the prefund is for.
+     */
+    exchangeRate(token: Address): Promise<bigint | null>;
 }
 
 export interface PrefundArgs {
@@ -75,8 +95,12 @@ export async function buildSpenderPrefundCall(
     // and picking one ourselves would move funds the permission never mentioned.
     if (!token) return null;
 
-    const decimals = await args.read.decimals(token);
-    const amount = 10n ** BigInt(decimals) / PREFUND_DIVISOR;
+    // `exchangeRate` is wei to the token's smallest unit, so this reads as
+    // "what PREFUND_GAS costs, in this token, at this moment, on this chain".
+    const exchangeRate = await args.read.exchangeRate(token);
+    if (exchangeRate === null) return null;
+    const amount = (PREFUND_GAS * (await args.read.gasPrice()) * exchangeRate) / 10n ** 18n;
+    if (amount === 0n) return null;
 
     // Re-granting to the same spender, which the CLI does whenever a session is
     // recreated with the same key. It still holds the last one.
@@ -104,7 +128,13 @@ export async function buildSpenderPrefundCall(
 function paymasterFeeIn(token: Address, context?: Record<string, unknown>): bigint | null {
     const contextToken = context?.token as string | undefined;
     const gas = context?.gas as string | bigint | undefined;
-    if (gas === undefined || contextToken?.toLowerCase() !== token.toLowerCase()) return 0n;
+    if (contextToken?.toLowerCase() !== token.toLowerCase()) return 0n;
+    // A context that names this token but no `gas` is the path where
+    // `createErc20ApprovalCall` sizes the ceiling itself, so the paymaster does
+    // charge here and there is a fee to leave behind; we just cannot see it from
+    // this side. Null, like an unreadable one: sending the transfer against a
+    // fee we cannot size is how the account ends up short in postOp.
+    if (gas === undefined) return null;
     try {
         return BigInt(gas);
     } catch {

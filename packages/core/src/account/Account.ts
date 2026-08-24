@@ -1178,13 +1178,44 @@ export class Account {
         });
 
         const read = {
-            decimals: (token: Address) =>
-                publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'decimals' }),
             balanceOf: (token: Address, owner: Address) =>
                 publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [owner] }),
+            gasPrice: () => publicClient.getGasPrice(),
+            exchangeRate: async (token: Address) => {
+                // This wallet's own paymaster, deliberately not the one the
+                // request may have supplied through `paymasterService`. That URL
+                // is the requester's to choose, and the rate it answers with is
+                // what decides how much leaves the account, to a spender the
+                // same requester named. The amount stays the wallet's, like the
+                // destination and the token.
+                //
+                // No paymaster is no rate, and no rate is no prefund: the token
+                // the spender would be holding could not pay for anything.
+                const url = this._chain.paymaster?.url;
+                if (!url) return null;
+                try {
+                    const { fetchTokenQuotes } = await import('./erc20Paymaster.js');
+                    const quotes = await fetchTokenQuotes(url, this._chain.id, [token]);
+                    return quotes[0]?.exchangeRate ?? null;
+                } catch (error) {
+                    // The grant is what the user came to do; a paymaster that
+                    // will not quote is not a reason to fail it. It is a reason
+                    // to say so, though: what the caller sees otherwise is a
+                    // grant that landed and a session that cannot pay for its
+                    // first operation, with nothing connecting the two.
+                    console.warn('Could not price the spender prefund, granting without it:', error);
+                    return null;
+                }
+            },
         };
 
-        return await buildSpenderPrefundCall({ account, spender, permissions, paymasterContext, read });
+        return await buildSpenderPrefundCall({
+            account,
+            spender,
+            permissions,
+            paymasterContext,
+            read,
+        });
     }
 
     /**

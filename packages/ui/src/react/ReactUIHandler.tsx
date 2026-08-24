@@ -2551,14 +2551,17 @@ function PermissionDialogWrapper({
         calls: request.data.permissions.calls,
       };
 
-      // Grant permissions using Account class with paymaster context
+      // Grant permissions using Account class with paymaster context.
+      // The last argument needs a core that carries the prefund; without it the
+      // spender is granted the permission and holds nothing to pay its first op.
       const result = await account.grantPermissions(
         request.data.expiry,
         request.data.spender as Address,
         permissionsDetail,
         computedPaymasterUrl,
         computedPaymasterContext,
-        request.data.address
+        request.data.address,
+        { prefundSpender: request.data.capabilities?.prefundSpender === true }
       );
 
       setStatus('Permissions granted successfully!');

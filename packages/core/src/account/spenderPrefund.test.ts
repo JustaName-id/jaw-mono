@@ -7,22 +7,30 @@ const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as Address;
 const ACCOUNT = '0x1111111111111111111111111111111111111111' as Address;
 const SPENDER = '0x2222222222222222222222222222222222222222' as Address;
 
-/** 0.10 USDC, six decimals. What one whole tenth of a token comes to. */
-const PREFUND = 100_000n;
+/**
+ * A Base-ish gas price at 0.001 gwei and the paymaster's rate for a 6-decimal
+ * stable with ether around three thousand. `PREFUND_GAS` at those comes to
+ * 0.006 USDC, which is the order the measured first operation cost.
+ */
+const GAS_PRICE = 1_000_000n;
+const RATE = 3_000_000_000n;
+const PREFUND = 6_000n;
 
 const usdcSpend: PermissionsDetail = {
     spends: [{ token: USDC, allowance: '10000000', unit: 'day' as never }],
 };
 
-function reader(balances: Partial<Record<Address, bigint>>, decimals = 6): PrefundReader {
+function reader(balances: Partial<Record<Address, bigint>>, overrides: Partial<PrefundReader> = {}): PrefundReader {
     return {
-        decimals: async () => decimals,
         balanceOf: async (_token, owner) => balances[owner] ?? 0n,
+        gasPrice: async () => GAS_PRICE,
+        exchangeRate: async () => RATE,
+        ...overrides,
     };
 }
 
 describe('buildSpenderPrefundCall', () => {
-    it('transfers a tenth of a token to the spender being approved', async () => {
+    it('transfers an operation of gas, priced in the token the permission names', async () => {
         const call = await buildSpenderPrefundCall({
             account: ACCOUNT,
             spender: SPENDER,
@@ -36,16 +44,32 @@ describe('buildSpenderPrefundCall', () => {
         expect(decoded.args).toEqual([SPENDER, PREFUND]);
     });
 
-    it('scales the amount to the token decimals', async () => {
+    // The amount used to be a tenth of a token whatever the token was, which is
+    // $0.10 in USDC and three hundred in WETH. It comes off the rate now, so the
+    // token's decimals no longer decide it.
+    it('takes the amount from the rate rather than from the token', async () => {
         const call = await buildSpenderPrefundCall({
             account: ACCOUNT,
             spender: SPENDER,
             permissions: usdcSpend,
-            read: reader({ [ACCOUNT]: 10n ** 18n }, 18),
+            read: reader({ [ACCOUNT]: 10n ** 18n }, { exchangeRate: async () => 10n ** 18n }),
         });
 
         const decoded = decodeFunctionData({ abi: erc20Abi, data: call!.data });
-        expect(decoded.args).toEqual([SPENDER, 10n ** 17n]);
+        expect(decoded.args).toEqual([SPENDER, 2_000_000n * GAS_PRICE]);
+    });
+
+    // Sending it would leave the spender holding something it cannot pay a fee
+    // with, which is the whole of what the prefund is for.
+    it('does nothing when the paymaster does not take the token', async () => {
+        const call = await buildSpenderPrefundCall({
+            account: ACCOUNT,
+            spender: SPENDER,
+            permissions: usdcSpend,
+            read: reader({ [ACCOUNT]: 5_000_000n }, { exchangeRate: async () => null }),
+        });
+
+        expect(call).toBeNull();
     });
 
     // Picking one ourselves would move funds the permission never mentioned.
@@ -145,6 +169,36 @@ describe('buildSpenderPrefundCall', () => {
         });
 
         expect(call).toBeNull();
+    });
+
+    // A context naming this token but no `gas` is the path where the approval
+    // sizes the ceiling itself. The paymaster still charges, so a fee we cannot
+    // see is one we cannot leave behind.
+    it('does nothing when the context names this token without a fee', async () => {
+        const call = await buildSpenderPrefundCall({
+            account: ACCOUNT,
+            spender: SPENDER,
+            permissions: usdcSpend,
+            paymasterContext: { token: USDC },
+            read: reader({ [ACCOUNT]: 5_000_000n }),
+        });
+
+        expect(call).toBeNull();
+    });
+
+    // The other half of that rule: a context with no `gas` naming some other
+    // token is a paymaster charging elsewhere, which takes nothing from the
+    // balance the transfer comes out of and leaves nothing to reserve.
+    it('still sends when the context names another token without a fee', async () => {
+        const call = await buildSpenderPrefundCall({
+            account: ACCOUNT,
+            spender: SPENDER,
+            permissions: usdcSpend,
+            paymasterContext: { token: '0x9999999999999999999999999999999999999999' },
+            read: reader({ [ACCOUNT]: PREFUND }),
+        });
+
+        expect(call).not.toBeNull();
     });
 
     // The fee used to be decided against `spends[0]` while the prefund went out
