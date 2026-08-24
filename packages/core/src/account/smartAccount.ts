@@ -15,7 +15,7 @@ import {
     encodeFunctionData,
     decodeFunctionResult,
 } from 'viem';
-import { call, getCode, getGasPrice, readContract } from 'viem/actions';
+import { call, getCode, getGasPrice, multicall, readContract } from 'viem/actions';
 import {
     abi,
     factoryAbi,
@@ -161,11 +161,17 @@ export const getBundlerClient = (
     const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chain.id);
 
     // Deliberately no `batch: { multicall: true }` here, unlike the store's client in
-    // store/chain-clients/utils.ts. Nothing issues an eth_call through this one: the
-    // account implementation and findOwnerIndex both read through the bundler client
-    // below, and all this client is asked for is estimateFeesPerGas/getGasPrice. Setting
-    // it would only put a Multicall3 hop and a setTimeout(0) defer on the userOp path
-    // for no round-trip saved.
+    // store/chain-clients/utils.ts. That option folds eth_calls that happen to be issued
+    // in the same tick, and nothing on this path fans out that way: the account
+    // implementation and scanOwnerIndex read through the bundler client below, and this
+    // one is asked for estimateFeesPerGas/getGasPrice. scanOwnerIndex does aggregate its
+    // owner reads, but it calls the multicall action outright rather than relying on the
+    // scheduler, so the option would buy nothing and would add a Multicall3 hop and a
+    // setTimeout(0) defer to the userOp path.
+    //
+    // It does still matter that `viemChain` carries the Multicall3 address, which is why
+    // scanOwnerIndex reads it off the chain and falls back when it is missing: an
+    // unlisted chain resolves to `undefined` here.
     const publicClient = createPublicClient({
         chain: viemChain,
         transport: http(chain.rpcUrl),
@@ -603,18 +609,55 @@ async function scanOwnerIndex({ address, client, publicKey }: FindOwnerIndexPara
         functionName: 'nextOwnerIndex',
     });
 
-    const formatted = formatPublicKey(publicKey);
+    const slots = Number(nextOwnerIndex);
+    if (slots === 0) {
+        return undefined;
+    }
 
-    for (let i = 0; i < Number(nextOwnerIndex); i++) {
-        const owner = await readContract(client, {
-            address,
-            abi,
-            functionName: 'ownerAtIndex',
-            args: [BigInt(i)],
+    const formatted = formatPublicKey(publicKey).toLowerCase();
+    const contracts = Array.from(
+        { length: slots },
+        (_, i) =>
+            ({
+                address,
+                abi,
+                functionName: 'ownerAtIndex',
+                args: [BigInt(i)],
+            }) as const
+    );
+
+    // `nextOwnerIndex` only ever grows, so an account that has rotated owners
+    // many times has a scan far longer than its live owner count, and this runs
+    // on every signing path. One aggregate3 keeps it at a single round-trip;
+    // viem chunks the batch by calldata size on its own.
+    //
+    // `allowFailure: false` is safe because a removed slot is a `delete` on the
+    // `s_ownerAtIndex` mapping (MultiOwnable.sol:304), so it reads back as empty
+    // bytes and simply does not match. Nothing here reverts.
+    //
+    // Multicall3 is not deployed everywhere, and getBundlerClient builds its
+    // public client from `SUPPORTED_CHAINS.find(...)`, which is undefined for a
+    // chain the SDK does not know. Rather than turn an unknown chain into a
+    // failure, fall back to the sequential read, which also short-circuits on
+    // the first match.
+    const multicallAddress = client.chain?.contracts?.multicall3?.address;
+
+    if (multicallAddress) {
+        const owners = await multicall(client, {
+            contracts,
+            allowFailure: false,
+            multicallAddress,
         });
 
-        if (owner.toLowerCase() === formatted.toLowerCase()) {
-            return i;
+        const hit = owners.findIndex((owner) => owner.toLowerCase() === formatted);
+        return hit === -1 ? undefined : hit;
+    }
+
+    for (const [index, contract] of contracts.entries()) {
+        const owner = await readContract(client, contract);
+
+        if (owner.toLowerCase() === formatted) {
+            return index;
         }
     }
 
@@ -631,13 +674,12 @@ export async function findOwnerIndex({ address, client, publicKey }: FindOwnerIn
         return 0;
     }
 
-    try {
-        return (await scanOwnerIndex({ address, client, publicKey })) ?? 0;
-    } catch (error) {
-        // If reading contract fails, return 0
-        console.warn('Failed to read owner information:', error);
-        return 0;
-    }
+    // Deliberately not wrapped in a try/catch. The `!code` guard above is what
+    // the old catch was really covering, and everything that reaches here is a
+    // live RPC failure. Swallowing one and returning 0 wraps the signature for
+    // whoever holds slot 0, which the account rejects on chain with an opaque
+    // revert. Letting it propagate makes it a diagnosable error at the call site.
+    return (await scanOwnerIndex({ address, client, publicKey })) ?? 0;
 }
 
 /**

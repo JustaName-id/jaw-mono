@@ -4,6 +4,7 @@ import { type Hex, type Address } from 'viem';
 vi.mock('viem/actions', () => ({
     getCode: vi.fn(),
     readContract: vi.fn(),
+    multicall: vi.fn(),
     getGasPrice: vi.fn(),
     call: vi.fn(),
 }));
@@ -80,7 +81,7 @@ vi.mock('viem/account-abstraction', () => ({
     toWebAuthnAccount: vi.fn(),
 }));
 
-import { getCode, readContract } from 'viem/actions';
+import { getCode, multicall, readContract } from 'viem/actions';
 import { toJustanAccount } from './toJustanAccount.js';
 import { createSmartAccountForAddress, findOwnerIndex } from './smartAccount.js';
 
@@ -90,6 +91,7 @@ const MOCK_PUBLIC_KEY =
 const MOCK_LOCAL_ADDRESS = '0xabcdef0123456789abcdef0123456789abcdef01' as Address;
 const MOCK_LOCAL_ADDRESS_PADDED = '0x000000000000000000000000abcdef0123456789abcdef0123456789abcdef01' as Hex;
 const MOCK_BUNDLER_CLIENT = { chain: { id: 1 } } as any;
+const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as Address;
 const MOCK_WEBAUTHN_ACCOUNT = {
     type: 'webAuthn' as const,
     publicKey: MOCK_PUBLIC_KEY,
@@ -297,15 +299,99 @@ describe('findOwnerIndex', () => {
         ).resolves.toBe(0);
     });
 
-    it('returns 0 when reading the account fails', async () => {
+    // The account is deployed, so the read failing is the RPC failing. Returning
+    // 0 here used to look like a safe default and is not: it wraps the signature
+    // for whoever holds slot 0, and the account rejects that on chain with a
+    // revert that says nothing about the RPC.
+    it('surfaces an RPC failure instead of signing as owner 0', async () => {
         vi.mocked(getCode).mockResolvedValue('0x1234' as Hex);
         vi.mocked(readContract).mockRejectedValueOnce(new Error('rpc down'));
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        await expect(
+            findOwnerIndex({ address: MOCK_TARGET_ADDRESS, client: MOCK_BUNDLER_CLIENT, publicKey: MOCK_PUBLIC_KEY })
+        ).rejects.toThrow('rpc down');
+    });
+
+    it('does not read a slot on an account that has never had one', async () => {
+        vi.mocked(getCode).mockResolvedValue('0x1234' as Hex);
+        vi.mocked(readContract).mockResolvedValueOnce(0n); // nextOwnerIndex
 
         await expect(
             findOwnerIndex({ address: MOCK_TARGET_ADDRESS, client: MOCK_BUNDLER_CLIENT, publicKey: MOCK_PUBLIC_KEY })
         ).resolves.toBe(0);
-        expect(warn).toHaveBeenCalled();
-        warn.mockRestore();
+        expect(readContract).toHaveBeenCalledTimes(1);
+        expect(multicall).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * `nextOwnerIndex` never shrinks, so the scan is as long as the account's whole
+ * rotation history. These pin which of the two access patterns runs, because the
+ * fallback is what a chain without Multicall3 gets and it has to keep working.
+ */
+describe('how findOwnerIndex reads the owner slots', () => {
+    const withMulticall3 = {
+        chain: { id: 1, contracts: { multicall3: { address: MULTICALL3_ADDRESS } } },
+    } as any;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(getCode).mockResolvedValue('0x1234' as Hex);
+    });
+
+    it('folds every slot into one aggregate when the chain has Multicall3', async () => {
+        vi.mocked(readContract).mockResolvedValueOnce(300n); // nextOwnerIndex
+        const slots = Array.from({ length: 300 }, (_, i) =>
+            i === 297 ? MOCK_PUBLIC_KEY : (('0x' + 'aa'.repeat(20).padStart(64, '0')) as Hex)
+        );
+        vi.mocked(multicall).mockResolvedValue(slots as never);
+
+        await expect(
+            findOwnerIndex({ address: MOCK_TARGET_ADDRESS, client: withMulticall3, publicKey: MOCK_PUBLIC_KEY })
+        ).resolves.toBe(297);
+
+        // One read for the bound, one aggregate for the 300 slots.
+        expect(readContract).toHaveBeenCalledTimes(1);
+        expect(multicall).toHaveBeenCalledTimes(1);
+        const [, params] = vi.mocked(multicall).mock.calls[0] as [unknown, any];
+        expect(params.contracts).toHaveLength(300);
+        expect(params.multicallAddress).toBe(MULTICALL3_ADDRESS);
+    });
+
+    // `_removeOwnerAtIndex` deletes the mapping entry (MultiOwnable.sol:304), so a
+    // removed slot reads back as empty bytes rather than reverting. That is what
+    // makes `allowFailure: false` safe on the aggregate.
+    it('reads a removed slot back as empty and keeps scanning', async () => {
+        vi.mocked(readContract).mockResolvedValueOnce(3n); // nextOwnerIndex
+        vi.mocked(multicall).mockResolvedValue(['0x', '0x', MOCK_PUBLIC_KEY] as never);
+
+        await expect(
+            findOwnerIndex({ address: MOCK_TARGET_ADDRESS, client: withMulticall3, publicKey: MOCK_PUBLIC_KEY })
+        ).resolves.toBe(2);
+    });
+
+    it('returns 0 when the aggregate holds no match', async () => {
+        vi.mocked(readContract).mockResolvedValueOnce(2n); // nextOwnerIndex
+        vi.mocked(multicall).mockResolvedValue(['0x', '0x'] as never);
+
+        await expect(
+            findOwnerIndex({ address: MOCK_TARGET_ADDRESS, client: withMulticall3, publicKey: MOCK_PUBLIC_KEY })
+        ).resolves.toBe(0);
+    });
+
+    // getBundlerClient resolves its chain through `SUPPORTED_CHAINS.find(...)`,
+    // which is undefined for a chain the SDK does not know, and viem cannot
+    // aggregate without the address. The sequential read has to stay.
+    it('reads slot by slot when the chain carries no Multicall3 address', async () => {
+        mockAccountWithRemovedOwner([undefined, MOCK_PUBLIC_KEY, undefined]);
+
+        await expect(
+            findOwnerIndex({ address: MOCK_TARGET_ADDRESS, client: MOCK_BUNDLER_CLIENT, publicKey: MOCK_PUBLIC_KEY })
+        ).resolves.toBe(1);
+
+        expect(multicall).not.toHaveBeenCalled();
+        // nextOwnerIndex, then slot 0 and slot 1. It stops at the match rather
+        // than reading slot 2.
+        expect(readContract).toHaveBeenCalledTimes(3);
     });
 });
