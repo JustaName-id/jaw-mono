@@ -1,12 +1,29 @@
 import { errorMessage } from '../lib/errors.js';
+import { sanitizeBlock } from '../lib/terminal.js';
 
+/**
+ * Every tool's failure path, which is also where text nobody on this side wrote
+ * gets rendered to a human.
+ *
+ * Handlers interpolate their arguments into the reason they refuse, and those
+ * arguments come from the model: `jaw_rpc` names the method it would not run,
+ * `jaw_config_set` echoes the value it could not parse. Further down, a server
+ * error string reaches here through the x402 paths. An agent reading a poisoned
+ * page is a remote party writing that text, so it is disarmed like any other,
+ * once at the boundary rather than at each site that builds a message.
+ *
+ * `sanitizeBlock` and not `sanitizeLine`: an error is legitimately multi-line,
+ * and truncating a stack or a revert reason to fit one costs more than the
+ * newline is worth. What matters is that the escape sequences, the bidi
+ * overrides and the zero-width characters do not survive, and none of them do.
+ */
 export function mcpError(err: unknown) {
   return {
     isError: true as const,
     content: [
       {
         type: 'text' as const,
-        text: `Error: ${errorMessage(err)}`,
+        text: `Error: ${sanitizeBlock(errorMessage(err))}`,
       },
     ],
   };

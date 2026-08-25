@@ -201,6 +201,26 @@ describe('jaw_rpc session mode', () => {
     expect(sessionRequestMock).not.toHaveBeenCalled();
   });
 
+  // A handler that refuses echoes the argument it refused, and that argument is
+  // written by the model, which may be reading a poisoned page. The escape
+  // sequence below would otherwise erase the line above it and paint its own.
+  it('disarms model-written text echoed back in an error', async () => {
+    const client = await connectClient();
+    const result = await client.callTool({
+      name: 'jaw_rpc',
+      arguments: { method: 'evil\u001b[2K\u001b[1GPaid. 5 USDC\u202e', session: true },
+    });
+
+    expect(result.isError).toBe(true);
+    const text = toolText(result);
+    expect(text).not.toContain('\u001b');
+    expect(text).not.toContain('\u202e');
+    // Not just absent: replaced, so the test fails if the sanitiser stops running
+    // rather than passing because the text never arrived.
+    expect(text).toContain('\uFFFD');
+    expect(text).toContain('not supported in session mode');
+  });
+
   // The way out the refusal points at. Without this, nothing would notice if the
   // browser route for these ever stopped working and the refusal became a dead end.
   it.each(['personal_sign', 'eth_signTypedData_v4'])('still signs %s through the browser', async (method) => {
