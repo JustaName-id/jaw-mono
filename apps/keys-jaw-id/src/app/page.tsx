@@ -2,16 +2,14 @@
 
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { debugLog } from '../lib/debug-log';
+import { selectScreen, type Phase } from '../lib/select-screen';
+import { RequestModals } from '../components/RequestModals';
 import { useAuth, usePasskeys } from '../hooks';
 import { SignInScreen, type AuthenticatedAccount } from '../components/OnboardingSection';
 import { PasskeyManager, type PasskeyAccount } from '@jaw.id/core';
-import { SignatureModal } from '../components/SignatureModal';
 import { SiweModal } from '../components/SiweModal';
-import { Eip712Modal } from '../components/Eip712Modal';
 import { ensureIntNumber, type SignInWithEthereumCapabilityRequest } from '@jaw.id/core';
 import { ConnectModal } from '../components/ConnectModal';
-import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
-import { PermissionModal, type PermissionRequestData } from '../components/PermissionModal';
 import { UnsupportedMethodModal } from '../components/UnsupportedMethodModal';
 import { SDKRequestType } from '../lib/sdk-types';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
@@ -24,9 +22,7 @@ import { sendSessionHandoff, registerSessionHandoffListener } from '../lib/sessi
 import type { SessionAuthState } from '../lib/session-manager';
 import type { RPCRequestMessage, RPCResponseMessage, MessageID } from '@jaw.id/core';
 import { RECONNECT_REQUIRED } from '@jaw.id/core';
-import type { Chain as chain } from '@jaw.id/core';
-import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
-import { isSiweMessage, getSiweOriginWarning, getSiweOriginWarningFromMessage, OnboardingSkeleton } from '@jaw.id/ui';
+import { getSiweOriginWarning, OnboardingSkeleton } from '@jaw.id/ui';
 import { applyDappTheme } from '../lib/apply-dapp-theme';
 import { createSiweMessage } from 'viem/siwe';
 import { ChainId } from '@justaname.id/sdk';
@@ -37,15 +33,9 @@ import { standardErrorCodes } from '@jaw.id/core';
 // Note: TransactionRequestData is now imported from TransactionModal for consistency
 
 // Simple state types
-type PopupState =
-  | 'initializing'
-  | 'passkey-check'
-  | 'passkey-create'
-  | 'passkey-auth'
-  | 'account-selection'
-  | 'processing'
-  | 'success'
-  | 'error';
+// Phase lives with the screen decision (lib/select-screen) so the two unions
+// stay disjoint by construction — sharing members is what made half of that
+// function an identity mapping.
 
 // Delay before closing the dialog once a flow completes. The response is
 // already posted to the SDK *before* this timer starts (each flow does
@@ -89,7 +79,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
   // Simple state
   const [isSDKMode, setIsSDKMode] = useState(false);
-  const [state, setState] = useState<PopupState>('initializing');
+  const [phase, setPhase] = useState<Phase>('starting');
   const [config, setConfig] = useState<PopupConfig | null>(null);
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   // Parent-owned so the "Signed ✓" tick appears only AFTER onApprove confirms delivery,
@@ -127,16 +117,16 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   }, [pendingRequest]);
 
   const configRef = useRef<PopupConfig | null>(null);
-  // Mirrors `state` so the (once-registered) message listener can read the
-  // CURRENT state without a stale closure. Updated on every render.
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  // Mirrors `phase` so the (once-registered) message listener can read the
+  // CURRENT phase without a stale closure. Updated on every render.
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
   // Holds the pending success→close timer so a new flow can cancel a previous
   // flow's auto-close (the embedded iframe stays mounted across flows).
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // True once this flow's response has been delivered — the flow is finished even
-  // though its modal lingers to show the delivered tick. `state` cannot express
-  // this: 'success' is the terminal marker AND what unmounts the modal, so setting
+  // though its modal lingers to show the delivered tick. `phase` cannot express
+  // this: 'done' is the terminal marker AND what unmounts the modal, so setting
   // it would cut the tick short. Cleared when the next request takes over.
   const flowDoneRef = useRef(false);
 
@@ -172,7 +162,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   }, [scheduleClose]);
 
   // Latest auth refetch for the (once-registered) handoff listener below —
-  // same stale-closure guard as stateRef.
+  // same stale-closure guard as phaseRef.
   const refetchAuthRef = useRef(authQuery.refetch);
   refetchAuthRef.current = authQuery.refetch;
 
@@ -258,7 +248,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       .catch((err) => {
         console.error('❌ Failed to initialize CryptoHandler:', err);
         setError('Failed to initialize');
-        setState('error');
+        setPhase('failed');
       });
 
     // Listen for messages
@@ -340,7 +330,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       // Handle RPC requests
       if (message.id && message.sender && message.content) {
         // The embedded iframe stays mounted across flows, so a previous flow may
-        // have left a terminal state ('success'/'error'), a stale pendingRequest,
+        // have left a terminal phase ('done'/'failed'), a stale pendingRequest,
         // and a scheduled auto-close — none of which the popup ever hit (fresh
         // page per flow). Reset before handling the new request so it renders its
         // own UI and is not closed by the previous flow's timer. Read the live
@@ -354,11 +344,11 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         // `flowDoneRef` for a flow that delivered its response and is only still on
         // screen to show the tick. The SDK does not serialize requests, so a new one
         // can genuinely arrive mid-tick; that is the case flowDoneRef covers.
-        if (stateRef.current === 'success' || stateRef.current === 'error' || flowDoneRef.current) {
+        if (phaseRef.current === 'done' || phaseRef.current === 'failed' || flowDoneRef.current) {
           flowDoneRef.current = false;
           setError(null);
           setPendingRequest(null);
-          setState('processing');
+          setPhase('working');
         }
 
         const rpcMessage = message as RPCRequestMessage;
@@ -392,11 +382,11 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     if (
       pendingRequest?.type === SDKRequestType.CONNECT &&
       currentAccount &&
-      (state === 'processing' || state === 'passkey-auth' || state === 'passkey-create')
+      (phase === 'working' || phase === 'confirming-account' || phase === 'creating-passkey')
     ) {
-      setState('account-selection');
+      setPhase('choosing-account');
     }
-  }, [pendingRequest, state, currentAccount]);
+  }, [pendingRequest, phase, currentAccount]);
 
   // Handle eth_chainId request (no UI needed, respond directly)
   useEffect(() => {
@@ -422,7 +412,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
   // Check for existing passkeys using hooks
   const checkForPasskeys = async () => {
-    setState('passkey-check');
+    setPhase('reading-passkeys');
 
     try {
       // Refetch and use the returned fresh data (not the cached hook values)
@@ -432,15 +422,15 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
       if (accounts.length > 0) {
         // Has accounts - show account selection/auth screen
-        setState('passkey-auth');
+        setPhase('confirming-account');
       } else {
         // No accounts - need to create
-        setState('passkey-create');
+        setPhase('creating-passkey');
       }
     } catch (err) {
       console.error('❌ Error checking passkeys:', err);
       setError('Failed to check for passkeys');
-      setState('error');
+      setPhase('failed');
     }
   };
 
@@ -503,7 +493,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         setError(null);
         // Must drive, not just clear: the request handler only ever `return`s,
         // so nothing else would put a screen up. Also replaces a stale
-        // 'processing' that the render gates would otherwise honour.
+        // 'working' phase, which would otherwise still resolve to a modal.
         void checkForPasskeys();
         // Acknowledge the handshake
         const response = await cryptoHandler.createHandshakeResponse(request.id, { accounts: [] });
@@ -560,7 +550,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     } catch (err) {
       console.error('❌ Failed to handle handshake:', err);
       setError(err instanceof Error ? err.message : 'Handshake failed');
-      setState('error');
+      setPhase('failed');
     }
   };
 
@@ -732,7 +722,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     } catch (err) {
       console.error('❌ Failed to handle encrypted request:', err);
       setError(err instanceof Error ? err.message : 'Failed to decrypt request');
-      setState('error');
+      setPhase('failed');
     }
   };
 
@@ -740,385 +730,32 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   // SDK MODE
   // ==========================================
   if (isSDKMode) {
-    // Check if we have a pending transaction request and either user is authenticated OR we're in processing state
-    // Don't show modal if state is 'success' or 'error' (request has been completed)
-    if (
-      pendingRequest?.type === SDKRequestType.SEND_TRANSACTION &&
-      state !== 'success' &&
-      state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')
-    ) {
-      // Extract transaction data with type safety
-      let txData: TransactionRequestData;
-      try {
-        txData = extractTransactionData(pendingRequest.method, pendingRequest.params, pendingRequest.chain);
-      } catch (err) {
-        console.error('❌ Failed to extract transaction data:', err);
-        setError(err instanceof Error ? err.message : 'Invalid transaction parameters');
-        setState('error');
-        return null;
-      }
+    // One decision for the whole dialog (lib/select-screen). Every branch below
+    // dispatches on it instead of re-deriving its own condition, so they cannot
+    // disagree about which screen is showing.
+    const screen = selectScreen({
+      requestType: pendingRequest?.type,
+      phase,
+      isAuthenticated: authQuery.isAuthenticated,
+    });
 
+    // The screen decision above already settled whether a modal shows; this only
+    // hands the request to the component that picks which one.
+    if (screen.kind === 'modal' && pendingRequest) {
       return (
-        // Keyed by request: the embedded iframe stays mounted across flows, so an
-        // unkeyed modal is the SAME React instance for the next request and keeps
-        // internal state (isProcessing, status) from the previous flow — which
-        // opened request #2 directly on the processing screen. The key forces a
-        // fresh mount per request, like the popup's fresh page used to guarantee.
-        <TransactionModal
-          key={pendingRequest.requestId}
-          transactionRequest={txData}
-          chain={pendingRequest.chain as chain}
+        <RequestModals
+          pendingRequest={pendingRequest}
+          communicator={communicator}
+          cryptoHandler={cryptoHandler}
           apiKey={apiKey}
-          origin={currentOrigin || undefined}
-          appName={pendingRequest.metadata?.appName}
-          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
-          onSuccess={async (result: TransactionResult) => {
-            setState('processing');
-            try {
-              // Type-safe result handling based on method
-              let response: WalletSendCallsReturn | EthSendTransactionReturn;
-
-              if (txData.method === 'wallet_sendCalls') {
-                // EIP-5792: Return sendCallsId for wallet_sendCalls
-                response = {
-                  id: result.id || `0x${'0'.repeat(64)}`,
-                  chainId: result.chainId as number,
-                  // capabilities can be included if supported by the wallet
-                } satisfies WalletSendCallsReturn;
-              } else {
-                // eth_sendTransaction: Return transaction hash
-                response = (result.hash || `0x${'0'.repeat(64)}`) as EthSendTransactionReturn;
-              }
-
-              debugLog('✅ Transaction response:', response);
-              await pendingRequest.onApprove(response);
-              setState('success');
-              scheduleClose(CLOSE_DELAY_MS);
-            } catch (err) {
-              console.error('❌ Failed to send transaction:', err);
-              setError(err instanceof Error ? err.message : 'Failed to send transaction');
-              setState('error');
-            }
-          }}
-          onError={async (error, errorCode) => {
-            try {
-              // Forward error and code directly from modal
-              await pendingRequest.onReject(
-                error.message,
-                errorCode ?? standardErrorCodes.provider.userRejectedRequest
-              );
-              communicator.requestClose();
-            } catch (err) {
-              console.error('❌ Failed to reject:', err);
-              communicator.requestClose();
-            }
-          }}
-        />
-      );
-    }
-
-    // Check if we have a pending sign message request and either user is authenticated OR we're in processing state
-    // Don't show modal if state is 'success' or 'error' (request has been completed)
-    if (
-      pendingRequest?.type === SDKRequestType.SIGN_MESSAGE &&
-      state !== 'success' &&
-      state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')
-    ) {
-      // Extract message and address based on method type
-      let messageToSign: string;
-      let address: string | undefined;
-
-      if (pendingRequest.method === 'wallet_sign') {
-        // wallet_sign: params[0] is SignParams object
-        // ERC-7871: For type 0x45, data is { message: string }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const signParams = pendingRequest.params[0] as {
-          request: { type: string; data: { message: string } };
-          address?: string;
-        };
-        messageToSign = signParams?.request?.data?.message || '';
-        address = signParams?.address;
-      } else {
-        // personal_sign: params[0] is message, params[1] is address
-        messageToSign = pendingRequest.params[0] as string;
-        address = pendingRequest.params[1] as string;
-      }
-
-      // Check if this is a SIWE (Sign-In with Ethereum) message
-      const isSiwe = isSiweMessage(messageToSign);
-
-      // Render SiweModal for SIWE messages, SignatureModal for regular messages
-      if (isSiwe) {
-        // Deliberately not gated on a successful parse: this warning carries the mandatory
-        // acknowledgement checkbox, and a message can detect as SIWE while failing to parse.
-        const siweWarning = getSiweOriginWarningFromMessage(pendingRequest.origin, messageToSign);
-        return (
-          // Keyed by request — see TransactionModal above.
-          <SiweModal
-            key={pendingRequest.requestId}
-            origin={pendingRequest.origin}
-            message={messageToSign}
-            address={address}
-            chain={pendingRequest.chain as chain}
-            apiKey={apiKey}
-            appName={pendingRequest.metadata?.appName || 'dApp'}
-            appLogoUrl={pendingRequest.metadata?.appLogoUrl}
-            warningMessage={siweWarning}
-            isSuccess={signDelivered}
-            onSuccess={async (signature) => {
-              setState('processing');
-              try {
-                await pendingRequest.onApprove(signature);
-                debugLog('✅ SIWE signature sent successfully');
-                // Delivery confirmed — show the tick, then close.
-                finishDeliveredFlow();
-              } catch (err) {
-                console.error('❌ Failed to send SIWE signature:', err);
-                setError(err instanceof Error ? err.message : 'Failed to send signature');
-                setState('error');
-              }
-            }}
-            onError={async (error, errorCode) => {
-              try {
-                // Forward error and code directly from modal
-                await pendingRequest.onReject(
-                  error.message,
-                  errorCode ?? standardErrorCodes.provider.userRejectedRequest
-                );
-                communicator.requestClose();
-              } catch (err) {
-                console.error('❌ Failed to reject:', err);
-                communicator.requestClose();
-              }
-            }}
-          />
-        );
-      }
-
-      return (
-        // Keyed by request — see TransactionModal above.
-        <SignatureModal
-          key={pendingRequest.requestId}
-          origin={pendingRequest.origin}
-          // open={true}
-          // onOpenChange={() => { }}
-          message={messageToSign}
-          address={address}
-          chain={pendingRequest.chain as chain}
-          apiKey={apiKey}
-          appName={pendingRequest.metadata?.appName}
-          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
-          isSuccess={signDelivered}
-          onSuccess={async (signature) => {
-            setState('processing');
-            try {
-              await pendingRequest.onApprove(signature);
-              debugLog('✅ Signature sent successfully');
-              // Delivery confirmed — show the tick, then close.
-              finishDeliveredFlow();
-            } catch (err) {
-              console.error('❌ Failed to send signature:', err);
-              setError(err instanceof Error ? err.message : 'Failed to send signature');
-              setState('error');
-            }
-          }}
-          onError={async (error, errorCode) => {
-            try {
-              // Forward error and code directly from modal
-              await pendingRequest.onReject(
-                error.message,
-                errorCode ?? standardErrorCodes.provider.userRejectedRequest
-              );
-              communicator.requestClose();
-            } catch (err) {
-              console.error('❌ Failed to reject:', err);
-              communicator.requestClose();
-            }
-          }}
-        />
-      );
-    }
-
-    // Check if we have a pending EIP-712 typed data signing request and either user is authenticated OR we're in processing state
-    // Don't show modal if state is 'success' or 'error' (request has been completed)
-    if (
-      pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA &&
-      state !== 'success' &&
-      state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')
-    ) {
-      // Extract typed data JSON and address based on method type
-      let address: string | undefined;
-      let typedDataJson: string;
-
-      if (pendingRequest.method === 'wallet_sign') {
-        // ERC-7871: For type 0x01, data is the TypedData object directly
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const signParams = pendingRequest.params[0] as {
-          request: { type: string; data: Record<string, unknown> };
-          address?: string;
-        };
-
-        const data = signParams?.request?.data;
-        typedDataJson = typeof data === 'string' ? data : JSON.stringify(data);
-
-        address = signParams?.address;
-
-        debugLog('🔍 wallet_sign EIP-712 Request:', { type: signParams?.request?.type, address, typedDataJson });
-      } else {
-        // eth_signTypedData_v4: params[0] is address, params[1] is typed data JSON string
-        address = pendingRequest.params[0] as string;
-        typedDataJson = pendingRequest.params[1] as string;
-
-        debugLog('🔍 eth_signTypedData_v4 Request:', { address, typedDataJson });
-      }
-
-      return (
-        // Keyed by request — see TransactionModal above. Eip712Modal's isProcessing
-        // never resets on the success path, so instance reuse showed the next
-        // request a permanent "Signing..." screen.
-        <Eip712Modal
-          key={pendingRequest.requestId}
-          origin={pendingRequest.origin}
-          typedDataJson={typedDataJson}
-          address={address}
-          chain={pendingRequest.chain as chain}
-          apiKey={apiKey}
-          appName={pendingRequest.metadata?.appName}
-          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
-          isSuccess={signDelivered}
-          onSuccess={async (signature) => {
-            setState('processing');
-            try {
-              await pendingRequest.onApprove(signature);
-              debugLog('✅ Typed data signature sent successfully');
-              // Delivery confirmed — show the tick, then close.
-              finishDeliveredFlow();
-            } catch (err) {
-              console.error('❌ Failed to send signature:', err);
-              setError(err instanceof Error ? err.message : 'Failed to send signature');
-              setState('error');
-            }
-          }}
-          onError={async (error, errorCode) => {
-            try {
-              // Forward error and code directly from modal
-              await pendingRequest.onReject(
-                error.message,
-                errorCode ?? standardErrorCodes.provider.userRejectedRequest
-              );
-              communicator.requestClose();
-            } catch (err) {
-              console.error('❌ Failed to reject:', err);
-              communicator.requestClose();
-            }
-          }}
-        />
-      );
-    }
-
-    // Check if we have a pending grant permissions request and either user is authenticated OR we're in processing state
-    if (
-      pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS &&
-      state !== 'success' &&
-      state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')
-    ) {
-      const permissionRequestData: PermissionRequestData = {
-        method: 'wallet_grantPermissions',
-        params: pendingRequest.params as any,
-      };
-
-      return (
-        // Keyed by request — see TransactionModal above.
-        <PermissionModal
-          key={pendingRequest.requestId}
-          permissionRequest={permissionRequestData}
-          chain={pendingRequest.chain as chain}
-          apiKey={apiKey || ''}
-          origin={pendingRequest.origin}
-          appName={pendingRequest.metadata?.appName}
-          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
-          onSuccess={async (result) => {
-            setState('processing');
-            try {
-              await pendingRequest.onApprove(result);
-              debugLog('✅ Permission granted successfully');
-              setState('success');
-              scheduleClose(CLOSE_DELAY_MS);
-            } catch (err) {
-              console.error('❌ Failed to grant permission:', err);
-              setError(err instanceof Error ? err.message : 'Failed to grant permission');
-              setState('error');
-            }
-          }}
-          onError={async (error, errorCode) => {
-            try {
-              // Forward error and code directly from modal
-              await pendingRequest.onReject(
-                error.message,
-                errorCode ?? standardErrorCodes.provider.userRejectedRequest
-              );
-              communicator.requestClose();
-            } catch (err) {
-              console.error('❌ Failed to reject:', err);
-              communicator.requestClose();
-            }
-          }}
-        />
-      );
-    }
-
-    // Check if we have a pending revoke permissions request and either user is authenticated OR we're in processing state
-    if (
-      pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS &&
-      state !== 'success' &&
-      state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')
-    ) {
-      const permissionRequestData: PermissionRequestData = {
-        method: 'wallet_revokePermissions',
-        params: pendingRequest.params as any,
-      };
-
-      return (
-        // Keyed by request — see TransactionModal above.
-        <PermissionModal
-          key={pendingRequest.requestId}
-          permissionRequest={permissionRequestData}
-          chain={pendingRequest.chain as chain}
-          apiKey={apiKey || ''}
-          origin={pendingRequest.origin}
-          appName={pendingRequest.metadata?.appName}
-          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
-          onSuccess={async (result) => {
-            setState('processing');
-            try {
-              await pendingRequest.onApprove(result);
-              debugLog('✅ Permission revoked successfully');
-              setState('success');
-              scheduleClose(CLOSE_DELAY_MS);
-            } catch (err) {
-              console.error('❌ Failed to revoke permission:', err);
-              setError(err instanceof Error ? err.message : 'Failed to revoke permission');
-              setState('error');
-            }
-          }}
-          onError={async (error, errorCode) => {
-            try {
-              // Forward error and code directly from modal
-              await pendingRequest.onReject(
-                error.message,
-                errorCode ?? standardErrorCodes.provider.userRejectedRequest
-              );
-              communicator.requestClose();
-            } catch (err) {
-              console.error('❌ Failed to reject:', err);
-              communicator.requestClose();
-            }
-          }}
+          chainId={chainId}
+          currentOrigin={currentOrigin}
+          setPhase={setPhase}
+          setError={setError}
+          scheduleClose={scheduleClose}
+          finishDeliveredFlow={finishDeliveredFlow}
+          closeDelayMs={CLOSE_DELAY_MS}
+          signDelivered={signDelivered}
         />
       );
     }
@@ -1155,7 +792,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     // a captioned spinner: a distinct "Connecting to dApp… / SDK v1.1"
     // interstitial used to flash here whenever a request beat the SDK's
     // prewarm, and it both read as a separate screen and leaked the version.
-    if (state === 'initializing' || state === 'passkey-check') {
+    if (screen.kind === 'loading') {
       return (
         <div className="flex min-h-screen items-center justify-center p-4">
           <div className="w-full max-w-md">
@@ -1166,7 +803,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     }
 
     // Show processing spinner
-    if (state === 'processing') {
+    if (screen.kind === 'progress') {
       return (
         <div className="flex min-h-screen items-center justify-center">
           <div className="max-w-md p-6 text-center">
@@ -1185,18 +822,18 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       );
     }
 
-    // 'success' is a terminal marker only — it renders no UI. Each completed flow
+    // 'done' is a terminal marker only — it renders no UI. Each completed flow
     // closes the dialog immediately (see scheduleClose on every onSuccess),
     // matching the connect flow; the dApp surfaces its own confirmation. Keeping
-    // the state (rather than dropping it) preserves the cross-flow reset sentinel
-    // and the `state !== 'success'` modal-hide guards; returning null avoids a
+    // the phase (rather than dropping it) preserves the cross-flow reset sentinel
+    // and stops selectScreen reopening the modal; returning null avoids a
     // success interstitial flashing during the brief close window.
-    if (state === 'success') {
+    if (screen.kind === 'receipt') {
       return null;
     }
 
     // Show error state
-    if (state === 'error') {
+    if (screen.kind === 'failure') {
       return (
         <div className="flex min-h-screen items-center justify-center">
           <div className="max-w-md p-6 text-center">
@@ -1211,7 +848,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               <button
                 onClick={() => {
                   setError(null);
-                  setState('passkey-check');
+                  setPhase('reading-passkeys');
                   checkForPasskeys();
                 }}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 w-full rounded-lg px-6 py-2 font-semibold transition-colors"
@@ -1234,7 +871,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     }
 
     // Show passkey creation screen
-    if (state === 'passkey-create') {
+    if (phase === 'creating-passkey') {
       return (
         <div className="flex min-h-screen items-center justify-center p-4">
           <div className="w-full max-w-md">
@@ -1277,7 +914,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
-                    setState('account-selection');
+                    setPhase('choosing-account');
                   } else if (
                     pendingRequest?.type === SDKRequestType.SIGN_MESSAGE ||
                     pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA ||
@@ -1287,7 +924,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                   ) {
                     // If there's a pending sign message, typed data, transaction, or permission request,
                     // the modal will be shown in the priority logic above since user is now authenticated
-                    setState('processing');
+                    setPhase('working');
                   } else {
                     // No pending request yet, stay on current screen and wait for it
                     // useEffect will handle transition when handshake arrives
@@ -1296,7 +933,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                 } catch (err) {
                   console.error('❌ Failed after passkey creation:', err);
                   setError(err instanceof Error ? err.message : 'Failed to proceed');
-                  setState('error');
+                  setPhase('failed');
                 }
               }}
             />
@@ -1306,7 +943,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     }
 
     // Show passkey authentication screen
-    if (state === 'passkey-auth') {
+    if (phase === 'confirming-account') {
       return (
         <div className="flex min-h-screen items-center justify-center p-4">
           <div className="w-full max-w-md">
@@ -1364,13 +1001,13 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                       // (the hint only persists post-approval) and just re-confirmed
                       // it via the Continue-as passkey ceremony — approve without
                       // re-showing the Connect screen. Mirrors ConnectModal.onSuccess.
-                      setState('processing');
+                      setPhase('working');
                       await pendingRequest.onApprove({ accounts: [{ address: authenticatedAccount.address }] });
                       communicator.sendAccountHint({ credentialId: authenticatedAccount.credentialId });
-                      setState('success');
+                      setPhase('done');
                       scheduleClose(CLOSE_DELAY_MS);
                     } else {
-                      setState('account-selection');
+                      setPhase('choosing-account');
                     }
                   } else if (
                     pendingRequest?.type === SDKRequestType.SIGN_MESSAGE ||
@@ -1381,7 +1018,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                   ) {
                     // If there's a pending sign message, typed data, transaction, or permission request,
                     // the modal will be shown in the priority logic above since user is now authenticated
-                    setState('processing');
+                    setPhase('working');
                   } else {
                     // No pending request yet, stay on current screen and wait for it
                     // useEffect will handle transition when handshake arrives
@@ -1390,7 +1027,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                 } catch (err) {
                   console.error('❌ Failed after authentication:', err);
                   setError(err instanceof Error ? err.message : 'Authentication failed');
-                  setState('passkey-auth');
+                  setPhase('confirming-account');
                 }
               }}
             />
@@ -1400,7 +1037,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     }
 
     // Show connection approval (account-selection state)
-    if (state === 'account-selection' && pendingRequest?.type === SDKRequestType.CONNECT) {
+    if (phase === 'choosing-account' && pendingRequest?.type === SDKRequestType.CONNECT) {
       // Extract signInWithEthereum capability from wallet_connect params
       // params structure: [{ capabilities?: { signInWithEthereum?: {...} } }]
       const walletConnectParams = pendingRequest.params as
@@ -1477,7 +1114,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             isSuccess={signDelivered}
             onSuccess={async (signature: string, message: string) => {
               // Connect owns its own post-delivery continuation below, so — unlike the
-              // standalone signing handlers — we intentionally don't switch to 'processing'.
+              // standalone signing handlers — we intentionally don't switch to 'working'.
               try {
                 debugLog('✅ User signed SIWE message');
 
@@ -1521,7 +1158,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               } catch (err) {
                 console.error('❌ Failed to approve connection with SIWE:', err);
                 setError(err instanceof Error ? err.message : 'Failed to approve connection');
-                setState('error');
+                setPhase('failed');
               }
             }}
             onError={async (error, errorCode) => {
@@ -1553,7 +1190,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           walletAddress={walletAddress}
           chain={pendingRequest.chain}
           onSuccess={async () => {
-            setState('processing');
+            setPhase('working');
             try {
               debugLog('✅ User approved connection');
 
@@ -1568,7 +1205,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
               await pendingRequest.onApprove(response);
               // Same reason as the SIWE path above: the response is delivered, so mark the flow
-              // done before the awaited handoff rather than leaving it to the setState('success')
+              // done before the awaited handoff rather than leaving it to the setPhase('done')
               // that only runs after it.
               flowDoneRef.current = true;
               // Only after approval (never on mere authentication, which the
@@ -1581,12 +1218,12 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               // Popup only: hand the session to the embedded iframe so the
               // next embedded action skips the second passkey ceremony.
               await handOffSessionToEmbedded(pendingRequest.origin);
-              setState('success');
+              setPhase('done');
               scheduleClose(CLOSE_DELAY_MS);
             } catch (err) {
               console.error('❌ Failed to approve connection:', err);
               setError(err instanceof Error ? err.message : 'Failed to approve connection');
-              setState('error');
+              setPhase('failed');
             }
           }}
           onError={async (error, errorCode) => {
