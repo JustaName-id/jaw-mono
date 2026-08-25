@@ -94,10 +94,10 @@ describe('buildSpenderPrefundCall', () => {
         expect(decoded.args).toEqual([SPENDER, PREFUND]);
     });
 
-    // The contract applies every limit configured for a token, so a permission
-    // can carry more than one period for the same one. The ceiling must not
-    // depend on which of them the requester wrote first.
-    it('takes the widest allowance when a token carries several periods', async () => {
+    // The contract applies every limit configured for a token, so the effective
+    // cap is their intersection: the tightest entry is the one that binds. The
+    // ceiling must not depend on which of them the requester wrote first.
+    it('takes the tightest allowance when a token carries several periods', async () => {
         const mainnetGas = 30_000_000_000n;
         const tightFirst: PermissionsDetail = {
             spends: [
@@ -116,8 +116,28 @@ describe('buildSpenderPrefundCall', () => {
         const a = await buildSpenderPrefundCall({ account: ACCOUNT, spender: SPENDER, permissions: tightFirst, read });
         const b = await buildSpenderPrefundCall({ account: ACCOUNT, spender: SPENDER, permissions: looseFirst, read });
 
-        expect(decodeFunctionData({ abi: erc20Abi, data: a!.data }).args).toEqual([SPENDER, 50_000_000n]);
+        expect(decodeFunctionData({ abi: erc20Abi, data: a!.data }).args).toEqual([SPENDER, 1_000_000n]);
         expect(a!.data).toEqual(b!.data);
+    });
+
+    // A `forever` entry never renews, so no window is long enough for a wider
+    // periodic one to matter: 5 USDC forever is all this permission authorises,
+    // and the prefund must not deliver more than that up front.
+    it('holds a forever allowance as the ceiling over a wider periodic one', async () => {
+        const mainnetGas = 30_000_000_000n;
+        const call = await buildSpenderPrefundCall({
+            account: ACCOUNT,
+            spender: SPENDER,
+            permissions: {
+                spends: [
+                    { token: USDC, allowance: '50000000', unit: 'day' as never },
+                    { token: USDC, allowance: '5000000', unit: 'forever' as never },
+                ],
+            },
+            read: reader({ [ACCOUNT]: 10n ** 12n }, { gasPrice: async () => mainnetGas }),
+        });
+
+        expect(decodeFunctionData({ abi: erc20Abi, data: call!.data }).args).toEqual([SPENDER, 5_000_000n]);
     });
 
     // Skipping only the unreadable entry would widen the ceiling to whatever the

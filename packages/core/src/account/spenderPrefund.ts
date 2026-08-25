@@ -59,11 +59,11 @@ const PREFUND_GAS = 2_000_000n;
  * approved on the same screen.
  *
  * A permission may carry several periods for one token, and the contract applies
- * every one of them, so "a period" is not a single number. The widest is the
- * ceiling: over a long enough window that is the most this permission can ever
- * put through, which is the amount funding past would be funding past. Taking
- * the first instead would make the result depend on the order the requester
- * happened to write them in.
+ * every one of them, so the effective cap is their intersection: the tightest
+ * entry is the one that binds, and it is the number the chain actually enforces.
+ * A `forever` entry never renews, so there is no window long enough for a wider
+ * one to matter. Taking the minimum keeps the result independent of the order
+ * the requester happened to write them in.
  *
  * A clamped prefund can be too small to cover the first operation on an
  * expensive chain. That operation is then sponsored, which is what happened for
@@ -71,12 +71,12 @@ const PREFUND_GAS = 2_000_000n;
  * behaviour rather than a broken grant.
  */
 function ceilingFor(permissions: PermissionsDetail, token: Address): bigint | null {
-    let widest = 0n;
+    let tightest: bigint | null = null;
     for (const spend of permissions.spends ?? []) {
         if (!isSameToken(spend.token, token)) continue;
         try {
             const allowance = BigInt(spend.allowance);
-            if (allowance > widest) widest = allowance;
+            if (tightest === null || allowance < tightest) tightest = allowance;
         } catch {
             // The allowance reaches here from the grant request, so it is a
             // number the requester wrote. Null like every other unreadable input
@@ -86,7 +86,7 @@ function ceilingFor(permissions: PermissionsDetail, token: Address): bigint | nu
             return null;
         }
     }
-    return widest > 0n ? widest : null;
+    return tightest !== null && tightest > 0n ? tightest : null;
 }
 
 /** Opt-in for the grant. Off by default: a wallet does not move funds unasked. */
