@@ -289,9 +289,14 @@ describe('tool descriptions', () => {
     return tools.find((t) => t.name === name)?.description ?? '';
   };
 
+  // The phrase family that keeps coming back, rather than the exact sentence
+  // that happened to be there: a rewrite in different words is the way this
+  // regresses, and pinning one wording would let it through.
+  const OFFERS_SIGNING = /sign\w*\s+autonomously|autonomous\s+signing|session:\s*true[^.]*\bto sign\b/;
+
   it('jaw_rpc does not offer the session key as a way to sign', async () => {
     const text = await describeOf('jaw_rpc');
-    expect(text).not.toMatch(/session: true to sign/);
+    expect(text).not.toMatch(OFFERS_SIGNING);
     expect(text).toMatch(/personal_sign[^.]*eth_signTypedData_v4[^.]*browser/);
   });
 
@@ -299,8 +304,17 @@ describe('tool descriptions', () => {
     const text = await describeOf('jaw_session_status');
     // jaw_rpc points the model here first, so a promise of signing made in this
     // description is read before the one that corrects it.
+    expect(text).not.toMatch(OFFERS_SIGNING);
     expect(text).not.toMatch(/can sign\b/);
     expect(text).toMatch(/personal_sign[^.]*eth_signTypedData_v4/);
+  });
+
+  it('the no-session hint does not promise signing either', async () => {
+    const client = await connectClient();
+    const result = await client.callTool({ name: 'jaw_session_status', arguments: {} });
+    const parsed = JSON.parse(toolText(result));
+    expect(parsed.exists).toBe(false);
+    expect(parsed.hint).not.toMatch(OFFERS_SIGNING);
   });
 });
 

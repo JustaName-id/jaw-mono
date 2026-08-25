@@ -60,11 +60,11 @@ export function registerRpcTool(server: McpServer): void {
       description:
         'Execute any JAW.id wallet RPC method. ' +
         'Supports transactions, signing, permissions, and queries. ' +
-        'By default, methods that require the account open the browser for passkey authentication. ' +
+        'By default, any method that uses the account opens the browser for passkey authentication. ' +
         'Pass session: true to send transactions autonomously with the local session key instead ' +
         '(requires a session created via `jaw session setup` — check jaw_session_status). ' +
-        'A signature is never one of them: personal_sign and eth_signTypedData_v4 always go through ' +
-        'the browser, so asking for one with session: true is refused rather than routed. ' +
+        'Session mode sends, it does not sign: personal_sign and eth_signTypedData_v4 always open ' +
+        'the browser, and asking for either with session: true is refused rather than routed. ' +
         'IMPORTANT: Read the jaw://api-reference resource for the full list of methods, ' +
         'and jaw://api-reference/{method} for detailed parameter formats and examples.',
       inputSchema: rpcMethodSchema,

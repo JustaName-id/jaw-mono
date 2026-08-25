@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mcpDiscoverResult, mcpPaymentResult } from './helpers.js';
+import { mcpDiscoverResult, mcpPaymentResult, mcpResult } from './helpers.js';
 
 const ESC = '\u001b';
 const RTL_OVERRIDE = '\u202e';
@@ -66,5 +66,36 @@ describe('mcpDiscoverResult sanitization', () => {
   it('leaves the trusted counters in their own block', () => {
     const [meta] = mcpDiscoverResult({ count: 2, services: [] }).content.map((b) => b.text);
     expect(JSON.parse(meta)).toEqual({ count: 2 });
+  });
+});
+
+/**
+ * The widest of the three, and the one that shipped raw the longest: `jaw_rpc`
+ * returns whatever the RPC answered, and `jaw_x402_log` replays a stored server
+ * refusal on every read. Both encode through the same place now.
+ */
+describe('mcpResult sanitization', () => {
+  it('strips a bidi override out of token metadata a contract declares', () => {
+    const [text] = mcpResult({ assets: [{ symbol: `USDC${RTL_OVERRIDE}`, balance: '0x1' }] }).content.map(
+      (b) => b.text
+    );
+
+    expect(text).not.toContain(RTL_OVERRIDE);
+    expect(JSON.parse(text).assets[0].balance).toBe('0x1');
+  });
+
+  it('strips a zero-width character out of a stored refusal reason', () => {
+    const entry = { url: 'https://api.example.com/x', status: 'refused', reason: `over cap${ZERO_WIDTH}all good` };
+    const [text] = mcpResult([entry]).content.map((b) => b.text);
+
+    expect(text).not.toContain(ZERO_WIDTH);
+    expect(JSON.parse(text)[0].reason).toContain(REPLACEMENT);
+  });
+
+  it('leaves ordinary values alone', () => {
+    const data = { exists: true, chainId: 84532, address: '0xAbC', tags: ['a', 'b'] };
+    const [text] = mcpResult(data).content.map((b) => b.text);
+
+    expect(JSON.parse(text)).toEqual(data);
   });
 });
