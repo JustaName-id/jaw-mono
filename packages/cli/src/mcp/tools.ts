@@ -30,7 +30,8 @@ export const rpcMethodSchema = {
     .describe(
       'Sign with the local session key instead of opening the browser (requires `jaw session setup`; ' +
         'check jaw_session_status first). Supported methods only: eth_requestAccounts, eth_accounts, ' +
-        'wallet_sendCalls, wallet_getCallsStatus, personal_sign, eth_signTypedData_v4. ' +
+        'wallet_sendCalls, wallet_getCallsStatus. personal_sign and eth_signTypedData_v4 are browser ' +
+        'only: a signature made by the session key never passes the spend caps or the ledger. ' +
         'Defaults to the JAW_SESSION env var.'
     ),
 };

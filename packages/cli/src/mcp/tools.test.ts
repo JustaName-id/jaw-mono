@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
+import { supportsSessionMode } from '../lib/rpc-classifier.js';
 import { payAndFetchSchema, rpcMethodSchema } from './tools.js';
 
 describe('payAndFetch url schema', () => {
@@ -36,5 +37,49 @@ describe('rpc chainId schema', () => {
     for (const bad of [NaN, Infinity, -Infinity, 8453.5, 0, -1]) {
       expect(chainId.safeParse(bad).success, String(bad)).toBe(false);
     }
+  });
+});
+
+/**
+ * The `.describe()` string ships in the MCP tool schema, so it is the list the
+ * model actually reads. The .mdx pages are not. If it names a method session
+ * mode refuses, an agent asked to sign follows it, calls with `session: true`
+ * and hits a dead end that only a retry with the other flag gets out of.
+ */
+describe('rpc session description', () => {
+  const description = z.object(rpcMethodSchema).shape.session.description ?? '';
+
+  const listed = (() => {
+    const match = /Supported methods only: ([^.]+)\./.exec(description);
+    if (!match) return null;
+    return match[1]
+      .split(/,| and /)
+      .map((m) => m.trim())
+      .filter(Boolean);
+  })();
+
+  it('lists exactly what session mode accepts', () => {
+    expect(listed).not.toBeNull();
+    for (const method of [
+      'eth_requestAccounts',
+      'eth_accounts',
+      'wallet_sendCalls',
+      'wallet_getCallsStatus',
+      'personal_sign',
+      'eth_signTypedData_v4',
+      'wallet_sign',
+      'eth_sendTransaction',
+      'wallet_connect',
+      'wallet_grantPermissions',
+      'wallet_revokePermissions',
+    ]) {
+      expect(listed?.includes(method), method).toBe(supportsSessionMode(method));
+    }
+  });
+
+  it('says where the signing methods go instead of just leaving them out', () => {
+    // Absent from the list is not enough: a model that reads "supported methods
+    // only" still guesses, and the retry it guesses into is the dead end.
+    expect(description).toMatch(/personal_sign[^.]*eth_signTypedData_v4[^.]*browser\s+only/);
   });
 });
