@@ -144,16 +144,25 @@ export default class X402Status extends BaseCommand {
     this.log(`  caps    ${formatUsdc(policy.maxAmountPerPayment, decimals)} per payment`);
     // The granted cap first: it is the one the chain enforces, and the one a
     // refusal will quote back.
+    //
+    // "at least", on both figures, because both are summed from the local
+    // ledger and the ledger only sees what went through `payAndFetch`. The same
+    // permission can be spent by a `wallet_sendCalls` sent through `jaw_rpc`,
+    // which writes no row, so what is printed is a floor rather than a total.
+    // Naming it is the whole fix: the number cannot be made exact from here,
+    // since a send made by any other client against the same permission would
+    // be just as invisible, and the chain is what enforces the cap either way.
     if (policy.maxPerPeriod !== undefined && periodLabel) {
       const spentThisPeriod = periodSpend?.spent ?? 0n;
       const resets = periodSpend ? ` (resets ${new Date(periodSpend.window.end * 1000).toISOString()})` : '';
       this.log(
-        `          ${formatUsdc(spentThisPeriod.toString(), decimals)} of ${formatUsdc(policy.maxPerPeriod, decimals)} spent this ${periodLabel}${resets}`
+        `          at least ${formatUsdc(spentThisPeriod.toString(), decimals)} of ${formatUsdc(policy.maxPerPeriod, decimals)} spent this ${periodLabel}${resets}`
       );
     }
     this.log(
-      `          ${formatUsdc(spent.toString(), decimals)} of ${formatUsdc(policy.maxTotalPerSession, decimals)} spent this session`
+      `          at least ${formatUsdc(spent.toString(), decimals)} of ${formatUsdc(policy.maxTotalPerSession, decimals)} spent this session`
     );
+    this.log("          counted from this CLI's ledger, which a direct jaw_rpc send bypasses");
     if (policy.topUpFloat) {
       this.log(`  float   tops the payer up to ${formatUsdc(policy.topUpFloat, decimals)} when it runs short`);
     }
