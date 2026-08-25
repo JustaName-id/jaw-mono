@@ -501,6 +501,19 @@ function KeysJawIdAppContent({
   };
 
   /**
+   * The chain shape a PendingRequest carries. Normalizing in one place keeps the
+   * object handed to the modals identical to the one the transaction was parsed
+   * from — two literals drifting apart would be silent, since the parser reads
+   * only some of the fields.
+   */
+  const toRequestChain = (
+    chain?: { id: number; rpcUrl?: string; paymaster?: { url: string; context?: Record<string, unknown> } } | undefined
+  ) =>
+    chain
+      ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', ...(chain.paymaster && { paymaster: chain.paymaster }) }
+      : undefined;
+
+  /**
    * Answer a handshake we cannot serve. Plain (unencrypted) failure: there is no
    * usable shared secret with this peer, and the SDK throws on `content.failure`
    * in a handshake response (CrossPlatformSigner.handshake), so the dApp's
@@ -643,9 +656,7 @@ function KeysJawIdAppContent({
           metadata: configRef.current?.metadata || null,
           method,
           params: Array.isArray(params) ? params : [],
-          chain: chain
-            ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', ...(chain.paymaster && { paymaster: chain.paymaster }) }
-            : undefined,
+          chain: toRequestChain(chain),
           onApprove: async (result: unknown) => {
             const response = await cryptoHandler.createHandshakeResponse(
               request.id,
@@ -783,10 +794,11 @@ function KeysJawIdAppContent({
       // Parse the transaction before the request goes on screen. On failure the
       // dApp gets a real rejection instead of a dialog stuck on an error screen
       // it never sent an answer for.
+      const requestChain = toRequestChain(chain);
       let parsedTx: TransactionRequestData | null = null;
       if (requestType === SDKRequestType.SEND_TRANSACTION) {
         try {
-          parsedTx = extractTransactionData(method, Array.isArray(params) ? params : [], chain);
+          parsedTx = extractTransactionData(method, Array.isArray(params) ? params : [], requestChain);
         } catch (extractErr) {
           console.error('❌ Failed to extract transaction data:', extractErr);
           const failure = await cryptoHandler.createEncryptedErrorResponse(
@@ -812,9 +824,7 @@ function KeysJawIdAppContent({
         metadata: configRef.current?.metadata || null,
         method,
         params: Array.isArray(params) ? params : [],
-        chain: chain
-          ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', ...(chain.paymaster && { paymaster: chain.paymaster }) }
-          : undefined,
+        chain: requestChain,
         onApprove: async (result: unknown) => {
           const response = await cryptoHandler.createEncryptedResponse(
             request.id || '',

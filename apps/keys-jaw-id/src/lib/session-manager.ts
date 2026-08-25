@@ -261,6 +261,13 @@ function isValidSession(session: unknown): session is AppSession {
  * - Automatic key pair generation
  * - Session persistence in localStorage
  * - Origin hashing for privacy
+ * - Safe against a second keys document in the same storage partition: writes
+ *   re-read storage first, and a `storage` event drops the read cache
+ *
+ * Two keys documents CAN share one partition — two popups are both top-level
+ * keys.jaw.id, and iframes are only kept apart by browsers that partition
+ * storage. Since every write persists the whole session map, a write built on
+ * a cache loaded earlier would erase whatever the other document stored since.
  *
  * @example
  * ```typescript
@@ -286,6 +293,7 @@ export class SessionManager {
   constructor() {
     // Load sessions into cache on initialization
     this.loadFromStorage();
+    this.watchStorage();
   }
 
   // ==========================================================================
@@ -293,30 +301,58 @@ export class SessionManager {
   // ==========================================================================
 
   /**
+   * Drop the cache when another document in this storage partition writes.
+   *
+   * `storage` fires only for writes made by OTHER documents, so this cannot
+   * loop on our own saves. Without it a keys window keeps serving a session a
+   * second one has already deleted — and the read-modify-write below would
+   * then resurrect it.
+   */
+  private watchStorage(): void {
+    if (typeof window === 'undefined') return;
+
+    window.addEventListener('storage', (event) => {
+      // sessionStorage raises the same event type; ignore anything not ours.
+      if (event.storageArea && event.storageArea !== window.localStorage) return;
+      // A null key means storage.clear(), which takes our key with it.
+      if (event.key !== null && event.key !== STORAGE_KEY) return;
+      this.cache = null;
+    });
+  }
+
+  /**
+   * Reads and validates the stored sessions. Never writes — the caller decides
+   * whether a prune is worth persisting, so this stays usable as the read half
+   * of a read-modify-write.
+   */
+  private readSessions(): { sessions: StoredSessions; pruned: boolean } {
+    const stored = getFromStorage<StoredSessions>(STORAGE_KEY);
+    if (!stored) return { sessions: {}, pruned: false };
+
+    const sessions: StoredSessions = {};
+    let pruned = false;
+
+    for (const [hashedOrigin, session] of Object.entries(stored)) {
+      if (isValidSession(session)) {
+        sessions[hashedOrigin] = session;
+      } else {
+        console.warn(`${LOG_PREFIX} Removing invalid session for hash:`, hashedOrigin.slice(0, 8) + '...');
+        pruned = true;
+      }
+    }
+
+    return { sessions, pruned };
+  }
+
+  /**
    * Loads sessions from localStorage into memory cache.
    */
   private loadFromStorage(): void {
-    const stored = getFromStorage<StoredSessions>(STORAGE_KEY);
-    this.cache = stored || {};
+    const { sessions, pruned } = this.readSessions();
+    this.cache = sessions;
 
-    // Validate and clean up invalid sessions
-    if (this.cache) {
-      const validSessions: StoredSessions = {};
-      let hasInvalid = false;
-
-      for (const [hashedOrigin, session] of Object.entries(this.cache)) {
-        if (isValidSession(session)) {
-          validSessions[hashedOrigin] = session;
-        } else {
-          console.warn(`${LOG_PREFIX} Removing invalid session for hash:`, hashedOrigin.slice(0, 8) + '...');
-          hasInvalid = true;
-        }
-      }
-
-      if (hasInvalid) {
-        this.cache = validSessions;
-        this.saveToStorage();
-      }
+    if (pruned) {
+      this.saveToStorage();
     }
   }
 
@@ -338,6 +374,25 @@ export class SessionManager {
       this.loadFromStorage();
     }
     return this.cache || {};
+  }
+
+  /**
+   * The merge base for a write: storage as it is RIGHT NOW, not as this
+   * document last saw it.
+   *
+   * Every mutator persists the whole map, so merging into a cache loaded
+   * earlier silently drops entries other documents added since — two keys
+   * windows sharing a storage partition (two popups; two iframes where the
+   * browser does not partition them) would erase each other's sessions, and
+   * the loser only finds out on its next load, as a failed decrypt.
+   *
+   * Callers must not `await` between this and `saveToStorage()`. The pair IS
+   * the read-modify-write, and only an uninterrupted synchronous run keeps
+   * another document's write from landing in the middle of it.
+   */
+  private freshSessions(): StoredSessions {
+    this.cache = this.readSessions().sessions;
+    return this.cache;
   }
 
   // ==========================================================================
@@ -425,10 +480,9 @@ export class SessionManager {
       lastUsedAt: now,
     };
 
-    // Save to cache and storage using hashed origin
-    const sessions = this.ensureCache();
+    // Read-modify-write, synchronous from here (see freshSessions).
+    const sessions = this.freshSessions();
     sessions[hashedOrigin] = session;
-    this.cache = sessions;
 
     if (!this.saveToStorage()) {
       throw new Error('Failed to persist session');
@@ -466,9 +520,9 @@ export class SessionManager {
     const hashedOrigin = await hashOrigin(origin);
     const imported: AppSession = { ...session, lastUsedAt: Date.now() };
 
-    const sessions = this.ensureCache();
+    // Read-modify-write, synchronous from here (see freshSessions).
+    const sessions = this.freshSessions();
     sessions[hashedOrigin] = imported;
-    this.cache = sessions;
 
     if (!this.saveToStorage()) {
       console.error(`${LOG_PREFIX} Failed to persist imported session`);
@@ -487,13 +541,19 @@ export class SessionManager {
    * @returns The updated session, or null if session doesn't exist
    */
   async updateSession(origin: string, updates: Partial<Omit<AppSession, 'createdAt'>>): Promise<AppSession | null> {
-    const session = await this.getSession(origin);
+    if (!origin) return null;
+
+    const hashedOrigin = await hashOrigin(origin);
+
+    // Read-modify-write, synchronous from here (see freshSessions). The merge
+    // base has to come from this read, not from a getSession() before the await
+    // above — otherwise the update is applied to a stale copy.
+    const sessions = this.freshSessions();
+    const session = sessions[hashedOrigin];
     if (!session) {
       console.warn(`${LOG_PREFIX} Cannot update non-existent session:`, origin);
       return null;
     }
-
-    const hashedOrigin = await hashOrigin(origin);
 
     const updatedSession: AppSession = {
       ...session,
@@ -508,10 +568,7 @@ export class SessionManager {
       return null;
     }
 
-    // Save to cache and storage
-    const sessions = this.ensureCache();
     sessions[hashedOrigin] = updatedSession;
-    this.cache = sessions;
     this.saveToStorage();
 
     console.log(`${LOG_PREFIX} Session updated for:`, origin);
@@ -526,14 +583,14 @@ export class SessionManager {
    */
   async deleteSession(origin: string): Promise<boolean> {
     const hashedOrigin = await hashOrigin(origin);
-    const sessions = this.ensureCache();
 
+    // Read-modify-write, synchronous from here (see freshSessions).
+    const sessions = this.freshSessions();
     if (!sessions[hashedOrigin]) {
       return false;
     }
 
     delete sessions[hashedOrigin];
-    this.cache = sessions;
     this.saveToStorage();
 
     console.log(`${LOG_PREFIX} Session deleted for:`, origin);

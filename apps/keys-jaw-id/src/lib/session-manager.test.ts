@@ -3,7 +3,7 @@
 // working Storage stub in a jsdom file. See vitest.setup.localstorage.ts.)
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { sessionManager } from './session-manager';
+import { sessionManager, SessionManager } from './session-manager';
 import type { SessionAuthState } from './session-manager';
 
 /**
@@ -153,5 +153,107 @@ describe('sessionManager auth lifecycle', () => {
     });
 
     expect(await sessionManager.isAuthenticated(ORIGIN)).toBe(true);
+  });
+});
+
+/**
+ * Two keys documents, one storage partition — two popups (both top-level
+ * keys.jaw.id), or two iframes in a browser that does not partition storage.
+ * Each holds its own SessionManager over the SAME localStorage, and every write
+ * persists the whole session map, so a write built on a stale cache erases the
+ * other document's entries. The victim keeps working until its next load, then
+ * fails to decrypt.
+ */
+describe('two SessionManagers over one storage', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionManager.clearAllSessions();
+  });
+
+  /** A second keys document. Loads its cache now, as a real one would on open. */
+  function secondDocument() {
+    return new SessionManager();
+  }
+
+  it('does not erase the other document’s session when creating one', async () => {
+    const docA = secondDocument();
+    const docB = secondDocument();
+
+    // Both cached an empty map at construction. A writes, then B writes.
+    await docA.createSession({ origin: ORIGIN, peerPublicKey: '04aabbccdd', account: AUTH });
+    await docB.createSession({ origin: OTHER_ORIGIN, peerPublicKey: '04eeff0011', account: AUTH });
+
+    // What actually landed on disk — read by a third, cache-free reader.
+    const onDisk = new SessionManager();
+    expect(await onDisk.getSession(ORIGIN)).not.toBeNull();
+    expect(await onDisk.getSession(OTHER_ORIGIN)).not.toBeNull();
+  });
+
+  it('does not erase the other document’s session when updating one', async () => {
+    const docA = secondDocument();
+    await docA.createSession({ origin: ORIGIN, peerPublicKey: '04aabbccdd', account: AUTH });
+
+    // B opens after A's write, so it sees both — then A, still on its own
+    // cache, clears its authState.
+    const docB = secondDocument();
+    await docB.createSession({ origin: OTHER_ORIGIN, peerPublicKey: '04eeff0011', account: AUTH });
+    await docA.updateSession(ORIGIN, { authState: null });
+
+    const onDisk = new SessionManager();
+    expect(await onDisk.isAuthenticated(ORIGIN)).toBe(false);
+    expect(await onDisk.isAuthenticated(OTHER_ORIGIN)).toBe(true);
+  });
+
+  it('does not resurrect a session the other document deleted', async () => {
+    const docA = secondDocument();
+    await docA.createSession({ origin: ORIGIN, peerPublicKey: '04aabbccdd', account: AUTH });
+
+    const docB = secondDocument();
+    await docB.deleteSession(ORIGIN);
+
+    // A's cache still holds ORIGIN. Its next write must not put it back.
+    await docA.createSession({ origin: OTHER_ORIGIN, peerPublicKey: '04eeff0011', account: AUTH });
+
+    const onDisk = new SessionManager();
+    expect(await onDisk.getSession(ORIGIN)).toBeNull();
+    expect(await onDisk.getSession(OTHER_ORIGIN)).not.toBeNull();
+  });
+
+  it('merges an update against the stored session, not a pre-await copy', async () => {
+    const docA = secondDocument();
+    await docA.createSession({ origin: ORIGIN, peerPublicKey: '04aabbccdd', account: AUTH });
+
+    // B rotates the keys (reconnect); A then clears authState on its stale copy.
+    const docB = secondDocument();
+    await docB.updatePeerKey(ORIGIN, '04ffeeddcc');
+    await docA.updateSession(ORIGIN, { authState: null });
+
+    // A's update must apply on top of B's rotation, not revert it.
+    const onDisk = new SessionManager();
+    const session = await onDisk.getSession(ORIGIN);
+    expect(session?.peerPublicKey).toBe('04ffeeddcc');
+    expect(session?.authState).toBeNull();
+  });
+
+  it('drops its read cache when another document writes', async () => {
+    const reader = secondDocument();
+    await reader.createSession({ origin: ORIGIN, peerPublicKey: '04aabbccdd', account: AUTH });
+    expect(await reader.isAuthenticated(ORIGIN)).toBe(true);
+
+    // Another document deletes it. jsdom does not raise `storage` across
+    // SessionManagers (same window), so dispatch what a real browser would.
+    await new SessionManager().deleteSession(ORIGIN);
+    window.dispatchEvent(new StorageEvent('storage', { key: 'jaw:sessions:apps', storageArea: localStorage }));
+
+    expect(await reader.isAuthenticated(ORIGIN)).toBe(false);
+  });
+
+  it('ignores storage events for other keys', async () => {
+    const reader = secondDocument();
+    await reader.createSession({ origin: ORIGIN, peerPublicKey: '04aabbccdd', account: AUTH });
+
+    window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated:key', storageArea: localStorage }));
+
+    expect(await reader.isAuthenticated(ORIGIN)).toBe(true);
   });
 });
