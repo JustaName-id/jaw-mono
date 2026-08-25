@@ -155,7 +155,7 @@ export default class X402Status extends BaseCommand {
     // payments, because the two caps meter different things: `maxPerPeriod`
     // mirrors the on-chain allowance, and the top-up is what draws that down.
     // Counting payments here understated the grant by whatever float the payer
-    // still held — one 0.1 USDC payment behind a 5 USDC top-up printed 0.1
+    // still held: one 0.1 USDC payment behind a 5 USDC top-up printed 0.1
     // against a cap the chain had already docked 5 from.
     //
     // "at least", on both figures, because both are summed from the local
