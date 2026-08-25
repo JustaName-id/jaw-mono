@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import type { ParameterDefinition } from '../../lib/rpc-methods';
-import type { PlaygroundMethod } from '../../lib/method-ui-meta';
+import { methodBlocked, type PlaygroundMethod } from '../../lib/method-ui-meta';
 import { ParameterField } from '../parameter-field';
 import { isLikelyEnsName, resolveEnsToAddress, resolveEnsToAddresses } from '../../lib/ens-resolver';
 
@@ -119,7 +119,13 @@ export function ExecutePanel({
     await onRun(resolvedParams);
   };
 
-  const canExecute = !method.requiresConnection || isConnected;
+  // Not just "needs a connection": a connect method (eth_requestAccounts /
+  // wallet_connect) is only runnable while DISCONNECTED — with an account already
+  // connected its dialog never appears, so executing it does nothing visible.
+  const canExecute = !methodBlocked(method, isConnected);
+  const blockedReason = method.requiresConnection
+    ? 'Connect your wallet first to execute this method.'
+    : 'Already connected — disconnect first to run this method.';
 
   // Filter parameters: generic showWhen + method-specific wallet_sign logic
   const filteredParameters = method.parameters?.filter((param) => {
@@ -166,9 +172,7 @@ export function ExecutePanel({
               <path d="M13 6l6 6-6 6" />
             </svg>
           </button>
-          {!canExecute && (
-            <p className="text-shell-warn m-0 text-xs">Connect your wallet first to execute this method.</p>
-          )}
+          {!canExecute && <p className="text-shell-warn m-0 text-xs">{blockedReason}</p>}
         </div>
       </div>
 

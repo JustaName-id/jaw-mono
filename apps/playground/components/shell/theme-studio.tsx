@@ -357,8 +357,11 @@ function ThemedFrame({ theme, children }: { theme: JawTheme; children: ReactNode
   }, [theme, systemScheme]);
 
   // data-jaw-ui: see note (1) above — the package's utilities are scoped to it.
+  // aria-hidden + inert: these cards are a visual specimen of the dialogs, not
+  // operable UI. Without it every preview donates a focusable "Cancel" button
+  // (DialogShell's close X) that does nothing.
   return (
-    <div ref={ref} data-jaw-ui className="flex justify-center">
+    <div ref={ref} data-jaw-ui aria-hidden inert className="flex justify-center">
       {children}
     </div>
   );
@@ -366,7 +369,10 @@ function ThemedFrame({ theme, children }: { theme: JawTheme; children: ReactNode
 
 /**
  * The shell renders its close X only when given a handler, and every real dialog
- * passes one — so the previews do too, inertly, to keep the card identical.
+ * passes one — so the previews do too, to keep the card identical. It is a real
+ * <button aria-label="Cancel">, so the frame below marks the whole preview
+ * inert: decorative here, and a focusable no-op control would otherwise land in
+ * the tab order and be announced to screen readers.
  */
 const noop = () => undefined;
 

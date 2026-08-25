@@ -64,9 +64,18 @@ export function groupMethods<M extends PlaygroundMethod>(methods: M[]): MethodGr
   })).filter((g) => g.items.length > 0);
 }
 
+/**
+ * The connection state blocks this method: either it needs a connection and
+ * there isn't one, or it only makes sense while disconnected (connect) and the
+ * account is already connected.
+ */
+export function methodBlocked(m: PlaygroundMethod, isConnected: boolean): boolean {
+  return (m.requiresConnection && !isConnected) || (NEEDS_DISCONNECTED.has(m.method) && isConnected);
+}
+
 /** Amber dot when running the method now would not behave as expected. */
 export function methodNeedsAttention(m: PlaygroundMethod, isConnected: boolean): boolean {
-  return (m.requiresConnection && !isConnected) || (NEEDS_DISCONNECTED.has(m.method) && isConnected);
+  return methodBlocked(m, isConnected);
 }
 
 /** Split "wallet_sendCalls" into a dimmed "wallet_" prefix and bold rest. */

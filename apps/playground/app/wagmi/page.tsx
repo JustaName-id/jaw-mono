@@ -4,10 +4,16 @@ import { useState, useCallback, useEffect, Suspense } from 'react';
 import { flushSync } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { Mode, type PaymasterConfig, type JawTheme } from '@jaw.id/core';
-import { Card } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { ThemePicker } from '../../components/theme-picker';
-import { ThemeToggle } from '../../components/theme-toggle';
+import { ShellHeader } from '../../components/shell/header';
+import { ShellSidebar, type ShellView } from '../../components/shell/sidebar';
+import { ConfigCard } from '../../components/shell/config-card';
+import { MethodList } from '../../components/shell/method-list';
+import { MethodDetail } from '../../components/shell/method-detail';
+import { ResponsePanel, latestResponse } from '../../components/shell/response-panel';
+import { ExecutePanel } from '../../components/shell/execute-panel';
+import { EncodePanel } from '../../components/shell/encode-panel';
+import { ThemeStudioControls, DialogPreviews } from '../../components/shell/theme-studio';
+import { activePresetLabel } from '../../lib/jaw-theme-presets';
 import { derivePlaygroundTheme } from '../../lib/derive-playground-theme';
 import { parseEther, formatUnits, type Address } from 'viem';
 import {
@@ -38,18 +44,9 @@ import {
 
 import { WagmiProviders } from './providers';
 import { type ModeType, type TransportModeType } from './config';
-import { MethodCard } from '../../components/method-card';
-import { WagmiMethodModal } from '../../components/wagmi-method-modal';
-import { EncodeDataModal } from '../../components/encode-data-modal';
-import { ExecutionLog, type LogEntry } from '../../components/execution-log';
+import { type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
-import {
-  WAGMI_METHODS,
-  CATEGORIES,
-  CATEGORY_LABELS,
-  type WagmiMethod,
-  type MethodCategory,
-} from '../../lib/wagmi-methods';
+import { WAGMI_METHODS, type WagmiMethod } from '../../lib/wagmi-methods';
 import { reverseResolveEnsName } from '../../lib/ens-resolver';
 import { getAnalyticsClient } from '../../analytics';
 import type { ModeName } from '../../analytics/events/types';
@@ -129,11 +126,17 @@ function WagmiPageContent({
     query: { enabled: !!lastBatchId, retry: false },
   });
 
-  const [selectedMethod, setSelectedMethod] = useState<WagmiMethod | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEncodeModalOpen, setIsEncodeModalOpen] = useState(false);
+  const [view, setView] = useState<ShellView>('playground');
+  const [activeMethodId, setActiveMethodId] = useState<string | null>(null);
+  const [prefChain, setPrefChain] = useState(String(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID || 84532));
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
+  // Theme draft: the mock previews follow it live, Save commits via onThemeChange.
+  const [draftTheme, setDraftTheme] = useState<JawTheme>(theme);
+  const savedTheme = JSON.stringify(theme);
+  const themeDirty = JSON.stringify(draftTheme) !== savedTheme;
+  useEffect(() => {
+    setDraftTheme(JSON.parse(savedTheme) as JawTheme);
+  }, [savedTheme]);
   const [isExecuting, setIsExecuting] = useState(false);
   const [ensName, setEnsName] = useState<string | null>(null);
 
@@ -435,304 +438,146 @@ function WagmiPageContent({
     ]
   );
 
-  const handleMethodClick = (method: WagmiMethod) => {
-    if (method.category === 'utility') {
-      setIsEncodeModalOpen(true);
-      return;
-    }
-    setSelectedMethod(method);
-    setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setSelectedMethod(null);
-  };
-
-  const filteredMethods =
-    selectedCategory === 'all' ? WAGMI_METHODS : WAGMI_METHODS.filter((m) => m.category === selectedCategory);
-
+  // Same aggregate the retired MethodModal received as `isExecuting`, so the
+  // inline panels reflect the JAW hook mutations too, not just handleExecute.
   const isPending = isGrantingPermissions || isRevokingPermissions || isSigning || isExecuting;
 
+  // ---- shell wiring (mirrors /core) --------------------------------------
+  const themeMeta = activePresetLabel(theme) ?? (theme.colors ? 'Custom' : 'Default');
+  const surface = transportMode === 'popup' ? ('popup' as const) : ('iframe' as const);
+  const activeMethod = WAGMI_METHODS.find((m) => m.id === activeMethodId) ?? WAGMI_METHODS[0] ?? null;
+  const dispatchNote = `${surface === 'popup' ? 'Popup' : 'Iframe (default)'} · ${
+    mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'
+  }`;
+
+  // Errors are surfaced through the same log the response panel reads from —
+  // handleExecute logs its own; this covers the pre-execution stages.
+  const logUiError = useCallback(
+    (methodName: string, err: unknown) => {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'message' in err
+            ? (err as { message: string }).message
+            : JSON.stringify(err);
+      addLog('error', methodName, message);
+    },
+    [addLog]
+  );
+
+  const runMethod = useCallback(
+    async (method: WagmiMethod, resolvedParams: Record<string, string>) => {
+      let built: Record<string, unknown>;
+      try {
+        built = method.buildParams(resolvedParams, { address, chainId: chainId || undefined });
+      } catch (err) {
+        logUiError(method.name, err);
+        return;
+      }
+      try {
+        await handleExecute(method, built);
+      } catch {
+        // Already logged inside handleExecute.
+      }
+    },
+    [address, chainId, handleExecute, logUiError]
+  );
+
+  // Connect/disconnect run through the SAME dispatcher as every other method —
+  // no separate path, so the activity log and response panel see them too.
+  const toggleConnect = () => {
+    const target = WAGMI_METHODS.find((m) => m.hookType === (isConnected ? 'jawDisconnect' : 'jawConnect'));
+    if (!target) return;
+    setActiveMethodId(target.id);
+    void runMethod(target, {});
+  };
+
   return (
-    <div className="bg-background min-h-screen p-4 md:p-8">
-      <div className="mx-auto max-w-6xl space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-foreground text-2xl font-bold md:text-3xl">JAW.id Playground - Wagmi</h1>
-          <ThemeToggle />
-        </div>
+    <div className="bg-shell-canvas text-shell-ink grid h-screen grid-rows-[auto_1fr] overflow-hidden">
+      <ShellHeader
+        sdk="wagmi"
+        isConnected={isConnected}
+        onToggleConnect={toggleConnect}
+        address={address}
+        ensName={ensName}
+        chainId={chainId}
+        balance={
+          balance
+            ? `${parseFloat(formatUnits(balance.value, balance.decimals)).toFixed(4)} ${balance.symbol}`
+            : undefined
+        }
+      />
 
-        {/* Mode Toggle */}
-        <Card className="p-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-muted-foreground text-sm font-medium">Mode:</span>
-              <span
-                className={`rounded-full px-3 py-1 text-sm font-medium ${
-                  mode === Mode.AppSpecific
-                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
-                    : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                }`}
-              >
-                {mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <ConfigSnippet type="wagmi" mode={mode} paymasters={pmConfig} onPaymasterApply={onPaymasterApply} />
-              <a
-                href="/wagmi"
-                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                  mode === Mode.CrossPlatform
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                Cross-Platform
-              </a>
-              <a
-                href="/wagmi?mode=app-specific"
-                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                  mode === Mode.AppSpecific
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                App-Specific
-              </a>
-            </div>
-          </div>
-          <p className="text-muted-foreground mt-2 text-xs">
-            {mode === Mode.AppSpecific
-              ? 'Direct signing with UI handled by UIHandler in your app'
-              : 'Passkey operations handled via keys.jaw.id'}
-          </p>
-        </Card>
-
-        {/* Transport Toggle (CrossPlatform only — how keys.jaw.id is reached) */}
-        {mode === Mode.CrossPlatform && (
-          <Card className="p-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-muted-foreground text-sm font-medium">Transport:</span>
-                <span
-                  className={`rounded-full px-3 py-1 text-sm font-medium ${
-                    transportMode === 'popup'
-                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
-                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
-                  }`}
-                >
-                  {transportMode === 'popup' ? 'Popup' : `Iframe (${transportMode})`}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <a
-                  href="/wagmi"
-                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                    transportMode !== 'popup'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  }`}
-                >
-                  Iframe (default)
-                </a>
-                <a
-                  href="/wagmi?transport=popup"
-                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                    transportMode === 'popup'
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  }`}
-                >
-                  Popup
-                </a>
-              </div>
-            </div>
-            <p className="text-muted-foreground mt-2 text-xs">
-              {transportMode === 'popup'
-                ? 'Legacy opt-out: keys.jaw.id opens in a popup window'
-                : 'Default: embedded dialog with automatic popup fallback (Safari passkey creation, insecure contexts, occluded UI)'}
-            </p>
-          </Card>
-        )}
-
-        {/* Manual picker for both modes: AppSpecific applies via ReactUIHandler,
-            CrossPlatform pushes to the keys dialog via connector.setTheme. Until
-            the user picks something, CrossPlatform auto-derives the theme from
-            the playground's own tokens (see effect in WagmiPageInner). */}
-        <ThemePicker theme={theme} onThemeChange={onThemeChange} />
-
-        {/* Connection Status */}
-        <Card className="p-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="mb-3 text-lg font-semibold">Connection Status</h2>
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Status:</span>
-                  <span className={`font-medium ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
-                    {isConnected ? 'Connected' : 'Disconnected'}
-                  </span>
-                </div>
-                {ensName && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">ENS:</span>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(ensName)}
-                      className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
-                      title="Click to copy"
-                    >
-                      {ensName}
-                    </button>
-                  </div>
-                )}
-                {address && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Account:</span>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(address)}
-                      className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
-                      title="Click to copy"
-                    >
-                      {address.slice(0, 6)}...{address.slice(-4)}
-                      <svg
-                        className="text-muted-foreground h-3 w-3"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-                {chainId && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Chain:</span>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(chainId.toString())}
-                      className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
-                      title="Click to copy"
-                    >
-                      {chainId}
-                      <svg
-                        className="text-muted-foreground h-3 w-3"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-                {balance && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Balance:</span>
-                    <span className="bg-muted rounded px-2 py-0.5 font-mono text-xs">
-                      {parseFloat(formatUnits(balance.value, balance.decimals)).toFixed(4)} {balance.symbol}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              {!isConnected ? (
-                <Button
-                  onClick={() => {
-                    const connectMethod = WAGMI_METHODS.find((m) => m.id === 'jaw_connect');
-                    if (connectMethod) handleMethodClick(connectMethod);
-                  }}
-                >
-                  Connect
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    const disconnectMethod = WAGMI_METHODS.find((m) => m.id === 'jaw_disconnect');
-                    if (disconnectMethod) handleMethodClick(disconnectMethod);
-                  }}
-                >
-                  Disconnect
-                </Button>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        {/* Category Filter */}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={selectedCategory === 'all' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setSelectedCategory('all')}
-          >
-            All ({WAGMI_METHODS.length})
-          </Button>
-          {CATEGORIES.map((category) => {
-            const count = WAGMI_METHODS.filter((m) => m.category === category).length;
-            if (count === 0) return null;
-            return (
-              <Button
-                key={category}
-                variant={selectedCategory === category ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSelectedCategory(category)}
-              >
-                {CATEGORY_LABELS[category]} ({count})
-              </Button>
-            );
-          })}
-        </div>
-
-        {/* Method Grid */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredMethods.map((method) => (
-            <MethodCard
-              key={method.id}
-              method={{
-                id: method.id,
-                name: method.name,
-                method: method.method,
-                category: method.category,
-                description: method.description,
-                requiresConnection: method.requiresConnection,
-              }}
-              onClick={() => handleMethodClick(method)}
-              disabled={method.requiresConnection && !isConnected}
+      <div className="grid min-h-0 grid-cols-[334px_minmax(0,1fr)]">
+        <ShellSidebar view={view} onViewChange={setView} themeMeta={themeMeta} methodCount={WAGMI_METHODS.length}>
+          {view === 'playground' ? (
+            <>
+              <ConfigCard
+                sdk="wagmi"
+                chainValue={prefChain}
+                onChainChange={setPrefChain}
+                mode={mode === Mode.AppSpecific ? 'app-specific' : 'cross-platform'}
+                transport={surface}
+              />
+              <MethodList
+                methods={WAGMI_METHODS}
+                selectedId={activeMethodId}
+                onSelect={(m) => setActiveMethodId(m.id)}
+                isConnected={isConnected}
+                transport={surface}
+              />
+            </>
+          ) : (
+            /* Theme controls: AppSpecific applies via ReactUIHandler, CrossPlatform
+               via the connector's setTheme pushing to the keys dialog. */
+            <ThemeStudioControls
+              theme={draftTheme}
+              onThemeChange={setDraftTheme}
+              onSave={() => onThemeChange(draftTheme)}
+              dirty={themeDirty}
             />
-          ))}
-        </div>
+          )}
+        </ShellSidebar>
 
-        {/* Activity Log */}
-        <ExecutionLog logs={logs} onClear={() => setLogs([])} />
-
-        {/* Encode Data Modal */}
-        <EncodeDataModal isOpen={isEncodeModalOpen} onClose={() => setIsEncodeModalOpen(false)} />
-
-        {/* Resolve Name Modal */}
-
-        {/* Method Modal */}
-        <WagmiMethodModal
-          method={selectedMethod}
-          isOpen={isModalOpen}
-          onClose={handleCloseModal}
-          onExecute={handleExecute}
-          context={{ address, chainId }}
-          isConnected={isConnected}
-          isExecuting={isPending}
-        />
+        <main className="flex min-h-0 flex-col overflow-y-auto">
+          <div className="flex flex-1 flex-col gap-6 px-6 py-6 md:px-9 md:py-[30px]">
+            {view === 'theme' ? (
+              <DialogPreviews theme={draftTheme} />
+            ) : activeMethod ? (
+              <>
+                <div className="flex justify-end">
+                  <ConfigSnippet type="wagmi" mode={mode} paymasters={pmConfig} onPaymasterApply={onPaymasterApply} />
+                </div>
+                <MethodDetail
+                  key={activeMethod.id}
+                  method={activeMethod}
+                  transport={surface}
+                  isConnected={isConnected}
+                  onToggleConnect={toggleConnect}
+                  snippet={activeMethod.getCodeSnippet({})}
+                  snippetLabel="@jaw.id/wagmi"
+                >
+                  {activeMethod.category === 'utility' ? (
+                    <EncodePanel dispatchNote="Local · viem" />
+                  ) : (
+                    <ExecutePanel
+                      method={activeMethod}
+                      context={{ address, chainId: chainId ? String(chainId) : undefined }}
+                      isConnected={isConnected}
+                      dispatchNote={dispatchNote}
+                      running={isPending}
+                      onRun={(resolved) => runMethod(activeMethod, resolved)}
+                      onError={(message) => addLog('error', activeMethod.name, message)}
+                    />
+                  )}
+                </MethodDetail>
+                {activeMethod.category !== 'utility' && (
+                  <ResponsePanel response={latestResponse(logs, activeMethod.name)} running={isPending} />
+                )}
+              </>
+            ) : null}
+          </div>
+        </main>
       </div>
     </div>
   );
