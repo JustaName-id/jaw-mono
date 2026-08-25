@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mcpPaymentResult } from './helpers.js';
+import { mcpDiscoverResult, mcpPaymentResult } from './helpers.js';
 
 const ESC = '\u001b';
 const RTL_OVERRIDE = '\u202e';
@@ -44,5 +44,27 @@ describe('mcpPaymentResult sanitization', () => {
     expect(reason.startsWith('[UNTRUSTED SERVER MESSAGE')).toBe(true);
     expect(reason).not.toContain(ESC);
     expect(reason).toContain(REPLACEMENT);
+  });
+});
+
+/**
+ * The catalog is seller-written copy that `discover.ts` only type-checks, and it
+ * ships JSON-encoded, so the escape sequences are already covered. What is left
+ * is the half `JSON.stringify` does not touch.
+ */
+describe('mcpDiscoverResult sanitization', () => {
+  it('strips the bidi override a seller put in a service name, and stays parseable', () => {
+    const services = [{ name: `Weather API${RTL_OVERRIDE}`, url: 'https://api.example.com/w' }];
+    const [, catalog] = mcpDiscoverResult({ count: 1, services }).content.map((b) => b.text);
+
+    expect(catalog).not.toContain(RTL_OVERRIDE);
+    expect(catalog).toContain(REPLACEMENT);
+    const json = catalog.slice(catalog.indexOf('\n') + 1);
+    expect(JSON.parse(json)[0].url).toBe('https://api.example.com/w');
+  });
+
+  it('leaves the trusted counters in their own block', () => {
+    const [meta] = mcpDiscoverResult({ count: 2, services: [] }).content.map((b) => b.text);
+    expect(JSON.parse(meta)).toEqual({ count: 2 });
   });
 });

@@ -276,6 +276,34 @@ describe('jaw_rpc session mode', () => {
   });
 });
 
+/**
+ * A tool description ships in the schema, so it is what the model plans from.
+ * Two of them advertised the session key as the way to sign autonomously, which
+ * is the flag a model reaches for when asked for a signature, and the one path
+ * that refuses. Pinned here because nothing else reads these strings.
+ */
+describe('tool descriptions', () => {
+  const describeOf = async (name: string) => {
+    const client = await connectClient();
+    const { tools } = await client.listTools();
+    return tools.find((t) => t.name === name)?.description ?? '';
+  };
+
+  it('jaw_rpc does not offer the session key as a way to sign', async () => {
+    const text = await describeOf('jaw_rpc');
+    expect(text).not.toMatch(/session: true to sign/);
+    expect(text).toMatch(/personal_sign[^.]*eth_signTypedData_v4[^.]*browser/);
+  });
+
+  it('jaw_session_status says the same thing jaw_rpc does', async () => {
+    const text = await describeOf('jaw_session_status');
+    // jaw_rpc points the model here first, so a promise of signing made in this
+    // description is read before the one that corrects it.
+    expect(text).not.toMatch(/can sign\b/);
+    expect(text).toMatch(/personal_sign[^.]*eth_signTypedData_v4/);
+  });
+});
+
 describe('jaw_session_status', () => {
   it('reports no session when keystore is missing', async () => {
     const client = await connectClient();

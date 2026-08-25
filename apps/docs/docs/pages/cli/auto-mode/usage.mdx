@@ -27,15 +27,20 @@ jaw rpc call eth_requestAccounts --chain 84532
 
 ### Blocked Methods
 
-These require a browser and passkey — they cannot run in session mode:
+These require a browser and passkey, so they cannot run in session mode. All of
+them stop at the same message, before any connection is opened:
 
-| Method                     | Error                                         |
-| -------------------------- | --------------------------------------------- |
-| `wallet_grantPermissions`  | "Requires browser — run `jaw session setup`"  |
-| `wallet_revokePermissions` | "Requires browser — run `jaw session revoke`" |
-| `personal_sign`            | "not available in auto mode"                  |
-| `eth_signTypedData_v4`     | "not available in auto mode"                  |
-| Any other method           | `Method <name> is not supported in auto mode` |
+```
+Method <name> is not supported in session mode. Use without --session to route through the browser bridge.
+```
+
+| Method                     | Why                                                      |
+| -------------------------- | -------------------------------------------------------- |
+| `wallet_grantPermissions`  | Granting a permission is what `jaw session setup` is for |
+| `wallet_revokePermissions` | Revoking one is what `jaw session revoke` is for         |
+| `personal_sign`            | A signature never passes the caps or the ledger          |
+| `eth_signTypedData_v4`     | Same, and this is the shape that signs away the balance  |
+| Any other method           | Only the four above are wired for the session key        |
 
 :::warning
 Signing is browser only on purpose. A signature the session makes is not a call,

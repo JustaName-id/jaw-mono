@@ -29,9 +29,15 @@ function envSessionEnabled(): boolean {
 
 // Autonomous sends have no per-call human confirmation, so a prompt-injected
 // agent could burst them. The window slows that down; it is not what bounds it.
-// The bound is `JustaPermissionManager`, which meters every send against the
-// period allowance on chain. Being per-process, a second server or a restart
-// starts a fresh window, which is another reason not to read this as a cap.
+// The bound is the grant `JustaPermissionManager` holds: a send only reaches a
+// target and selector the permission lists, and a token it moves is metered
+// against that token's period allowance. Which of the two does the bounding
+// depends on the scope. `jaw session setup --x402` grants a USDC transfer with
+// a period allowance, so there the allowance is the ceiling; a hand-written
+// scope whose `calls` have no matching `spends` is bounded by the allowlist
+// alone, and nothing on chain counts how often it fires. Being per-process, a
+// second server or a restart starts a fresh window, which is another reason not
+// to read this as a cap.
 const SEND_RATE_WINDOW_MS = 60_000;
 const MAX_SENDS_PER_WINDOW = 5;
 const RATE_LIMITED_SESSION_METHODS = ['wallet_sendCalls'];
@@ -54,9 +60,11 @@ export function registerRpcTool(server: McpServer): void {
       description:
         'Execute any JAW.id wallet RPC method. ' +
         'Supports transactions, signing, permissions, and queries. ' +
-        'By default, methods that require signing open the browser for passkey authentication. ' +
-        'Pass session: true to sign autonomously with the local session key instead ' +
+        'By default, methods that require the account open the browser for passkey authentication. ' +
+        'Pass session: true to send transactions autonomously with the local session key instead ' +
         '(requires a session created via `jaw session setup` — check jaw_session_status). ' +
+        'A signature is never one of them: personal_sign and eth_signTypedData_v4 always go through ' +
+        'the browser, so asking for one with session: true is refused rather than routed. ' +
         'IMPORTANT: Read the jaw://api-reference resource for the full list of methods, ' +
         'and jaw://api-reference/{method} for detailed parameter formats and examples.',
       inputSchema: rpcMethodSchema,
