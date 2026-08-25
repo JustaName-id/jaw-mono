@@ -296,10 +296,11 @@ describe('extractGrantedSpend', () => {
     expect(extractGrantedSpend(spends, 8453)).toBeUndefined();
   });
 
-  // The contract applies every spend entry granted for a token, so the cap that
-  // binds is the tightest one. Seeding first-match let a wider entry shadow it
-  // and the policy approved payments the chain reverted after the tight cap.
-  it('seeds from the tightest entry when the grant carries several for USDC', () => {
+  // The contract applies every spend entry granted for a token over its own
+  // window, so the grant is a conjunction one pair cannot represent. The seed
+  // takes the smallest allowance over the longest window: what fits under that
+  // fits under every entry, in whatever order the requester wrote them.
+  it('seeds the smallest allowance over the longest window from several entries', () => {
     const anchor = new Date('2026-01-01T00:00:00.000Z');
     const wideFirst = [
       { token: USDC_BASE, allowance: '0x2FAF080', unit: 'day', multiplier: 1 }, // 50 USDC
@@ -311,14 +312,49 @@ describe('extractGrantedSpend', () => {
     const b = extractGrantedSpend(tightFirst, 8453, anchor);
 
     expect(a?.allowance).toBe('5000000');
-    // The tightest entry's own period rides along with its allowance.
     expect(a?.unit).toBe('forever');
     expect(a).toEqual(b);
   });
 
-  // Skipping just the bad entry would silently seed from whatever the readable
-  // ones say, so any untrustworthy match poisons the whole read.
-  it('returns undefined when any matching entry is malformed or negative', () => {
+  // The smallest number and the longest window can come from different entries:
+  // 5/day plus 6/week must not seed 5/day, which would re-approve 5 every day
+  // while the chain stops at 6 for the week.
+  it('combines the smallest allowance with the longest window across entries', () => {
+    const anchor = new Date('2026-01-01T00:00:00.000Z');
+    const spends = [
+      { token: USDC_BASE, allowance: '0x4C4B40', unit: 'day', multiplier: 1 }, // 5 USDC
+      { token: USDC_BASE, allowance: '0x5B8D80', unit: 'week', multiplier: 1 }, // 6 USDC
+    ];
+
+    const grant = extractGrantedSpend(spends, 8453, anchor);
+
+    expect(grant?.allowance).toBe('5000000');
+    expect(grant?.unit).toBe('week');
+  });
+
+  // Equal allowances used to keep whichever entry came first, and a short
+  // window first meant re-approving every reset while the long window was
+  // already exhausted on chain.
+  it('keeps the longest window when allowances tie, in either order', () => {
+    const anchor = new Date('2026-01-01T00:00:00.000Z');
+    const hourFirst = [
+      { token: USDC_BASE, allowance: '0x4C4B40', unit: 'hour', multiplier: 1 },
+      { token: USDC_BASE, allowance: '0x4C4B40', unit: 'day', multiplier: 1 },
+    ];
+    const dayFirst = [hourFirst[1], hourFirst[0]];
+
+    const a = extractGrantedSpend(hourFirst, 8453, anchor);
+    const b = extractGrantedSpend(dayFirst, 8453, anchor);
+
+    expect(a?.unit).toBe('day');
+    expect(a).toEqual(b);
+  });
+
+  // Dropping the whole seed on one bad entry would land on the defaults, whose
+  // allowlists are wider than the grant's: the untrusted entry would loosen
+  // enforcement instead of tightening it. Skip it, warn, seed from the rest.
+  it('skips unreadable entries with a warning and seeds from the readable ones', () => {
+    const warnings: string[] = [];
     const mixedMalformed = [
       { token: USDC_BASE, allowance: '0x4C4B40' },
       { token: USDC_BASE, allowance: 'not-hex' },
@@ -327,8 +363,43 @@ describe('extractGrantedSpend', () => {
       { token: USDC_BASE, allowance: '0x4C4B40' },
       { token: USDC_BASE, allowance: '-0x100' },
     ];
-    expect(extractGrantedSpend(mixedMalformed, 8453)).toBeUndefined();
-    expect(extractGrantedSpend(mixedNegative, 8453)).toBeUndefined();
+
+    const a = extractGrantedSpend(mixedMalformed, 8453, new Date(), (m) => warnings.push(m));
+    const b = extractGrantedSpend(mixedNegative, 8453, new Date(), (m) => warnings.push(m));
+
+    expect(a?.allowance).toBe('5000000');
+    expect(b?.allowance).toBe('5000000');
+    expect(warnings).toHaveLength(2);
+  });
+
+  // BigInt('') is 0n, which would win every tightest comparison and seed a cap
+  // that refuses all payments. The canonical parser reads '' as unset instead.
+  it('treats an empty allowance as unreadable, not as a zero cap', () => {
+    const warnings: string[] = [];
+    const emptyAlone = [{ token: USDC_BASE, allowance: '' }];
+    const emptyBeside = [
+      { token: USDC_BASE, allowance: '' },
+      { token: USDC_BASE, allowance: '0x4C4B40', unit: 'day', multiplier: 1 },
+    ];
+
+    expect(extractGrantedSpend(emptyAlone, 8453, new Date(), (m) => warnings.push(m))).toBeUndefined();
+    expect(extractGrantedSpend(emptyBeside, 8453)?.allowance).toBe('5000000');
+    expect(warnings).toHaveLength(1);
+  });
+
+  // A window we cannot place is read as one that never resets: no period is
+  // recorded, so the allowance lands session-wide, which never approves more
+  // than whatever window the chain actually enforces.
+  it('falls back to no period when the longest window has an unknown unit', () => {
+    const spends = [
+      { token: USDC_BASE, allowance: '0x4C4B40', unit: 'fortnight', multiplier: 1 },
+      { token: USDC_BASE, allowance: '0x2FAF080', unit: 'day', multiplier: 1 },
+    ];
+
+    const grant = extractGrantedSpend(spends, 8453);
+
+    expect(grant?.allowance).toBe('5000000');
+    expect(grant?.unit).toBeUndefined();
   });
 });
 

@@ -277,7 +277,7 @@ export default class SessionSetup extends BaseCommand {
         chainId,
         expiry: expiryTimestamp,
         mode,
-        grantedSpend: extractGrantedSpend(permissions.spends, chainId),
+        grantedSpend: extractGrantedSpend(permissions.spends, chainId, new Date(), (message) => this.warn(message)),
       });
 
       // 9. Output

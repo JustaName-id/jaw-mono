@@ -68,6 +68,35 @@ export const DEFAULT_X402_POLICY: X402Policy = {
   allowedNetworks: Object.keys(USDC_BY_NETWORK),
 };
 
+/** A spend entry as the grant request writes it on the wire. */
+interface GrantSpendEntry {
+  token: string;
+  allowance: string;
+  unit?: string;
+  multiplier?: number;
+}
+
+/**
+ * Approximate seconds one window lasts, used only to order windows from
+ * shortest to longest. `month` is calendar-based on chain; thirty days is close
+ * enough for ordering. A unit `normalizePeriod` does not recognise ranks as
+ * unbounded: a window we cannot place is read as one that never resets, which
+ * is the reading that never approves more than the chain does.
+ */
+const APPROX_WINDOW_SECONDS: Record<Exclude<PeriodUnit, 'forever'>, number> = {
+  minute: 60,
+  hour: 3_600,
+  day: 86_400,
+  week: 604_800,
+  month: 2_592_000,
+};
+
+function windowSeconds(unit: string | undefined, multiplier?: number): number {
+  const period = normalizePeriod(unit, multiplier);
+  if (!period || period.unit === 'forever') return Infinity;
+  return APPROX_WINDOW_SECONDS[period.unit] * period.multiplier;
+}
+
 /**
  * Pull the USDC spend limit out of a granted permission's `spends` so the policy
  * can be seeded from it. Matches the granted entries against the registry USDC for
@@ -78,52 +107,66 @@ export const DEFAULT_X402_POLICY: X402Policy = {
  * case-insensitively and the allowlist this seeds compares addresses that way too.
  *
  * A permission may carry several spend entries for the same token, and the
- * contract applies every one of them, so the cap that binds is the tightest
- * entry, not whichever one was written first. Seeding from the first entry let
- * a wider one shadow a tighter one and the policy approved payments the chain
- * then reverted with ExceededSpendLimit. The tightest entry's own period rides
- * along with its allowance, keeping the number and its window together.
+ * contract applies every one of them over its own window, so the grant is a
+ * conjunction of caps that a single number-plus-period cannot represent. What
+ * one pair can do is never approve more than the chain does: the smallest
+ * allowance over the longest window among the entries. Anything that fits under
+ * that fits under every entry, because each entry allows at least that much over
+ * a window no longer than its own. When windows differ this over-restricts, and
+ * the chain stays the final word either way; what it never does is approve a
+ * payment the chain then reverts with ExceededSpendLimit, which is what seeding
+ * from the first entry, or from the smallest number regardless of window, both
+ * allowed.
+ *
+ * An entry whose allowance cannot be read is skipped with a warning rather than
+ * trusted or allowed to sink the whole seed: dropping everything would land on
+ * the default policy, whose allowlists are wider than the grant's, so the
+ * unreadable entry would loosen enforcement instead of tightening it. When no
+ * entry is readable there is nothing to seed from and the defaults hold.
  */
 export function extractGrantedSpend(
-  spends: ReadonlyArray<{ token: string; allowance: string; unit?: string; multiplier?: number }> | undefined,
+  spends: ReadonlyArray<GrantSpendEntry> | undefined,
   chainId: number,
-  anchor: Date = new Date()
+  anchor: Date = new Date(),
+  warn?: (message: string) => void
 ): GrantedSpend | undefined {
   const usdc = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === chainId);
   if (!usdc) return undefined;
-  let spend: { token: string; allowance: string; unit?: string; multiplier?: number } | undefined;
+  let dropped = 0;
   let tightest: bigint | undefined;
+  let widest: { entry: GrantSpendEntry; seconds: number } | undefined;
   for (const candidate of spends ?? []) {
-    if (candidate.token.toLowerCase() !== usdc.address.toLowerCase()) continue;
-    let parsed: bigint;
-    try {
-      parsed = BigInt(candidate.allowance);
-    } catch {
-      return undefined; // malformed allowance: fall back to defaults rather than a bad cap
+    if (!eqAddr(candidate.token, usdc.address)) continue;
+    // The canonical parser: '' reads as unset rather than 0n, negatives are
+    // rejected, and a malformed string cannot throw mid-seed.
+    const parsed = parseNonNegativeBigInt(candidate.allowance);
+    if (parsed === undefined) {
+      dropped++;
+      continue;
     }
-    // A negative allowance (BigInt('-0x100') parses fine) would seed a negative
-    // cap and make checkPolicy reject or misbehave — treat it as no grant.
-    // Applied to every matching entry, not just the chosen one: an entry we
-    // cannot trust poisons the whole read, and skipping it would silently seed
-    // from whatever the readable ones say.
-    if (parsed < 0n) return undefined;
-    if (tightest === undefined || parsed < tightest) {
-      tightest = parsed;
-      spend = candidate;
-    }
+    if (tightest === undefined || parsed < tightest) tightest = parsed;
+    const seconds = windowSeconds(candidate.unit, candidate.multiplier);
+    if (widest === undefined || seconds > widest.seconds) widest = { entry: candidate, seconds };
   }
-  if (!spend || tightest === undefined) return undefined;
-  const allowance = tightest.toString();
-  // Keep the period alongside the number. An allowance without its unit is
+  if (dropped > 0) {
+    warn?.(
+      tightest === undefined
+        ? 'The granted USDC spend limit could not be read; no cap was seeded from the grant and the default x402 policy applies.'
+        : `Ignored ${dropped} unreadable USDC spend ${dropped === 1 ? 'entry' : 'entries'} in the grant; the cap is seeded from the readable ones.`
+    );
+  }
+  if (tightest === undefined || widest === undefined) return undefined;
+  // Keep the window alongside the number. An allowance without its window is
   // dimensionless, and reading a per-period figure as a per-session one caps a
   // multi-period grant at a single period's worth for its whole life.
   // Normalised the way the SDK normalises it before encoding, so `year` lands on
   // the same month-based window the permission actually enforces. An unrecognised
-  // unit records no period rather than guessing, falling back to session-wide.
-  const period = normalizePeriod(spend.unit, spend.multiplier);
+  // unit records no period rather than guessing, falling back to session-wide,
+  // which is the never-resets reading `windowSeconds` already ranked it by.
+  const period = normalizePeriod(widest.entry.unit, widest.entry.multiplier);
   return {
     token: usdc.address,
-    allowance,
+    allowance: tightest.toString(),
     network: usdc.wireNetwork,
     ...(period ? { unit: period.unit, multiplier: period.multiplier, periodAnchor: anchor.toISOString() } : {}),
   };
