@@ -28,16 +28,12 @@ function envSessionEnabled(): boolean {
 }
 
 // Autonomous sends have no per-call human confirmation, so a prompt-injected
-// agent could burst them. The window slows that down; it is not what bounds it.
-// The bound is the grant `JustaPermissionManager` holds: a send only reaches a
-// target and selector the permission lists, and a token it moves is metered
-// against that token's period allowance. Which of the two does the bounding
-// depends on the scope. `jaw session setup --x402` grants a USDC transfer with
-// a period allowance, so there the allowance is the ceiling; a hand-written
-// scope whose `calls` have no matching `spends` is bounded by the allowlist
-// alone, and nothing on chain counts how often it fires. Being per-process, a
-// second server or a restart starts a fresh window, which is another reason not
-// to read this as a cap.
+// agent could burst them. The window slows that down; the bound is the grant.
+// A send only reaches a target and selector the permission lists, and a token it
+// moves is metered against that token's period allowance: under `--x402` the
+// allowance is the ceiling, under a hand-written scope whose `calls` have no
+// matching `spends` the allowlist is, and nothing counts how often it fires.
+// This window is per-process, so a restart starts a fresh one.
 const SEND_RATE_WINDOW_MS = 60_000;
 const MAX_SENDS_PER_WINDOW = 5;
 const RATE_LIMITED_SESSION_METHODS = ['wallet_sendCalls'];

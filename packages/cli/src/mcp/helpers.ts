@@ -30,35 +30,25 @@ export function mcpError(err: unknown) {
 }
 
 /**
- * Encode any value into a content block, disarmed.
+ * JSON-encode a value for a content block, disarmed.
  *
- * Every tool result on this side goes out JSON-encoded, and it was tempting to
- * stop there: the encoder escapes U+0000 to U+001F, so the escape sequences
- * cannot survive it. They are only half of what `sanitizeBlock` exists for. The
- * bidi overrides and the zero-width family are ordinary characters to JSON and
- * come out the far side intact, and those are the ones that reorder an address
- * or hide half a url in whatever the host renders this with.
+ * The encoder escapes U+0000 to U+001F, so it stops the escape sequences on its
+ * own. It does not touch the bidi overrides or the zero-width family, which are
+ * ordinary characters to JSON and the ones that reorder an address or hide half
+ * a url in whatever the host renders this with.
  *
- * So it happens here rather than at each site that knows its data is remote.
- * Deciding per call site is what let three of these ship: the payment body, the
- * seller catalog, and the ledger each looked like the only one at the time. The
- * sites that stay explicit are the ones that also need a marker around the
- * text, and they encode through this too.
- *
- * Replacement never breaks the encoding: what it substitutes is always inside a
- * JSON string literal, so the result still parses.
+ * Here rather than at each site that knows its data is remote: deciding per call
+ * site is what let the payment body, the seller catalog and the ledger each ship
+ * raw. What it replaces is always inside a string literal, so the JSON parses.
  */
 function encode(value: unknown): string {
   return sanitizeBlock(JSON.stringify(value));
 }
 
 /**
- * The plain result path, and the one carrying the widest range of text nobody
- * on this side wrote. `jaw_rpc` returns whatever the RPC answered, and
- * `wallet_getAssets` answers with the name and symbol each token contract
- * declares. `jaw_x402_log` replays the stored refusal reason, which is a paid
- * server's own error string, on every read: the same string `mcpPaymentResult`
- * disarms when it is live.
+ * Carries the widest range of text nobody here wrote: `jaw_rpc` returns whatever
+ * the RPC answered, `wallet_getAssets` the name and symbol a token contract
+ * declares, `jaw_x402_log` the stored refusal reason on every read.
  */
 export function mcpResult(data: unknown) {
   return {

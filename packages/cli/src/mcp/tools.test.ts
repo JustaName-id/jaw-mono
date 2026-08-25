@@ -41,10 +41,9 @@ describe('rpc chainId schema', () => {
 });
 
 /**
- * The `.describe()` string ships in the MCP tool schema, so it is the list the
- * model actually reads. The .mdx pages are not. If it names a method session
- * mode refuses, an agent asked to sign follows it, calls with `session: true`
- * and hits a dead end that only a retry with the other flag gets out of.
+ * The `.describe()` ships in the tool schema, so it is the list the model reads.
+ * A method named here that session mode refuses is a dead end the model walks
+ * into with `session: true`.
  */
 describe('rpc session description', () => {
   const description = z.object(rpcMethodSchema).shape.session.description ?? '';
@@ -78,8 +77,7 @@ describe('rpc session description', () => {
   });
 
   it('says where the signing methods go instead of just leaving them out', () => {
-    // Absent from the list is not enough: a model that reads "supported methods
-    // only" still guesses, and the retry it guesses into is the dead end.
+    // Absent from the list is not enough: the model still guesses.
     expect(description).toMatch(/personal_sign[^.]*eth_signTypedData_v4[^.]*browser\s+only/);
   });
 });

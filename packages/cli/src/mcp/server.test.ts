@@ -278,9 +278,8 @@ describe('jaw_rpc session mode', () => {
 
 /**
  * A tool description ships in the schema, so it is what the model plans from.
- * Two of them advertised the session key as the way to sign autonomously, which
- * is the flag a model reaches for when asked for a signature, and the one path
- * that refuses. Pinned here because nothing else reads these strings.
+ * Both of these advertised the session key as the way to sign autonomously,
+ * which is the one path that refuses a signature.
  */
 describe('tool descriptions', () => {
   const describeOf = async (name: string) => {
@@ -289,9 +288,8 @@ describe('tool descriptions', () => {
     return tools.find((t) => t.name === name)?.description ?? '';
   };
 
-  // The phrase family that keeps coming back, rather than the exact sentence
-  // that happened to be there: a rewrite in different words is the way this
-  // regresses, and pinning one wording would let it through.
+  // The phrase family, not the sentence that happened to be there: a reword is
+  // how this regresses.
   const OFFERS_SIGNING = /sign\w*\s+autonomously|autonomous\s+signing|session:\s*true[^.]*\bto sign\b/;
 
   it('jaw_rpc does not offer the session key as a way to sign', async () => {
