@@ -476,8 +476,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       // Check for existing session
       const existingSession = await cryptoHandler.getSession(origin);
 
-      // For pure key exchange handshake (method: 'handshake')
-      // This situation never happens because the wallet_connect/ eth_requestAccounts request is always sent first
+      // Pure key exchange — the SDK's cold-start signal, sent only from its
+      // no-signer branch. Means the dApp holds no session. A reload with a live
+      // one never lands here: the SDK restores its signer and uses the normal path.
       if (method === 'handshake') {
         if (!existingSession) {
           // No session yet - nothing to respond to, wait for wallet_connect
@@ -488,6 +489,22 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           // Update peer key if changed
           await cryptoHandler.getSessionManager().updatePeerKey(origin, peerPublicKey);
         }
+
+        // A cold start begins a fresh flow, so nothing from a previous one may
+        // survive: our authState outlives a dApp disconnect (different origin,
+        // and sessions never expire), and a cancel leaves `state` behind.
+        if (existingSession.authState) {
+          await cryptoHandler.getSessionManager().updateSession(origin, { authState: null });
+          await refetchAuthRef.current();
+          debugLog('🧊 Cold-start handshake — dropped stale auth for this origin');
+        }
+        setCurrentAccount(null);
+        setPendingRequest(null);
+        setError(null);
+        // Must drive, not just clear: the request handler only ever `return`s,
+        // so nothing else would put a screen up. Also replaces a stale
+        // 'processing' that the render gates would otherwise honour.
+        void checkForPasskeys();
         // Acknowledge the handshake
         const response = await cryptoHandler.createHandshakeResponse(request.id, { accounts: [] });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -696,14 +713,17 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         },
       });
 
-      // For sign message, typed data, transaction, and permission requests, if user is authenticated, show modal directly
+      // Read auth from the session manager, not authQuery: that is a snapshot
+      // captured in this closure, and the cold-start handshake may have just
+      // cleared the stored auth out from under it.
+      const authenticatedForOrigin = await cryptoHandler.getSessionManager().isAuthenticated(origin);
       if (
         (requestType === SDKRequestType.SIGN_MESSAGE ||
           requestType === SDKRequestType.SIGN_TYPED_DATA ||
           requestType === SDKRequestType.SEND_TRANSACTION ||
           requestType === SDKRequestType.GRANT_PERMISSIONS ||
           requestType === SDKRequestType.REVOKE_PERMISSIONS) &&
-        authQuery.isAuthenticated &&
+        authenticatedForOrigin &&
         currentAccount
       ) {
         // The modal will be shown in the render logic below
