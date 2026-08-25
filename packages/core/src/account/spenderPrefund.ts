@@ -73,7 +73,7 @@ const PREFUND_GAS = 2_000_000n;
 function ceilingFor(permissions: PermissionsDetail, token: Address): bigint | null {
     let widest = 0n;
     for (const spend of permissions.spends ?? []) {
-        if (spend.token?.trim().toLowerCase() !== token.toLowerCase()) continue;
+        if (!isSameToken(spend.token, token)) continue;
         try {
             const allowance = BigInt(spend.allowance);
             if (allowance > widest) widest = allowance;
@@ -200,12 +200,24 @@ function paymasterFeeIn(token: Address, context?: Record<string, unknown>): bigi
     }
 }
 
+/**
+ * Whether a spend entry names `token`.
+ *
+ * The address arrives as whatever the requester wrote, so the comparison is
+ * case-insensitive and tolerates surrounding space. One place, because the two
+ * callers below would otherwise each carry their own copy of that rule and only
+ * one of them would get fixed the day it turns out to be wrong.
+ */
+function isSameToken(candidate: string | undefined, token: Address): boolean {
+    return candidate?.trim().toLowerCase() === token.toLowerCase();
+}
+
 /** The first token the permission authorises spending, native ones aside. */
 function firstErc20Spend(permissions: PermissionsDetail): Address | null {
     for (const spend of permissions.spends ?? []) {
         const token = spend.token?.trim();
         if (!token) continue;
-        if (token.toLowerCase() === NATIVE_TOKEN.toLowerCase()) continue;
+        if (isSameToken(token, NATIVE_TOKEN)) continue;
         return token as Address;
     }
     return null;
