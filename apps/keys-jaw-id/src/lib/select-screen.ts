@@ -46,9 +46,11 @@ export interface SelectScreenInput {
   requestType: SDKRequestType | undefined;
   phase: Phase;
   /**
-   * Whether this origin is authenticated. Must come from the session manager,
-   * not from a react-query snapshot: a cold-start handshake can clear the stored
-   * auth between a snapshot being taken and this running.
+   * Whether this origin is authenticated: `authQuery.isAuthenticated`, which
+   * useAuth derives from the session manager. This is called from a render body
+   * and the session-manager read is async, so the query value is the source —
+   * what keeps it honest is the awaited refetch in the cold-start handshake
+   * handler, which lands before that handler clears the screen state.
    */
   isAuthenticated: boolean;
 }

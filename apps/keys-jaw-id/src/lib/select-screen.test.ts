@@ -4,8 +4,9 @@ import { selectScreen, type Phase, type Screen } from './select-screen';
 import { SDKRequestType } from './sdk-types';
 
 /**
- * The screen decision, pinned. Each case below is a state the dialog actually
- * reached during the cold-start work — including the four that shipped broken.
+ * The screen mapping, pinned. Each case is a (requestType, phase, isAuthenticated)
+ * combination the dialog actually reaches. These cover this function only — the
+ * cold-start defects lived in page.tsx's handshake handler, which it cannot see.
  */
 
 const MODAL_REQUESTS = [
@@ -47,8 +48,8 @@ describe('selectScreen', () => {
 
   describe('a signing request with no auth — the cold-start case', () => {
     it.each(MODAL_REQUESTS)('sends %s to onboarding, not the modal', (requestType) => {
-      // Bug 1: keys kept an authState the dApp's disconnect never reached, so
-      // the request went straight to the signing modal as the previous account.
+      // Auth is a precondition for the modal, not a detail: without it the
+      // request must fall through to account selection, whatever the phase.
       expect(selectScreen({ requestType, phase: 'choosing-account', isAuthenticated: false })).toEqual({
         kind: 'onboarding',
       });
@@ -75,8 +76,8 @@ describe('selectScreen', () => {
     });
 
     it('falls back to the progress screen when no request is pending', () => {
-      // Bug 3: a cancel leaves the phase at 'working'. With the request cleared,
-      // that must NOT render a modal for a request that no longer exists.
+      // 'working' alone must never stand in for a request: with none pending
+      // there is nothing for a modal to be about.
       expect(selectScreen({ requestType: undefined, phase: 'working', isAuthenticated: false })).toEqual({
         kind: 'progress',
       });
@@ -117,8 +118,8 @@ describe('selectScreen', () => {
   });
 
   it('always returns a screen, for every input combination', () => {
-    // Exhaustive: no gap in the decision can leave the dialog with nothing to
-    // render — the failure mode that produced the skeleton (bug 4).
+    // Exhaustive: every combination maps to a screen, so no input can leave the
+    // dialog with nothing to render.
     const types = [...MODAL_REQUESTS, SDKRequestType.CONNECT, SDKRequestType.UNSUPPORTED_METHOD, undefined];
     for (const requestType of types) {
       for (const phase of ALL_PHASES) {

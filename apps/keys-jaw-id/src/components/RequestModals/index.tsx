@@ -9,17 +9,12 @@ import { SiweModal } from '../SiweModal';
 import { isSiweMessage, getSiweOriginWarningFromMessage } from '@jaw.id/ui';
 import { Eip712Modal } from '../Eip712Modal';
 import { PermissionModal, type PermissionRequestData } from '../PermissionModal';
-import {
-  extractTransactionData,
-  type WalletSendCallsReturn,
-  type EthSendTransactionReturn,
-} from '../../lib/tx-handler';
+import type { WalletSendCallsReturn, EthSendTransactionReturn } from '../../lib/tx-handler';
 import { SDKRequestType } from '../../lib/sdk-types';
 import { debugLog } from '../../lib/debug-log';
 import type { Phase } from '../../lib/select-screen';
-import type { PendingRequest, ChainId } from '../../utils/types';
+import type { PendingRequest } from '../../utils/types';
 import type { PopupCommunicator } from '../../lib/popup-communicator';
-import type { CryptoHandler } from '../../lib/crypto-handler';
 
 /**
  * Every modal that answers a pending request, in one place.
@@ -32,10 +27,14 @@ import type { CryptoHandler } from '../../lib/crypto-handler';
 export interface RequestModalsProps {
   pendingRequest: PendingRequest;
   communicator: PopupCommunicator;
-  cryptoHandler: CryptoHandler;
   apiKey: string | undefined;
-  chainId: ChainId | undefined;
   currentOrigin: string | null;
+  /**
+   * The parsed transaction, or null when the pending request is not one. Parsed
+   * by the parent when the request arrives — doing it here would mean reporting
+   * a parse failure through the parent's setters during this component's render.
+   */
+  txData: TransactionRequestData | null;
   setPhase: (phase: Phase) => void;
   setError: (error: string | null) => void;
   scheduleClose: (delayMs: number) => void;
@@ -49,10 +48,9 @@ export interface RequestModalsProps {
 export function RequestModals({
   pendingRequest,
   communicator,
-  cryptoHandler,
   apiKey,
-  chainId,
   currentOrigin,
+  txData,
   setPhase,
   setError,
   scheduleClose,
@@ -61,16 +59,9 @@ export function RequestModals({
   signDelivered,
 }: RequestModalsProps): ReactElement | null {
   if (pendingRequest.type === SDKRequestType.SEND_TRANSACTION) {
-    // Extract transaction data with type safety
-    let txData: TransactionRequestData;
-    try {
-      txData = extractTransactionData(pendingRequest.method, pendingRequest.params, pendingRequest.chain);
-    } catch (err) {
-      console.error('❌ Failed to extract transaction data:', err);
-      setError(err instanceof Error ? err.message : 'Invalid transaction parameters');
-      setPhase('failed');
-      return null;
-    }
+    // A send-transaction request that failed to parse is rejected before it ever
+    // reaches state, so there is nothing to render for it.
+    if (!txData) return null;
 
     return (
       // Keyed by request: the embedded iframe stays mounted across flows, so an
