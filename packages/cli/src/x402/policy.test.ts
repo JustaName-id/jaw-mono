@@ -295,6 +295,41 @@ describe('extractGrantedSpend', () => {
     const spends = [{ token: USDC_BASE, allowance: '-0x100' }];
     expect(extractGrantedSpend(spends, 8453)).toBeUndefined();
   });
+
+  // The contract applies every spend entry granted for a token, so the cap that
+  // binds is the tightest one. Seeding first-match let a wider entry shadow it
+  // and the policy approved payments the chain reverted after the tight cap.
+  it('seeds from the tightest entry when the grant carries several for USDC', () => {
+    const anchor = new Date('2026-01-01T00:00:00.000Z');
+    const wideFirst = [
+      { token: USDC_BASE, allowance: '0x2FAF080', unit: 'day', multiplier: 1 }, // 50 USDC
+      { token: USDC_BASE, allowance: '0x4C4B40', unit: 'forever', multiplier: 1 }, // 5 USDC
+    ];
+    const tightFirst = [wideFirst[1], wideFirst[0]];
+
+    const a = extractGrantedSpend(wideFirst, 8453, anchor);
+    const b = extractGrantedSpend(tightFirst, 8453, anchor);
+
+    expect(a?.allowance).toBe('5000000');
+    // The tightest entry's own period rides along with its allowance.
+    expect(a?.unit).toBe('forever');
+    expect(a).toEqual(b);
+  });
+
+  // Skipping just the bad entry would silently seed from whatever the readable
+  // ones say, so any untrustworthy match poisons the whole read.
+  it('returns undefined when any matching entry is malformed or negative', () => {
+    const mixedMalformed = [
+      { token: USDC_BASE, allowance: '0x4C4B40' },
+      { token: USDC_BASE, allowance: 'not-hex' },
+    ];
+    const mixedNegative = [
+      { token: USDC_BASE, allowance: '0x4C4B40' },
+      { token: USDC_BASE, allowance: '-0x100' },
+    ];
+    expect(extractGrantedSpend(mixedMalformed, 8453)).toBeUndefined();
+    expect(extractGrantedSpend(mixedNegative, 8453)).toBeUndefined();
+  });
 });
 
 describe('topUpFloat as a settable policy key', () => {

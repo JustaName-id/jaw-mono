@@ -70,12 +70,19 @@ export const DEFAULT_X402_POLICY: X402Policy = {
 
 /**
  * Pull the USDC spend limit out of a granted permission's `spends` so the policy
- * can be seeded from it. Matches the granted entry against the registry USDC for
+ * can be seeded from it. Matches the granted entries against the registry USDC for
  * the session chain (case-insensitive); the allowance is a hex string on the wire,
  * returned as base-units decimal. Returns undefined when the permission grants no
  * registry-USDC spend (nothing to seed, defaults hold). Stores the registry's
  * canonical address, not the permission's literal token string: they match
  * case-insensitively and the allowlist this seeds compares addresses that way too.
+ *
+ * A permission may carry several spend entries for the same token, and the
+ * contract applies every one of them, so the cap that binds is the tightest
+ * entry, not whichever one was written first. Seeding from the first entry let
+ * a wider one shadow a tighter one and the policy approved payments the chain
+ * then reverted with ExceededSpendLimit. The tightest entry's own period rides
+ * along with its allowance, keeping the number and its window together.
  */
 export function extractGrantedSpend(
   spends: ReadonlyArray<{ token: string; allowance: string; unit?: string; multiplier?: number }> | undefined,
@@ -84,18 +91,29 @@ export function extractGrantedSpend(
 ): GrantedSpend | undefined {
   const usdc = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === chainId);
   if (!usdc) return undefined;
-  const spend = spends?.find((s) => s.token.toLowerCase() === usdc.address.toLowerCase());
-  if (!spend) return undefined;
-  let allowance: string;
-  try {
-    const parsed = BigInt(spend.allowance);
+  let spend: { token: string; allowance: string; unit?: string; multiplier?: number } | undefined;
+  let tightest: bigint | undefined;
+  for (const candidate of spends ?? []) {
+    if (candidate.token.toLowerCase() !== usdc.address.toLowerCase()) continue;
+    let parsed: bigint;
+    try {
+      parsed = BigInt(candidate.allowance);
+    } catch {
+      return undefined; // malformed allowance: fall back to defaults rather than a bad cap
+    }
     // A negative allowance (BigInt('-0x100') parses fine) would seed a negative
     // cap and make checkPolicy reject or misbehave — treat it as no grant.
+    // Applied to every matching entry, not just the chosen one: an entry we
+    // cannot trust poisons the whole read, and skipping it would silently seed
+    // from whatever the readable ones say.
     if (parsed < 0n) return undefined;
-    allowance = parsed.toString();
-  } catch {
-    return undefined; // malformed allowance: fall back to defaults rather than a bad cap
+    if (tightest === undefined || parsed < tightest) {
+      tightest = parsed;
+      spend = candidate;
+    }
   }
+  if (!spend || tightest === undefined) return undefined;
+  const allowance = tightest.toString();
   // Keep the period alongside the number. An allowance without its unit is
   // dimensionless, and reading a per-period figure as a per-session one caps a
   // multi-period grant at a single period's worth for its whole life.
