@@ -5,17 +5,19 @@ import { useSearchParams } from 'next/navigation';
 import { JAW, Mode } from '@jaw.id/core';
 import type { JawTheme } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
-import { Card } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { ThemePicker } from '../../components/theme-picker';
-import { ThemeToggle } from '../../components/theme-toggle';
+import { ThemeStudioControls, DialogPreviews } from '../../components/shell/theme-studio';
+import { ShellHeader } from '../../components/shell/header';
+import { ShellSidebar, type ShellView } from '../../components/shell/sidebar';
+import { ConfigCard } from '../../components/shell/config-card';
+import { MethodList } from '../../components/shell/method-list';
 
-import { MethodCard } from '../../components/method-card';
-import { MethodModal } from '../../components/method-modal';
-import { EncodeDataModal } from '../../components/encode-data-modal';
-import { ExecutionLog, type LogEntry } from '../../components/execution-log';
+import { MethodDetail } from '../../components/shell/method-detail';
+import { ResponsePanel, latestResponse, type LogEntry } from '../../components/shell/response-panel';
+import { ExecutePanel, useMethodParams } from '../../components/shell/execute-panel';
+import { EncodePanel } from '../../components/shell/encode-panel';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
-import { RPC_METHODS, CATEGORIES, CATEGORY_LABELS, type RpcMethod, type MethodCategory } from '../../lib/rpc-methods';
+import { RPC_METHODS, type RpcMethod } from '../../lib/rpc-methods';
+import { activePresetLabel } from '../../lib/jaw-theme-presets';
 import { reverseResolveEnsName } from '../../lib/ens-resolver';
 import { resolveKeysUrl } from '../../lib/keys-url';
 import { getAnalyticsClient } from '../../analytics';
@@ -64,13 +66,20 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
   const defaultChainId = String(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID || 84532);
   const [chainId, setChainId] = useState<string>(defaultChainId);
   const [ensName, setEnsName] = useState<string | null>(null);
-  const [selectedMethod, setSelectedMethod] = useState<RpcMethod | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEncodeModalOpen, setIsEncodeModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
+  // Which method is mid-flight, so a different method's panel doesn't claim it.
+  const [runningMethodId, setRunningMethodId] = useState<string | null>(null);
+  // v2 shell UI state: sidebar view and highlighted method.
+  const [view, setView] = useState<ShellView>('playground');
+  // wallet_connect is the default selection — the natural first step of a session.
+  const [activeMethodId, setActiveMethodId] = useState<string | null>('wallet_connect');
 
   const [theme, setTheme] = useState<JawTheme>({ mode: 'auto' });
+  // Draft the studio edits. The mock previews read this immediately; only Save
+  // pushes it into the SDK (handleThemeChange), so the live dialogs below keep
+  // the last saved theme while you experiment.
+  const [draftTheme, setDraftTheme] = useState<JawTheme>({ mode: 'auto' });
+  const themeDirty = JSON.stringify(draftTheme) !== JSON.stringify(theme);
   const uiHandlerRef = useRef<ReactUIHandler>(new ReactUIHandler({ theme }));
   const [sdk, setSdk] = useState(() => buildSdk(mode, uiHandlerRef.current, undefined, theme, transportMode));
   const [pmConfig, setPmConfig] = useState<PaymasterApplyConfig | undefined>();
@@ -234,279 +243,152 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
     [sdk, addLog, defaultChainId, mode, transportMode, chainId]
   );
 
-  const handleMethodClick = (method: RpcMethod) => {
-    if (method.category === 'utility') {
-      setIsEncodeModalOpen(true);
-      return;
-    }
-    setSelectedMethod(method);
-    setIsModalOpen(true);
-  };
+  const themeMeta = activePresetLabel(theme) ?? (theme.colors ? 'Custom' : 'Default');
+  const surface = transportMode === 'popup' ? ('popup' as const) : ('iframe' as const);
+  const activeMethod = RPC_METHODS.find((m) => m.id === activeMethodId) ?? RPC_METHODS[0] ?? null;
+  const [methodParams, setMethodParam] = useMethodParams(activeMethod);
+  const isRunningActive = runningMethodId !== null && runningMethodId === activeMethod?.id;
+  const dispatchNote = `${surface === 'popup' ? 'Popup' : 'Iframe (default)'} · ${
+    mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'
+  }`;
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setSelectedMethod(null);
-  };
+  // Errors are surfaced through the same log the response panel reads from —
+  // handleExecute logs its own; this covers the pre-execution stages.
+  const logUiError = useCallback(
+    (methodName: string, err: unknown) => {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'message' in err
+            ? (err as { message: string }).message
+            : JSON.stringify(err);
+      addLog('error', methodName, message);
+    },
+    [addLog]
+  );
 
-  const filteredMethods =
-    selectedCategory === 'all' ? RPC_METHODS : RPC_METHODS.filter((m) => m.category === selectedCategory);
+  const runMethod = useCallback(
+    async (method: RpcMethod, resolvedParams: Record<string, string>) => {
+      let built: unknown[];
+      try {
+        built = method.buildParams(resolvedParams, { address: accounts[0], chainId: chainId || undefined });
+      } catch (err) {
+        logUiError(method.method, err);
+        return;
+      }
+      setRunningMethodId(method.id);
+      try {
+        await handleExecute(method.method, built);
+      } catch {
+        // Already logged inside handleExecute.
+      } finally {
+        setRunningMethodId(null);
+      }
+    },
+    [accounts, chainId, handleExecute, logUiError]
+  );
+
+  // Straight to the keys dialog: plain passkey auth, no SIWE capabilities (Leo's call).
+  const toggleConnect = () => {
+    // Registry id and RPC method name coincide for both of these entries.
+    const methodName = isConnected ? 'wallet_disconnect' : 'eth_requestAccounts';
+    setRunningMethodId(methodName);
+    setActiveMethodId(methodName);
+    void handleExecute(methodName, [])
+      .catch(() => {
+        // Already logged inside handleExecute.
+      })
+      .finally(() => setRunningMethodId(null));
+  };
 
   return (
-    <div className="bg-background min-h-screen p-4 md:p-8">
-      <div className="mx-auto max-w-6xl space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-foreground text-2xl font-bold md:text-3xl">JAW.id Playground - Core</h1>
-          <ThemeToggle />
-        </div>
+    <div className="bg-shell-canvas text-shell-ink grid h-screen grid-rows-[auto_1fr] overflow-hidden">
+      <ShellHeader
+        sdk="core"
+        isConnected={isConnected}
+        onToggleConnect={toggleConnect}
+        address={accounts[0]}
+        ensName={ensName}
+        chainId={chainId}
+      />
 
-        {/* Mode Toggle */}
-        <Card className="p-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-muted-foreground text-sm font-medium">Mode:</span>
-              <span
-                className={`rounded-full px-3 py-1 text-sm font-medium ${
-                  mode === Mode.AppSpecific
-                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
-                    : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                }`}
-              >
-                {mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <ConfigSnippet type="core" mode={mode} paymasters={pmConfig} onPaymasterApply={handlePaymasterApply} />
-              <a
-                href="/core"
-                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                  mode === Mode.CrossPlatform
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                Cross-Platform
-              </a>
-              <a
-                href="/core?mode=app-specific"
-                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                  mode === Mode.AppSpecific
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                App-Specific
-              </a>
-            </div>
-          </div>
-          <p className="text-muted-foreground mt-2 text-xs">
-            {mode === Mode.AppSpecific
-              ? 'Direct signing with UI handled by UIHandler in your app'
-              : 'Passkey operations handled via keys.jaw.id'}
-          </p>
-        </Card>
-
-        {/* Transport Toggle (CrossPlatform only — how keys.jaw.id is reached) */}
-        {mode === Mode.CrossPlatform && (
-          <Card className="p-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-muted-foreground text-sm font-medium">Transport:</span>
-                <span
-                  className={`rounded-full px-3 py-1 text-sm font-medium ${
-                    transportMode === 'popup'
-                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
-                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
-                  }`}
-                >
-                  {transportMode === 'popup' ? 'Popup' : `Iframe (${transportMode})`}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <a
-                  href="/core"
-                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                    transportMode !== 'popup'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  }`}
-                >
-                  Iframe (default)
-                </a>
-                <a
-                  href="/core?transport=popup"
-                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                    transportMode === 'popup'
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  }`}
-                >
-                  Popup
-                </a>
-              </div>
-            </div>
-            <p className="text-muted-foreground mt-2 text-xs">
-              {transportMode === 'popup'
-                ? 'Legacy opt-out: keys.jaw.id opens in a popup window'
-                : 'Default: embedded dialog with automatic popup fallback (Safari passkey creation, insecure contexts, occluded UI)'}
-            </p>
-          </Card>
-        )}
-
-        {/* Theme Picker: AppSpecific applies via ReactUIHandler, CrossPlatform
-            via provider.setTheme pushing to the keys dialog. */}
-        <ThemePicker theme={theme} onThemeChange={handleThemeChange} />
-
-        {/* Connection Status */}
-        <Card className="p-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="mb-3 text-lg font-semibold">Connection Status</h2>
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Status:</span>
-                  <span className={`font-medium ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
-                    {isConnected ? 'Connected' : 'Disconnected'}
-                  </span>
-                </div>
-                {ensName && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">ENS:</span>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(ensName)}
-                      className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
-                      title="Click to copy"
-                    >
-                      {ensName}
-                    </button>
-                  </div>
-                )}
-                {accounts.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Account:</span>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(accounts[0] || '')}
-                      className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
-                      title="Click to copy"
-                    >
-                      {accounts[0]?.slice(0, 6)}...{accounts[0]?.slice(-4)}
-                      <svg
-                        className="text-muted-foreground h-3 w-3"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Chain:</span>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(String(chainId))}
-                    className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
-                    title="Click to copy"
-                  >
-                    {chainId}
-                    <svg
-                      className="text-muted-foreground h-3 w-3"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              {!isConnected ? (
-                <Button
-                  onClick={() => {
-                    const m = RPC_METHODS.find((m) => m.id === 'wallet_connect');
-                    if (m) handleMethodClick(m);
-                  }}
-                >
-                  Connect
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    const m = RPC_METHODS.find((m) => m.id === 'wallet_disconnect');
-                    if (m) handleMethodClick(m);
-                  }}
-                >
-                  Disconnect
-                </Button>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        {/* Category Filter */}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={selectedCategory === 'all' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setSelectedCategory('all')}
-          >
-            All ({RPC_METHODS.length})
-          </Button>
-          {CATEGORIES.map((category) => {
-            const count = RPC_METHODS.filter((m) => m.category === category).length;
-            return (
-              <Button
-                key={category}
-                variant={selectedCategory === category ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSelectedCategory(category)}
-              >
-                {CATEGORY_LABELS[category]} ({count})
-              </Button>
-            );
-          })}
-        </div>
-
-        {/* Method Grid */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredMethods.map((method) => (
-            <MethodCard
-              key={method.id}
-              method={method}
-              onClick={() => handleMethodClick(method)}
-              disabled={method.requiresConnection && !isConnected}
+      <div className="grid min-h-0 grid-cols-[334px_minmax(0,1fr)]">
+        <ShellSidebar view={view} onViewChange={setView} themeMeta={themeMeta} methodCount={RPC_METHODS.length}>
+          {view === 'playground' ? (
+            <>
+              <ConfigCard
+                sdk="core"
+                chainId={chainId}
+                mode={mode === Mode.AppSpecific ? 'app-specific' : 'cross-platform'}
+                transport={surface}
+              />
+              <MethodList
+                methods={RPC_METHODS}
+                selectedId={activeMethod?.id ?? null}
+                onSelect={(m) => setActiveMethodId(m.id)}
+                isConnected={isConnected}
+                transport={surface}
+              />
+            </>
+          ) : (
+            /* Theme controls: AppSpecific applies via ReactUIHandler, CrossPlatform
+               via provider.setTheme pushing to the keys dialog. */
+            <ThemeStudioControls
+              theme={draftTheme}
+              onThemeChange={setDraftTheme}
+              onSave={() => handleThemeChange(draftTheme)}
+              dirty={themeDirty}
             />
-          ))}
-        </div>
+          )}
+        </ShellSidebar>
 
-        {/* Activity Log */}
-        <ExecutionLog logs={logs} onClear={() => setLogs([])} />
-
-        {/* Method Modal */}
-        <MethodModal
-          method={selectedMethod}
-          isOpen={isModalOpen}
-          onClose={handleCloseModal}
-          onExecute={handleExecute}
-          context={{ address: accounts[0], chainId: chainId || undefined }}
-          isConnected={isConnected}
-        />
-
-        {/* Encode Data Modal */}
-        <EncodeDataModal isOpen={isEncodeModalOpen} onClose={() => setIsEncodeModalOpen(false)} />
+        <main className="flex min-h-0 flex-col overflow-y-auto">
+          <div className="flex flex-1 flex-col gap-6 px-6 py-6 md:px-9 md:py-[30px]">
+            {view === 'theme' ? (
+              <DialogPreviews theme={draftTheme} />
+            ) : activeMethod ? (
+              <>
+                {/* Interim: ConfigSnippet moves to its shell home in a later step. */}
+                <div className="flex justify-end">
+                  <ConfigSnippet
+                    type="core"
+                    mode={mode}
+                    paymasters={pmConfig}
+                    onPaymasterApply={handlePaymasterApply}
+                  />
+                </div>
+                <MethodDetail
+                  key={activeMethod.id}
+                  method={activeMethod}
+                  transport={surface}
+                  isConnected={isConnected}
+                  onToggleConnect={toggleConnect}
+                  snippet={activeMethod.getCodeSnippet(methodParams)}
+                  snippetLabel="@jaw.id/core"
+                >
+                  {activeMethod.category === 'utility' ? (
+                    <EncodePanel dispatchNote="Local · viem" />
+                  ) : (
+                    <ExecutePanel
+                      method={activeMethod}
+                      params={methodParams}
+                      onParamChange={setMethodParam}
+                      context={{ address: accounts[0], chainId: chainId || undefined }}
+                      isConnected={isConnected}
+                      dispatchNote={dispatchNote}
+                      running={isRunningActive}
+                      onRun={(resolved) => runMethod(activeMethod, resolved)}
+                      onError={(message) => addLog('error', activeMethod.method, message)}
+                    />
+                  )}
+                </MethodDetail>
+                {activeMethod.category !== 'utility' && (
+                  <ResponsePanel response={latestResponse(logs, activeMethod.method)} running={isRunningActive} />
+                )}
+              </>
+            ) : null}
+          </div>
+        </main>
       </div>
     </div>
   );
