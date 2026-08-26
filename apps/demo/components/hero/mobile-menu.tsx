@@ -3,22 +3,18 @@
 import { FEATS } from './features';
 import { btnGhost, btnPrimary, Icon } from '@/components/ui';
 
-// Mobile-only feature switcher: a floating hamburger over the app plus an
-// in-phone bottom sheet listing every feature, its variants, and the links
-// that live in the desktop header/footer.
+// Mobile-only feature switcher: the bottom sheet listing every feature, its
+// variants, and the links that live in the desktop header/footer. The trigger
+// lives in the top bar (see mobile-bar.tsx).
 export function MobileMenu({
-  showButton,
   open,
-  onOpen,
   onClose,
   activeId,
   activeVi,
   onPick,
   onPickVariant,
 }: {
-  showButton: boolean;
   open: boolean;
-  onOpen: () => void;
   onClose: () => void;
   activeId: number;
   activeVi: number;
@@ -27,29 +23,6 @@ export function MobileMenu({
 }) {
   return (
     <>
-      {/* mobile-only: feature switcher floats over the app */}
-      {showButton && (
-        <button
-          type="button"
-          aria-label="Choose a feature"
-          onClick={onOpen}
-          className="absolute right-3.5 top-3.5 z-[35] grid h-9 w-9 cursor-pointer place-items-center rounded-full border border-black/10 bg-white/75 shadow-[0_2px_10px_rgba(15,23,42,.12)] backdrop-blur-md md:hidden"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--ink)"
-            strokeWidth="2"
-            strokeLinecap="round"
-          >
-            <path d="M4 7h16" />
-            <path d="M4 12h16" />
-            <path d="M4 17h16" />
-          </svg>
-        </button>
-      )}
       {open && (
         <div
           className="animate-jd-fade absolute inset-0 z-[55] flex items-end bg-[rgba(15,23,42,.35)] backdrop-blur-[2px] md:hidden"

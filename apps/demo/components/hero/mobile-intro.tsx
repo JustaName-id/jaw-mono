@@ -1,6 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/ui';
+import { MobileIntroBar } from './mobile-bar';
 import { SocialApp } from '@/components/screens/social';
 
 const LINKS = [
@@ -27,26 +28,15 @@ const LINKS = [
 // Mobile-only landing shown before the demo starts. Desktop puts the pitch
 // beside the phone; on a real phone the demo owns the whole screen, so this
 // page carries the headline, the four capabilities, and the launch CTA first.
-export function MobileIntro({ onLaunch }: { onLaunch: () => void }) {
+export function MobileIntro({ onLaunch, onMenu }: { onLaunch: () => void; onMenu: () => void }) {
   return (
     <div
       className="animate-jd-fade flex h-full flex-col overflow-y-auto bg-white"
       data-analytics-surface="mobile-intro"
     >
-      <header className="flex items-center justify-between px-5 pb-4 pt-[54px]">
-        <a href="https://jaw.id" className="inline-flex items-center gap-2 text-inherit no-underline">
-          <Icon.Logo size={24} />
-          <span className="text-[16px] font-semibold tracking-[-0.015em]">
-            JAW<span className="text-ink-3">.id</span>
-          </span>
-        </a>
-        <span className="text-ink-2 inline-flex items-center gap-[7px] font-mono text-[9.5px] uppercase tracking-[.14em]">
-          <span className="animate-hd-live bg-jaw-blue h-1.5 w-1.5 rounded-full" />
-          Interactive demo
-        </span>
-      </header>
+      <MobileIntroBar onMenu={onMenu} />
 
-      <div className="px-5">
+      <div className="px-5 pt-5">
         <h1 className="mb-2.5 text-balance text-[27px] font-semibold leading-[1.08] tracking-[-0.035em]">
           Experience <span className="text-jaw-blue">your users&apos;</span> journey
         </h1>
