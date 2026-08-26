@@ -12,7 +12,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 
-import { Communicator } from '@jaw.id/core';
+import { Communicator, standardErrorCodes, type RPCRequestMessage } from '@jaw.id/core';
+import { createFlowLock } from './flow-lock';
+import { buildHandshakeFailure, routeHandshake, routeOwnsScreen } from './handshake-route';
 import { PopupCommunicator, type Message } from './popup-communicator';
 
 // The iframe transport requires a real HTTPS origin (http://localhost falls
@@ -313,5 +315,221 @@ describe('SDK <-> keys integration over the iframe transport', () => {
     } finally {
       window.open = originalOpen;
     }
+  });
+});
+
+/**
+ * page.tsx's handshake handler, reduced to its routing: the same routeHandshake
+ * + flow lock it composes, over the real transport. The React work each route
+ * does (session CRUD, screens) is out of scope here.
+ */
+function bootKeysRouter(keys: PopupCommunicator, originsWithSession: Set<string>) {
+  const lock = createFlowLock();
+  const routes: string[] = [];
+  const refusals: number[] = [];
+
+  bootKeysApp(keys, (message) => {
+    const request = message as unknown as RPCRequestMessage;
+    const handshake = (request.content as { handshake?: { method: string } } | undefined)?.handshake;
+
+    if (lock.isOpen()) {
+      refusals.push(standardErrorCodes.rpc.resourceUnavailable);
+      keys.sendMessage(
+        buildHandshakeFailure(
+          request,
+          standardErrorCodes.rpc.resourceUnavailable,
+          'A request is already in progress'
+        ) as unknown as Message
+      );
+      return;
+    }
+    lock.claim();
+
+    const route = routeHandshake({
+      hasHandshake: Boolean(handshake),
+      method: handshake?.method,
+      hasSession: originsWithSession.has(DAPP_ORIGIN),
+    });
+    routes.push(route);
+
+    try {
+      if (route === 'connect-first') {
+        keys.sendMessage(
+          buildHandshakeFailure(
+            request,
+            standardErrorCodes.provider.unauthorized,
+            'No connection for this origin; call wallet_connect first'
+          ) as unknown as Message
+        );
+        keys.requestClose();
+        return;
+      }
+      if (route === 'cold-start' || route === 'connect') {
+        keys.sendResponse(request.id as string, { accounts: [] });
+      }
+    } finally {
+      if (!routeOwnsScreen(route)) lock.release();
+    }
+  });
+
+  return { lock, routes, refusals };
+}
+
+function handshakeRequest(id: string, method: string) {
+  return { id, sender: 'peer-key-hex', content: { handshake: { method, params: [] } } };
+}
+
+describe('handshake routing over the iframe transport', () => {
+  let sdk: Communicator;
+
+  beforeEach(() => {
+    sdk = createSdkCommunicator();
+  });
+
+  afterEach(() => {
+    sdk.disconnect();
+    document.body.innerHTML = '';
+    document.head.innerHTML = '';
+  });
+
+  it('answers 4100 and closes the dialog when no session exists', async () => {
+    const { keysWin, deliver } = createKeysWindow();
+    const keysApp = new PopupCommunicator(keysWin);
+
+    const responsePromise = sdk.postRequestAndWaitForResponse(handshakeRequest('hs-1', 'handshake'));
+    await bridgeIframe(deliver);
+    const router = bootKeysRouter(keysApp, new Set());
+
+    const response = (await responsePromise) as unknown as { content: { failure?: { code: number } } };
+    expect(response.content.failure?.code).toBe(standardErrorCodes.provider.unauthorized);
+    expect(router.routes).toEqual(['connect-first']);
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('dialog[data-jaw]')?.hasAttribute('open')).toBe(false);
+    });
+    expect(router.lock.isOpen()).toBe(false);
+  });
+
+  it('leaves the lock held after a cold-start ack, so the follow-up owns the screen', async () => {
+    const { keysWin, deliver } = createKeysWindow();
+    const keysApp = new PopupCommunicator(keysWin);
+
+    const responsePromise = sdk.postRequestAndWaitForResponse(handshakeRequest('hs-2', 'handshake'));
+    await bridgeIframe(deliver);
+    const router = bootKeysRouter(keysApp, new Set([DAPP_ORIGIN]));
+
+    await responsePromise;
+    expect(router.routes).toEqual(['cold-start']);
+    expect(router.lock.isOpen()).toBe(true);
+  });
+
+  it('refuses a second handshake while a connect is still unanswered', async () => {
+    const { keysWin, deliver } = createKeysWindow();
+    const keysApp = new PopupCommunicator(keysWin);
+
+    const first = sdk.postRequestAndWaitForResponse(handshakeRequest('hs-3a', 'wallet_connect'));
+    await bridgeIframe(deliver);
+    const router = bootKeysRouter(keysApp, new Set());
+    await first;
+
+    const second = (await sdk.postRequestAndWaitForResponse(
+      handshakeRequest('hs-3b', 'eth_requestAccounts')
+    )) as unknown as { content: { failure?: { code: number; message: string } } };
+
+    expect(second.content.failure?.code).toBe(standardErrorCodes.rpc.resourceUnavailable);
+    expect(second.content.failure?.message).toBe('A request is already in progress');
+    expect(router.routes).toEqual(['connect']);
+    expect(router.lock.isOpen()).toBe(true);
+  });
+
+  it('releases the lock on an unsupported method, so the next handshake is served', async () => {
+    const { keysWin, deliver } = createKeysWindow();
+    const keysApp = new PopupCommunicator(keysWin);
+
+    void sdk.postRequestAndWaitForResponse(handshakeRequest('hs-4a', 'eth_sendRawTransaction')).catch(() => undefined);
+    await bridgeIframe(deliver);
+    const router = bootKeysRouter(keysApp, new Set([DAPP_ORIGIN]));
+
+    await vi.waitFor(() => expect(router.routes).toEqual(['unsupported']));
+    expect(router.lock.isOpen()).toBe(false);
+
+    await sdk.postRequestAndWaitForResponse(handshakeRequest('hs-4b', 'handshake'));
+    expect(router.routes).toEqual(['unsupported', 'cold-start']);
+    expect(router.refusals).toEqual([]);
+  });
+
+  it('releases the lock on a handshake with no handshake content', async () => {
+    const { keysWin, deliver } = createKeysWindow();
+    const keysApp = new PopupCommunicator(keysWin);
+
+    void sdk.postRequestAndWaitForResponse({ id: 'hs-5', sender: 'peer', content: {} }).catch(() => undefined);
+    await bridgeIframe(deliver);
+    const router = bootKeysRouter(keysApp, new Set([DAPP_ORIGIN]));
+
+    await vi.waitFor(() => expect(router.routes).toEqual(['invalid']));
+    expect(router.lock.isOpen()).toBe(false);
+  });
+});
+
+describe('dialog dismissal over the iframe transport', () => {
+  let sdk: Communicator;
+
+  beforeEach(() => {
+    sdk = createSdkCommunicator();
+  });
+
+  afterEach(() => {
+    sdk.disconnect();
+    document.body.innerHTML = '';
+    document.head.innerHTML = '';
+  });
+
+  it('rejects the in-flight request and tells keys the dialog hid on Escape', async () => {
+    const { keysWin, deliver } = createKeysWindow();
+    const keysApp = new PopupCommunicator(keysWin);
+
+    const responsePromise = sdk.postRequestAndWaitForResponse({
+      id: 'dismiss-1',
+      data: { method: 'wallet_sendCalls' },
+    });
+    await bridgeIframe(deliver);
+    const received = bootKeysApp(keysApp, () => {
+      /* never answers — the user escapes instead */
+    });
+
+    await vi.waitFor(() => {
+      expect(received.some((m) => m.id === 'dismiss-1')).toBe(true);
+    });
+
+    const dialog = document.querySelector('dialog[data-jaw]') as HTMLDialogElement;
+    dialog.dispatchEvent(new dom.window.Event('cancel', { cancelable: true }));
+
+    await expect(responsePromise).rejects.toMatchObject({ code: 4001 });
+    await vi.waitFor(() => {
+      const hidden = received.filter(
+        (m) => m.event === 'DialogVisibility' && (m.data as { visible?: boolean })?.visible === false
+      );
+      expect(hidden.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("only hides on a 'completed' close, and rejects on a 'cancelled' one", async () => {
+    const { keysWin, deliver } = createKeysWindow();
+    const keysApp = new PopupCommunicator(keysWin);
+
+    const completed = sdk.postRequestAndWaitForResponse({ id: 'close-1', data: { method: 'eth_chainId' } });
+    await bridgeIframe(deliver);
+    bootKeysApp(keysApp, (message, app) => {
+      app.sendResponse(message.id as string, { chainId: '0x1' });
+      app.requestClose('completed');
+    });
+    await expect(completed).resolves.toMatchObject({ requestId: 'close-1' });
+
+    const cancelled = sdk.postRequestAndWaitForResponse({ id: 'close-2', data: { method: 'eth_chainId' } });
+    await vi.waitFor(() => {
+      expect(document.querySelector('dialog[data-jaw]')?.hasAttribute('open')).toBe(true);
+    });
+    keysApp.requestClose('cancelled');
+    await expect(cancelled).rejects.toMatchObject({ code: 4001 });
   });
 });

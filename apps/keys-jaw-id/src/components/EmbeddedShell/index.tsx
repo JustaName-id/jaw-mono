@@ -15,6 +15,12 @@ import { EnsureVisibility } from '../EnsureVisibility';
 export interface EmbeddedShellProps {
   communicator: PopupCommunicator;
   children: ReactNode;
+  /**
+   * Called when the overlay tap dismisses the flow. The SDK rejects the pending
+   * request on its side, so the app content has to drop it here too — otherwise
+   * it looks like a flow that is still in progress.
+   */
+  onCancel?: () => void;
 }
 
 /**
@@ -34,7 +40,7 @@ export interface EmbeddedShellProps {
  *
  * In popup/standalone contexts it renders children unchanged.
  */
-export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
+export function EmbeddedShell({ communicator, children, onCancel }: EmbeddedShellProps) {
   const embedded = communicator.getContext() === 'embedded';
   const [presentation, setPresentation] = useState<EmbeddedPresentation>('floating');
   // Whether the host currently shows the iframe. The SDK mirrors its
@@ -140,7 +146,10 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   // and hide the dialog, handing control back to the dApp underneath.
   const onOverlayClick = active
     ? (event: MouseEvent) => {
-        if (event.target === event.currentTarget) communicator.requestClose('cancelled');
+        if (event.target === event.currentTarget) {
+          onCancel?.();
+          communicator.requestClose('cancelled');
+        }
       }
     : undefined;
 
