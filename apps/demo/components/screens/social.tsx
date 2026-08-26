@@ -36,8 +36,8 @@ export function SocialApp({ onCta }: { onCta: () => void }) {
                 style={{ background: 'linear-gradient(135deg,#38BDF8,#0EA5E9)' }}
               />
               <span className="min-w-0">
-                <span className="block text-[12.5px] font-[650] tracking-[-0.01em]">Eddie</span>
-                <span className="text-ink-3 block font-mono text-[9.5px]">eddie.nova.eth</span>
+                <span className="block text-[12.5px] font-[650] tracking-[-0.01em]">Leo</span>
+                <span className="text-ink-3 block font-mono text-[9.5px]">leo.nova.eth</span>
               </span>
               <span
                 className="ml-auto rounded-full border border-[rgba(8,81,255,.25)] px-[9px] py-[3px] text-[10px] font-semibold"
