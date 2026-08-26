@@ -231,17 +231,22 @@ export function policyFromGrant(grant?: GrantedSpend): X402Policy {
  * approved; an explicit `jaw config set x402.*` wins per field, so a user can
  * tighten further.
  *
- * Nothing is clamped. An earlier revision pinned `maxTotalPerSession` to the
- * grant, which was only needed because the grant's per-period allowance was
- * being written into that session-wide field: config had to be prevented from
- * raising a cap that was already wrong. Now that the grant lands on
- * `maxPerPeriod` instead, the two caps measure different things and cannot
- * contradict each other, so config is free to set its own session ceiling. The
- * per-period cap keeps mirroring the chain regardless of what config says, and
- * `maxPerPeriod` is not settable from the CLI.
+ * The per-period cap always mirrors the chain: it is seeded from the grant and
+ * `maxPerPeriod` is not settable from the CLI. `maxTotalPerSession` is the
+ * user's own ceiling and is normally left alone, since it and the per-period cap
+ * measure different things and cannot contradict each other. The exception is
+ * the grant that records no period at all: its allowance lands on
+ * `maxTotalPerSession` for want of a window, and config is spread last, so a
+ * `jaw config set x402.maxTotalPerSession` would raise a grant-derived cap
+ * rather than tighten it. Where both supply that field, the smaller wins.
  */
 export function resolveX402Policy(configPolicy?: X402Policy, grantPolicy?: X402Policy): X402Policy {
   const merged: X402Policy = { ...DEFAULT_X402_POLICY, ...(grantPolicy ?? {}), ...(configPolicy ?? {}) };
+  const grantTotal = parseNonNegativeBigInt(grantPolicy?.maxTotalPerSession);
+  const configTotal = parseNonNegativeBigInt(configPolicy?.maxTotalPerSession);
+  if (grantTotal !== undefined && configTotal !== undefined && grantTotal < configTotal) {
+    merged.maxTotalPerSession = grantPolicy?.maxTotalPerSession;
+  }
   // The default session cap is the guardrail for an unconfigured setup that has
   // no grant to bound it. Once a grant supplies a per-period cap, that cap is
   // what the user approved on chain, and leaving the 10-USDC default sitting on

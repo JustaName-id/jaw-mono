@@ -137,6 +137,15 @@ describe('resolveX402Policy — grant layer', () => {
     expect(policy.maxTotalPerSession).toBe('50000000');
   });
 
+  // The no-period grant is the one case where the grant and config land on the
+  // same field. Config is spread last, so without this the user's own number
+  // would replace the grant-derived cap outright rather than tighten it, and
+  // this path has no `maxPerPeriod` left to bound the session.
+  it('does not let config raise the session cap the grant seeded', () => {
+    const policy = resolveX402Policy({ maxTotalPerSession: '50000000' }, policyFromGrant(grant)); // 50 > 5 USDC
+    expect(policy.maxTotalPerSession).toBe('5000000');
+  });
+
   // The session cap used to be pinned to the grant. That clamp only existed
   // because a per-period allowance was being written into a session-wide field,
   // and it silently rewrote whatever the user configured. With the allowance on
