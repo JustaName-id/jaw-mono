@@ -141,7 +141,8 @@ export function extractGrantedSpend(
   const usdc = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === chainId);
   if (!usdc) return undefined;
   let dropped = 0;
-  let tightest: bigint | undefined;
+  let readable = 0;
+  let tightest: { entry: GrantSpendEntry; allowance: bigint } | undefined;
   let widest: { entry: GrantSpendEntry; seconds: number } | undefined;
   for (const candidate of spends ?? []) {
     if (!eqAddr(candidate.token, usdc.address)) continue;
@@ -152,7 +153,8 @@ export function extractGrantedSpend(
       dropped++;
       continue;
     }
-    if (tightest === undefined || parsed < tightest) tightest = parsed;
+    readable++;
+    if (tightest === undefined || parsed < tightest.allowance) tightest = { entry: candidate, allowance: parsed };
     const seconds = windowSeconds(candidate.unit, candidate.multiplier);
     if (widest === undefined || seconds > widest.seconds) widest = { entry: candidate, seconds };
   }
@@ -172,9 +174,23 @@ export function extractGrantedSpend(
   // unit records no period rather than guessing, falling back to session-wide,
   // which is the never-resets reading `windowSeconds` already ranked it by.
   const period = normalizePeriod(widest.entry.unit, widest.entry.multiplier);
+  // When the number and the window come from different entries the seed is
+  // tighter than anything actually granted: `[100 USDC/day, 1000 USDC/month]`
+  // becomes 100 per month. That is the intended trade, but the user meets it
+  // later as a refusal quoting a cap they never granted, and `maxPerPeriod` is
+  // not settable from the CLI, so say it here while `jaw session setup` is still
+  // cheap to re-run.
+  if (readable > 1 && tightest.entry !== widest.entry) {
+    const window = period ? describePeriod(period.unit, period.multiplier) : 'session';
+    warn?.(
+      `The grant carries ${readable} USDC spend entries and a single cap cannot represent all of them; ` +
+        `the x402 policy was seeded at the smallest allowance (${tightest.allowance} base units) over the longest ` +
+        `window (per ${window}), which can be far tighter than any single entry. Grant a single spend entry to avoid it.`
+    );
+  }
   return {
     token: usdc.address,
-    allowance: tightest.toString(),
+    allowance: tightest.allowance.toString(),
     network: usdc.wireNetwork,
     ...(period ? { unit: period.unit, multiplier: period.multiplier, periodAnchor: anchor.toISOString() } : {}),
   };

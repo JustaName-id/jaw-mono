@@ -387,6 +387,38 @@ describe('extractGrantedSpend', () => {
     expect(warnings).toHaveLength(1);
   });
 
+  // The seed pairs the smallest allowance with the longest window, so when they
+  // come from different entries it is tighter than anything granted and the cap
+  // it produces cannot be raised from the CLI. Say so while setup is re-runnable.
+  it('warns when the seeded pair is assembled from different entries', () => {
+    const warnings: string[] = [];
+    const mixed = [
+      { token: USDC_BASE, allowance: '0x5F5E100', unit: 'day', multiplier: 1 }, // 100 USDC/day
+      { token: USDC_BASE, allowance: '0x3B9ACA00', unit: 'month', multiplier: 1 }, // 1000 USDC/month
+    ];
+
+    const grant = extractGrantedSpend(mixed, 8453, new Date(), (m) => warnings.push(m));
+
+    expect(grant?.allowance).toBe('100000000');
+    expect(grant?.unit).toBe('month');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('100000000');
+    expect(warnings[0]).toContain('month');
+  });
+
+  // Same entry on both sides of the pair: the seed is exactly what was granted,
+  // so there is nothing to warn about.
+  it('stays quiet when one entry supplies both the allowance and the window', () => {
+    const warnings: string[] = [];
+    const spends = [
+      { token: USDC_BASE, allowance: '0x3B9ACA00', unit: 'day', multiplier: 1 }, // 1000 USDC/day
+      { token: USDC_BASE, allowance: '0x5F5E100', unit: 'month', multiplier: 1 }, // 100 USDC/month
+    ];
+
+    expect(extractGrantedSpend(spends, 8453, new Date(), (m) => warnings.push(m))?.allowance).toBe('100000000');
+    expect(warnings).toEqual([]);
+  });
+
   // A window we cannot place is read as one that never resets: no period is
   // recorded, so the allowance lands session-wide, which never approves more
   // than whatever window the chain actually enforces.
