@@ -44,10 +44,12 @@ export interface StatusFacts {
   sessionCap: bigint | null;
   /**
    * The granted per-period cap and what has gone against it in the current
-   * window. Null when no grant seeded one. Reported separately from the session
-   * cap because a grant-seeded policy usually has no session cap at all, and
-   * checking only that one stayed quiet while the cap that actually binds was
-   * exhausted.
+   * window: top-ups pulled through the permission, not payments, because the
+   * cap mirrors the on-chain allowance and payments lag it by whatever float
+   * the payer holds. Null when no grant seeded one. Reported separately from
+   * the session cap because a grant-seeded policy usually has no session cap
+   * at all, and checking only that one stayed quiet while the cap that
+   * actually binds was exhausted.
    */
   periodCap?: bigint | null;
   periodSpent?: bigint | null;
