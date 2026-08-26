@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import type { ParameterDefinition } from '../../lib/rpc-methods';
-import { methodBlocked, type PlaygroundMethod } from '../../lib/method-ui-meta';
+import { defaultParams, methodBlocked, type PlaygroundMethod } from '../../lib/method-ui-meta';
 import { ParameterField } from '../parameter-field';
 import { isLikelyEnsName, resolveEnsToAddress, resolveEnsToAddresses } from '../../lib/ens-resolver';
 
@@ -10,8 +10,38 @@ export interface ExecutableMethod extends PlaygroundMethod {
   parameters?: ParameterDefinition[];
 }
 
+/**
+ * Form state for the selected method, held by the PAGE rather than by the
+ * panel below: MethodDetail unmounts the Execute tab when you switch to Code
+ * Snippet (which would wipe whatever was typed), and that same tab renders its
+ * snippet from these values. Resets to the registry defaults when the method
+ * changes — React's "adjust state when a prop changes" pattern, so no effect
+ * and no extra commit.
+ */
+export function useMethodParams(
+  method: ExecutableMethod | null
+): [Record<string, string>, (name: string, value: string) => void] {
+  const [state, setState] = useState(() => ({
+    id: method?.id,
+    values: defaultParams(method?.parameters),
+  }));
+
+  if (method && method.id !== state.id) {
+    setState({ id: method.id, values: defaultParams(method.parameters) });
+  }
+
+  const setParam = useCallback((name: string, value: string) => {
+    setState((prev) => ({ ...prev, values: { ...prev.values, [name]: value } }));
+  }, []);
+
+  return [state.values, setParam];
+}
+
 export interface ExecutePanelProps {
   method: ExecutableMethod;
+  /** Form values from useMethodParams above. */
+  params: Record<string, string>;
+  onParamChange: (name: string, value: string) => void;
   context: { address?: string; chainId?: string };
   isConnected: boolean;
   /** "Iframe (default) · Cross-Platform" header note. */
@@ -27,10 +57,13 @@ export interface ExecutePanelProps {
 /**
  * Inline parameter form — the MethodModal's execute tab as a main-pane panel.
  * Param defaults, showWhen filtering, and ENS resolution ported verbatim.
- * Mount with `key={method.id}` so param state resets per method.
+ * Controlled by useMethodParams above, so the values survive a tab switch and
+ * feed the Code Snippet tab.
  */
 export function ExecutePanel({
   method,
+  params,
+  onParamChange,
   context,
   isConnected,
   dispatchNote,
@@ -38,20 +71,7 @@ export function ExecutePanel({
   onRun,
   onError,
 }: ExecutePanelProps) {
-  const [params, setParams] = useState<Record<string, string>>(() => {
-    const defaults: Record<string, string> = {};
-    method.parameters?.forEach((param) => {
-      if (param.defaultValue) {
-        defaults[param.name] = param.defaultValue;
-      }
-    });
-    return defaults;
-  });
   const [isResolving, setIsResolving] = useState(false);
-
-  const handleParamChange = useCallback((name: string, value: string) => {
-    setParams((prev) => ({ ...prev, [name]: value }));
-  }, []);
 
   const parseChainIdString = (value: string): number => {
     return value.startsWith('0x') ? parseInt(value, 16) : parseInt(value, 10);
@@ -183,7 +203,7 @@ export function ExecutePanel({
               key={param.name}
               param={param}
               value={params[param.name] || ''}
-              onChange={(value) => handleParamChange(param.name, value)}
+              onChange={(value) => onParamChange(param.name, value)}
               context={context}
             />
           ))

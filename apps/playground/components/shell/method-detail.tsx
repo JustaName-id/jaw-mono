@@ -21,7 +21,8 @@ export interface MethodDetailProps {
 /**
  * Main-pane method view: title row, Execute/Code Snippet tabs, dialog badge,
  * and the connect-gate pill. Mount with `key={method.id}` so tab/copy state
- * resets per method.
+ * resets per method. The Execute tab is unmounted while the snippet shows, so
+ * nothing below here may own form state — see useMethodParams.
  */
 export function MethodDetail({
   method,

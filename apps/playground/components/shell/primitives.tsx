@@ -20,6 +20,13 @@ export function SegGroup({ label, children }: { label: string; children: ReactNo
   );
 }
 
+/**
+ * Focus indicator for controls that suppress the browser default — shadcn's
+ * `ring-ring` pair in shell tokens. Anything setting `outline-none` needs it.
+ */
+export const focusRing =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shell-ink-4 focus-visible:ring-offset-2 focus-visible:ring-offset-shell-raise';
+
 /** Class string for one segment inside a SegGroup (button or Link). */
 export function segClass(active: boolean, extra = ''): string {
   return [

@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import { encodeFunctionData, parseAbiItem } from 'viem';
 import type { AbiFunction, AbiParameter } from 'viem';
+import { focusRing } from './primitives';
 import { ResponsePanel } from './response-panel';
 
 // Ported verbatim from encode-data-modal.tsx — local viem encoding, no provider.
@@ -31,8 +32,7 @@ function getPlaceholder(type: string): string {
 }
 
 const labelClass = 'text-shell-ink-2 text-[13.5px] font-medium leading-[1.4] tracking-[-0.005em]';
-const inputClass =
-  'border-shell-line-2 bg-shell-pop text-shell-ink placeholder:text-shell-ink-4 min-h-[46px] w-full rounded-[10px] border px-[15px] py-[13px] font-mono text-[14.5px] outline-none focus-visible:border-shell-ink-4';
+const inputClass = `border-shell-line-2 bg-shell-pop text-shell-ink placeholder:text-shell-ink-4 min-h-[46px] w-full rounded-[10px] border px-[15px] py-[13px] font-mono text-[14.5px] outline-none focus-visible:border-shell-ink-4 ${focusRing}`;
 
 /**
  * Inline encodeFunctionData tool — the EncodeDataModal as a main-pane panel.

@@ -1,4 +1,4 @@
-import { CATEGORIES, CATEGORY_LABELS, type MethodCategory } from './rpc-methods';
+import { CATEGORIES, CATEGORY_LABELS, type MethodCategory, type ParameterDefinition } from './rpc-methods';
 
 /**
  * UI-side metadata for the v2 shell's method list. Purely presentational —
@@ -76,6 +76,20 @@ export function methodBlocked(m: PlaygroundMethod, isConnected: boolean): boolea
 /** Amber dot when running the method now would not behave as expected. */
 export function methodNeedsAttention(m: PlaygroundMethod, isConnected: boolean): boolean {
   return methodBlocked(m, isConnected);
+}
+
+/**
+ * The registry's declared defaults for one method, as a parameter form's
+ * initial values. A param with no `defaultValue` starts absent rather than
+ * empty — the field falls back to its placeholder and `buildParams` sees
+ * `undefined`, which is what the registries' `??` fallbacks expect.
+ */
+export function defaultParams(parameters?: ParameterDefinition[]): Record<string, string> {
+  const defaults: Record<string, string> = {};
+  parameters?.forEach((param) => {
+    if (param.defaultValue) defaults[param.name] = param.defaultValue;
+  });
+  return defaults;
 }
 
 /** Split "wallet_sendCalls" into a dimmed "wallet_" prefix and bold rest. */

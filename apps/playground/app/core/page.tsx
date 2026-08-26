@@ -13,7 +13,7 @@ import { MethodList } from '../../components/shell/method-list';
 
 import { MethodDetail } from '../../components/shell/method-detail';
 import { ResponsePanel, latestResponse } from '../../components/shell/response-panel';
-import { ExecutePanel } from '../../components/shell/execute-panel';
+import { ExecutePanel, useMethodParams } from '../../components/shell/execute-panel';
 import { EncodePanel } from '../../components/shell/encode-panel';
 import { type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
@@ -69,11 +69,10 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
   const [ensName, setEnsName] = useState<string | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  // v2 shell UI state: sidebar view, highlighted method, chain preference.
+  // v2 shell UI state: sidebar view and highlighted method.
   const [view, setView] = useState<ShellView>('playground');
   // wallet_connect is the default selection — the natural first step of a session.
   const [activeMethodId, setActiveMethodId] = useState<string | null>('wallet_connect');
-  const [prefChain, setPrefChain] = useState(defaultChainId);
 
   const [theme, setTheme] = useState<JawTheme>({ mode: 'auto' });
   // Draft the studio edits. The mock previews read this immediately; only Save
@@ -247,6 +246,7 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
   const themeMeta = activePresetLabel(theme) ?? (theme.colors ? 'Custom' : 'Default');
   const surface = transportMode === 'popup' ? ('popup' as const) : ('iframe' as const);
   const activeMethod = RPC_METHODS.find((m) => m.id === activeMethodId) ?? RPC_METHODS[0] ?? null;
+  const [methodParams, setMethodParam] = useMethodParams(activeMethod);
   const dispatchNote = `${surface === 'popup' ? 'Popup' : 'Iframe (default)'} · ${
     mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'
   }`;
@@ -316,8 +316,7 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
             <>
               <ConfigCard
                 sdk="core"
-                chainValue={prefChain}
-                onChainChange={setPrefChain}
+                chainId={chainId}
                 mode={mode === Mode.AppSpecific ? 'app-specific' : 'cross-platform'}
                 transport={surface}
               />
@@ -362,7 +361,7 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
                   transport={surface}
                   isConnected={isConnected}
                   onToggleConnect={toggleConnect}
-                  snippet={activeMethod.getCodeSnippet({})}
+                  snippet={activeMethod.getCodeSnippet(methodParams)}
                   snippetLabel="@jaw.id/core"
                 >
                   {activeMethod.category === 'utility' ? (
@@ -370,6 +369,8 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
                   ) : (
                     <ExecutePanel
                       method={activeMethod}
+                      params={methodParams}
+                      onParamChange={setMethodParam}
                       context={{ address: accounts[0], chainId: chainId || undefined }}
                       isConnected={isConnected}
                       dispatchNote={dispatchNote}

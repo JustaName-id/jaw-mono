@@ -1,6 +1,7 @@
 'use client';
 
 import { Label } from './ui/label';
+import { focusRing } from './shell/primitives';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { type ParameterDefinition } from '../lib/rpc-methods';
 
@@ -13,8 +14,7 @@ interface ParameterFieldProps {
 
 const labelClass = 'text-shell-ink-2 text-[13.5px] font-medium leading-[1.4] tracking-[-0.005em]';
 const hintClass = 'text-shell-ink-3 text-[13px] leading-normal';
-const fieldClass =
-  'border-shell-line-2 bg-shell-pop text-shell-ink placeholder:text-shell-ink-4 w-full rounded-[10px] border text-[14.5px] outline-none focus-visible:border-shell-ink-4';
+const fieldClass = `border-shell-line-2 bg-shell-pop text-shell-ink placeholder:text-shell-ink-4 w-full rounded-[10px] border text-[14.5px] outline-none focus-visible:border-shell-ink-4 ${focusRing}`;
 const inputClass = `${fieldClass} min-h-[46px] px-[15px] py-[13px] font-mono`;
 const textareaClass = `${fieldClass} min-h-[120px] resize-y p-[15px] font-mono leading-[1.65]`;
 
@@ -42,7 +42,7 @@ export function ParameterField({ param, value, onChange, context }: ParameterFie
           role="switch"
           aria-checked={isOn}
           onClick={() => onChange(isOn ? 'false' : 'true')}
-          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none ${
+          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors ${focusRing} ${
             isOn ? 'bg-shell-btn' : 'bg-shell-line-2'
           }`}
         >

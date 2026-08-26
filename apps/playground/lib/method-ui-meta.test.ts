@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  defaultParams,
   filterMethods,
   groupMethods,
   opensDialog,
@@ -73,6 +74,24 @@ describe('methodNeedsAttention', () => {
     const connect = m({ method: 'wallet_connect' });
     expect(methodNeedsAttention(connect, true)).toBe(true);
     expect(methodNeedsAttention(connect, false)).toBe(false);
+  });
+});
+
+describe('defaultParams', () => {
+  it('seeds only the params that declare a default', () => {
+    expect(
+      defaultParams([
+        { name: 'message', type: 'string', label: 'Message', required: true, defaultValue: 'Hello, World!' },
+        { name: 'to', type: 'address', label: 'To', required: true },
+      ])
+    ).toEqual({ message: 'Hello, World!' });
+    expect(defaultParams(undefined)).toEqual({});
+  });
+
+  it('seeds a real registry method from its own declared defaults', () => {
+    const sign = RPC_METHODS.find((m) => m.id === 'personal_sign');
+    expect(sign).toBeDefined();
+    expect(sign && defaultParams(sign.parameters)).toEqual({ message: 'Hello, World!' });
   });
 });
 

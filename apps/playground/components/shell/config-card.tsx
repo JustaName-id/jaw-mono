@@ -7,11 +7,17 @@ import type { ShellSdk } from './header';
 
 export interface ConfigCardProps {
   sdk: ShellSdk;
-  /** Decimal chain id shown in the "Default chain" select (display/prefill only). */
-  chainValue: string;
-  onChainChange: (chainId: string) => void;
+  /** The session's live chain, as the page tracks it (hex or decimal). */
+  chainId: string | number;
   mode: 'cross-platform' | 'app-specific';
   transport: 'iframe' | 'popup';
+}
+
+/** "Base Sepolia · 84532", or the bare id for a chain the SDK doesn't list. */
+function chainLabel(chainId: string | number): string {
+  // Number() reads both forms the pages hold: '0x14a34' and 84532.
+  const chain = SUPPORTED_CHAINS.find((c) => c.id === Number(chainId));
+  return chain ? `${chain.name} · ${chain.id}` : String(chainId);
 }
 
 function RowLabel({ children }: { children: string }) {
@@ -23,11 +29,16 @@ function RowLabel({ children }: { children: string }) {
 }
 
 /**
- * Compact session config: default chain (UI preference), and the Mode /
- * Transport switches. Mode and Transport are links because that is exactly how
- * the pages have always worked — the query params drive connector rebuilds.
+ * Compact session config: the live chain, and the Mode / Transport switches.
+ * Mode and Transport are links because that is exactly how the pages have
+ * always worked — the query params drive connector rebuilds.
+ *
+ * The chain is REPORTED, not set: switching chains is `wallet_switchEthereumChain`
+ * in the method list, and the page picks the result up from the provider's
+ * `chainChanged`. A select here would have to either dispatch that method or
+ * silently disagree with it.
  */
-export function ConfigCard({ sdk, chainValue, onChainChange, mode, transport }: ConfigCardProps) {
+export function ConfigCard({ sdk, chainId, mode, transport }: ConfigCardProps) {
   const base = sdk === 'core' ? '/core' : '/wagmi';
   const href = (next: { mode?: 'app-specific'; transport?: 'popup' }) => {
     const params = new URLSearchParams();
@@ -43,35 +54,10 @@ export function ConfigCard({ sdk, chainValue, onChainChange, mode, transport }: 
   return (
     <div className="border-shell-line bg-shell-raise mx-3.5 mb-3.5 mt-0.5 flex flex-col gap-[7px] overflow-visible rounded-[14px] border px-3 py-2.5">
       <div className="flex items-center justify-between gap-2">
-        <RowLabel>Default chain</RowLabel>
-        <div className="relative flex items-center">
-          <select
-            aria-label="Default chain"
-            value={chainValue}
-            onChange={(e) => onChainChange(e.target.value)}
-            className="border-shell-line-2 bg-shell-raise text-shell-ink max-w-[170px] cursor-pointer appearance-none rounded-full border py-[5px] pl-[11px] pr-[27px] text-xs tracking-[-0.005em] outline-none"
-          >
-            {SUPPORTED_CHAINS.map((chain) => (
-              <option key={chain.id} value={String(chain.id)} className="bg-shell-pop text-shell-ink">
-                {chain.name} · {chain.id}
-              </option>
-            ))}
-          </select>
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            className="text-shell-ink-3 pointer-events-none absolute right-[9px]"
-          >
-            <path d="M6 9l6 6 6-6" />
-          </svg>
-        </div>
+        <RowLabel>Chain</RowLabel>
+        <span className="border-shell-line-2 text-shell-ink max-w-[170px] truncate rounded-full border px-[11px] py-[5px] text-xs tracking-[-0.005em]">
+          {chainLabel(chainId)}
+        </span>
       </div>
 
       <div className="flex items-center justify-between gap-2">

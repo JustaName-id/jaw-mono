@@ -10,7 +10,7 @@ import { ConfigCard } from '../../components/shell/config-card';
 import { MethodList } from '../../components/shell/method-list';
 import { MethodDetail } from '../../components/shell/method-detail';
 import { ResponsePanel, latestResponse } from '../../components/shell/response-panel';
-import { ExecutePanel } from '../../components/shell/execute-panel';
+import { ExecutePanel, useMethodParams } from '../../components/shell/execute-panel';
 import { EncodePanel } from '../../components/shell/encode-panel';
 import { ThemeStudioControls, DialogPreviews } from '../../components/shell/theme-studio';
 import { activePresetLabel } from '../../lib/jaw-theme-presets';
@@ -128,7 +128,6 @@ function WagmiPageContent({
 
   const [view, setView] = useState<ShellView>('playground');
   const [activeMethodId, setActiveMethodId] = useState<string | null>(null);
-  const [prefChain, setPrefChain] = useState(String(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID || 84532));
   const [logs, setLogs] = useState<LogEntry[]>([]);
   // Theme draft: the mock previews follow it live, Save commits via onThemeChange.
   const [draftTheme, setDraftTheme] = useState<JawTheme>(theme);
@@ -446,6 +445,7 @@ function WagmiPageContent({
   const themeMeta = activePresetLabel(theme) ?? (theme.colors ? 'Custom' : 'Default');
   const surface = transportMode === 'popup' ? ('popup' as const) : ('iframe' as const);
   const activeMethod = WAGMI_METHODS.find((m) => m.id === activeMethodId) ?? WAGMI_METHODS[0] ?? null;
+  const [methodParams, setMethodParam] = useMethodParams(activeMethod);
   const dispatchNote = `${surface === 'popup' ? 'Popup' : 'Iframe (default)'} · ${
     mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'
   }`;
@@ -514,8 +514,7 @@ function WagmiPageContent({
             <>
               <ConfigCard
                 sdk="wagmi"
-                chainValue={prefChain}
-                onChainChange={setPrefChain}
+                chainId={chainId}
                 mode={mode === Mode.AppSpecific ? 'app-specific' : 'cross-platform'}
                 transport={surface}
               />
@@ -554,7 +553,7 @@ function WagmiPageContent({
                   transport={surface}
                   isConnected={isConnected}
                   onToggleConnect={toggleConnect}
-                  snippet={activeMethod.getCodeSnippet({})}
+                  snippet={activeMethod.getCodeSnippet(methodParams)}
                   snippetLabel="@jaw.id/wagmi"
                 >
                   {activeMethod.category === 'utility' ? (
@@ -562,6 +561,8 @@ function WagmiPageContent({
                   ) : (
                     <ExecutePanel
                       method={activeMethod}
+                      params={methodParams}
+                      onParamChange={setMethodParam}
                       context={{ address, chainId: chainId ? String(chainId) : undefined }}
                       isConnected={isConnected}
                       dispatchNote={dispatchNote}
