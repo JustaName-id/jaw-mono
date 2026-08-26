@@ -108,15 +108,23 @@ function windowSeconds(unit: string | undefined, multiplier?: number): number {
  *
  * A permission may carry several spend entries for the same token, and the
  * contract applies every one of them over its own window, so the grant is a
- * conjunction of caps that a single number-plus-period cannot represent. What
- * one pair can do is never approve more than the chain does: the smallest
- * allowance over the longest window among the entries. Anything that fits under
- * that fits under every entry, because each entry allows at least that much over
- * a window no longer than its own. When windows differ this over-restricts, and
- * the chain stays the final word either way; what it never does is approve a
- * payment the chain then reverts with ExceededSpendLimit, which is what seeding
- * from the first entry, or from the smallest number regardless of window, both
- * allowed.
+ * conjunction of caps that a single number-plus-period cannot represent. The
+ * closest one pair gets is the smallest allowance over the longest window among
+ * the entries: anything that fits under that fits under every entry whose window
+ * nests inside the longest one, because each such entry allows at least that
+ * much over a window no longer than its own. Usually it over-restricts, and the
+ * chain stays the final word either way.
+ *
+ * The nesting is a real condition, not a formality. A month is not a whole
+ * number of weeks, so `[5 USDC/week, 6 USDC/month]` seeds 5 per month, and the
+ * contract meters each entry from the permission start in whole durations of its
+ * own unit. Five payments late in one month plus one early in the next sit
+ * inside a single chain week and revert with ExceededSpendLimit, even though the
+ * local month counter had reset. `topUpCeiling` reads the same seed, so the
+ * reverting op can be the top-up pull rather than the payment. What the pair
+ * does close is the much wider hole of seeding from the first entry, or from the
+ * smallest number regardless of window, both of which over-approve even when the
+ * windows do nest.
  *
  * An entry whose allowance cannot be read is skipped with a warning rather than
  * trusted or allowed to sink the whole seed: dropping everything would land on
