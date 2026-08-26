@@ -74,7 +74,7 @@ If a session key exists (created with [`jaw session setup`](/cli/auto-mode)), pa
 }
 ```
 
-Set `JAW_SESSION=true` in the MCP server's `env` block to make session mode the default (a per-call `session: false` still routes through the browser). Session mode supports `eth_requestAccounts`, `eth_accounts`, `wallet_sendCalls`, `wallet_getCallsStatus`, `personal_sign`, and `eth_signTypedData_v4`. Use `jaw_session_status` to check whether a session key exists and when it expires.
+Set `JAW_SESSION=true` in the MCP server's `env` block to make session mode the default (a per-call `session: false` still routes through the browser). Session mode supports `eth_requestAccounts`, `eth_accounts`, `wallet_sendCalls` and `wallet_getCallsStatus`. Signing methods are browser only, since a signature made by the session key never passes the spend caps or the ledger. Use `jaw_session_status` to check whether a session key exists and when it expires.
 
 ### jaw_config_set
 

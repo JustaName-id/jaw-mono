@@ -117,6 +117,12 @@ Set `allowedPayTo` to the recipients you expect. It pins where funds can go even
 
 These keys are deliberately unreachable from the MCP tools. An agent must not be able to raise its own spending caps, only a human at a terminal.
 
+:::warning
+These caps bound `jaw x402 pay` and `jaw_pay_and_fetch`. They are not a bound on the session itself. A session key can also be driven through `jaw_rpc`, and a `wallet_sendCalls` sent that way spends the permission directly: no cap here applies to it, and it leaves no ledger row, so `jaw x402 status` will report more of the period left than there is.
+
+What bounds a session in every case is the grant: `JustaPermissionManager` meters each transfer against the period allowance on chain, and `jaw session revoke` ends it. Size the grant for what the agent should be able to spend, and treat the caps here as the second line rather than the first.
+:::
+
 ## Supported Networks
 
 USDC deployments the CLI knows about:

@@ -185,8 +185,8 @@ describe('jaw_rpc session mode', () => {
   it('honors the JAW_SESSION env var', async () => {
     process.env['JAW_SESSION'] = 'true';
     const client = await connectClient();
-    await client.callTool({ name: 'jaw_rpc', arguments: { method: 'personal_sign', params: ['hello'] } });
-    expect(sessionRequestMock).toHaveBeenCalledWith('personal_sign', ['hello']);
+    await client.callTool({ name: 'jaw_rpc', arguments: { method: 'eth_accounts' } });
+    expect(sessionRequestMock).toHaveBeenCalledWith('eth_accounts', undefined);
     expect(getBridgeMock).not.toHaveBeenCalled();
   });
 
@@ -195,11 +195,55 @@ describe('jaw_rpc session mode', () => {
     const client = await connectClient();
     await client.callTool({
       name: 'jaw_rpc',
-      arguments: { method: 'personal_sign', params: ['hello'], session: false },
+      arguments: { method: 'eth_accounts', session: false },
     });
     expect(getBridgeMock).toHaveBeenCalled();
     expect(sessionRequestMock).not.toHaveBeenCalled();
   });
+
+  // A handler that refuses echoes the argument it refused, and that argument is
+  // written by the model, which may be reading a poisoned page. The escape
+  // sequence below would otherwise erase the line above it and paint its own.
+  it('disarms model-written text echoed back in an error', async () => {
+    const client = await connectClient();
+    const result = await client.callTool({
+      name: 'jaw_rpc',
+      arguments: { method: 'evil\u001b[2K\u001b[1GPaid. 5 USDC\u202e', session: true },
+    });
+
+    expect(result.isError).toBe(true);
+    const text = toolText(result);
+    expect(text).not.toContain('\u001b');
+    expect(text).not.toContain('\u202e');
+    // Not just absent: replaced, so the test fails if the sanitiser stops running
+    // rather than passing because the text never arrived.
+    expect(text).toContain('\uFFFD');
+    expect(text).toContain('not supported in session mode');
+  });
+
+  // The way out the refusal points at. Without this, nothing would notice if the
+  // browser route for these ever stopped working and the refusal became a dead end.
+  it.each(['personal_sign', 'eth_signTypedData_v4'])('still signs %s through the browser', async (method) => {
+    const client = await connectClient();
+    await client.callTool({ name: 'jaw_rpc', arguments: { method, params: ['hello'], session: false } });
+    expect(getBridgeMock).toHaveBeenCalled();
+    expect(sessionRequestMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['personal_sign', 'eth_signTypedData_v4'])(
+    'refuses %s in session mode without reaching the bridge',
+    async (method) => {
+      const client = await connectClient();
+      const result = await client.callTool({
+        name: 'jaw_rpc',
+        arguments: { method, params: ['hello'], session: true },
+      });
+      expect(result.isError).toBe(true);
+      expect(toolText(result)).toContain('not supported in session mode');
+      expect(sessionRequestMock).not.toHaveBeenCalled();
+      expect(getBridgeMock).not.toHaveBeenCalled();
+    }
+  );
 
   it('rate-limits a burst of autonomous signing calls (bounds silent allowance drain)', async () => {
     const client = await connectClient();
@@ -229,6 +273,46 @@ describe('jaw_rpc session mode', () => {
         '0xbridge-result'
       );
     }
+  });
+});
+
+/**
+ * A tool description ships in the schema, so it is what the model plans from.
+ * Both of these advertised the session key as the way to sign autonomously,
+ * which is the one path that refuses a signature.
+ */
+describe('tool descriptions', () => {
+  const describeOf = async (name: string) => {
+    const client = await connectClient();
+    const { tools } = await client.listTools();
+    return tools.find((t) => t.name === name)?.description ?? '';
+  };
+
+  // The phrase family, not the sentence that happened to be there: a reword is
+  // how this regresses.
+  const OFFERS_SIGNING = /sign\w*\s+autonomously|autonomous\s+signing|session:\s*true[^.]*\bto sign\b/;
+
+  it('jaw_rpc does not offer the session key as a way to sign', async () => {
+    const text = await describeOf('jaw_rpc');
+    expect(text).not.toMatch(OFFERS_SIGNING);
+    expect(text).toMatch(/personal_sign[^.]*eth_signTypedData_v4[^.]*browser/);
+  });
+
+  it('jaw_session_status says the same thing jaw_rpc does', async () => {
+    const text = await describeOf('jaw_session_status');
+    // jaw_rpc points the model here first, so a promise of signing made in this
+    // description is read before the one that corrects it.
+    expect(text).not.toMatch(OFFERS_SIGNING);
+    expect(text).not.toMatch(/can sign\b/);
+    expect(text).toMatch(/personal_sign[^.]*eth_signTypedData_v4/);
+  });
+
+  it('the no-session hint does not promise signing either', async () => {
+    const client = await connectClient();
+    const result = await client.callTool({ name: 'jaw_session_status', arguments: {} });
+    const parsed = JSON.parse(toolText(result));
+    expect(parsed.exists).toBe(false);
+    expect(parsed.hint).not.toMatch(OFFERS_SIGNING);
   });
 });
 

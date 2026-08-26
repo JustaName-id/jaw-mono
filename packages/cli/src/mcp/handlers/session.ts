@@ -10,8 +10,9 @@ export function registerSessionTools(server: McpServer): void {
     {
       description:
         'Show the local session-key (auto mode) status — session address, owner, permission ID, ' +
-        'chain, expiry, and the x402 payer address. When a valid session exists, jaw_rpc can sign ' +
-        'autonomously with session: true instead of opening the browser. Sessions are created with ' +
+        'chain, expiry, and the x402 payer address. When a valid session exists, jaw_rpc can send ' +
+        'transactions with session: true instead of opening the browser; personal_sign and ' +
+        'eth_signTypedData_v4 stay on the browser either way. Sessions are created with ' +
         '`jaw session setup` in a terminal (requires a one-time browser passkey approval).',
       annotations: { readOnlyHint: true },
     },
@@ -20,7 +21,7 @@ export function registerSessionTools(server: McpServer): void {
         if (!keystoreExists()) {
           return mcpResult({
             exists: false,
-            hint: 'No session key. Ask the user to run `jaw session setup` in a terminal to enable autonomous signing.',
+            hint: 'No session key. Ask the user to run `jaw session setup` in a terminal to enable autonomous sends.',
           });
         }
         const config = loadSessionConfig();
