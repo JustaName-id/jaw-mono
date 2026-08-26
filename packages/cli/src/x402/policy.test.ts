@@ -146,6 +146,18 @@ describe('resolveX402Policy — grant layer', () => {
     expect(policy.maxTotalPerSession).toBe('5000000');
   });
 
+  // A cap that cannot be compared cannot be clamped, so the unreadable value is
+  // left where it is rather than quietly replaced by the grant's. checkPolicy
+  // refuses on it, which is the safe end: an unreadable session cap stops
+  // payments instead of silently becoming a different number.
+  it('leaves an unreadable config session cap alone and refuses on it', () => {
+    const policy = resolveX402Policy({ maxTotalPerSession: 'oops' }, policyFromGrant(grant));
+    expect(policy.maxTotalPerSession).toBe('oops');
+    // The reason, not just the refusal: `base` is on the granted asset and
+    // network, so a refusal for any other cause would pass this test blind.
+    expect(checkPolicy(base, policy).reason).toContain('invalid maxTotalPerSession');
+  });
+
   // The session cap used to be pinned to the grant. That clamp only existed
   // because a per-period allowance was being written into a session-wide field,
   // and it silently rewrote whatever the user configured. With the allowance on
