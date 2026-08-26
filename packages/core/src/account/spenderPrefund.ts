@@ -31,13 +31,63 @@ import type { PermissionsDetail } from '../rpc/permissions.js';
  * covers the paymaster charging at `maxFeePerGas` while this prices at the
  * current one.
  *
- * Not more than roughly that, because the multiplier is not free everywhere: the
- * same budget is a fraction of a cent on Base and tens of dollars on mainnet,
- * and all of it moves to the session address. Not less either, because the op
- * has to land. After it does, the spender is topped up by refills rather than by
- * this.
+ * Not less than roughly that, because the op has to land. After it does, the
+ * spender is topped up by refills rather than by this. What keeps it from being
+ * too much on a chain where gas is expensive is the ceiling below, not this
+ * number.
  */
 const PREFUND_GAS = 2_000_000n;
+
+/**
+ * The ceiling on what the prefund may move, and the reason it is the
+ * permission's own allowance rather than a number.
+ *
+ * `PREFUND_GAS` prices in gas, which is what the fee is denominated in, and that
+ * is right until gas is expensive. The same multiplier is a fraction of a cent
+ * on Base and tens of dollars on mainnet, and all of it lands on the session
+ * address, outside the permission, where nothing meters it any more.
+ *
+ * A fixed cap in the token cannot be written down once: a tenth is $0.10 in
+ * USDC and three hundred in WETH, which is the reason the amount is priced in
+ * gas to begin with. A cap in native value has the same problem across chains,
+ * since a unit of ETH and a unit of POL are not the same money.
+ *
+ * The permission already carries a number in the right token: what it lets the
+ * session spend in a period. Sending more than that to the spender funds it past
+ * anything it could do with the authority it was given, so that is the ceiling.
+ * It needs no table, it moves when the grant moves, and it is a figure the user
+ * approved on the same screen.
+ *
+ * A permission may carry several periods for one token, and the contract applies
+ * every one of them, so the effective cap is their intersection: the tightest
+ * entry is the one that binds, and it is the number the chain actually enforces.
+ * A `forever` entry never renews, so there is no window long enough for a wider
+ * one to matter. Taking the minimum keeps the result independent of the order
+ * the requester happened to write them in.
+ *
+ * A clamped prefund can be too small to cover the first operation on an
+ * expensive chain. That operation is then sponsored, which is what happened for
+ * every session before this transfer existed, so the failure mode is the old
+ * behaviour rather than a broken grant.
+ */
+function ceilingFor(permissions: PermissionsDetail, token: Address): bigint | null {
+    let tightest: bigint | null = null;
+    for (const spend of permissions.spends ?? []) {
+        if (!isSameToken(spend.token, token)) continue;
+        try {
+            const allowance = BigInt(spend.allowance);
+            if (tightest === null || allowance < tightest) tightest = allowance;
+        } catch {
+            // The allowance reaches here from the grant request, so it is a
+            // number the requester wrote. Null like every other unreadable input
+            // in this module: a ceiling we cannot size is one we cannot hold to,
+            // and skipping just the unreadable entry would silently widen the
+            // ceiling to whatever the readable ones say.
+            return null;
+        }
+    }
+    return tightest !== null && tightest > 0n ? tightest : null;
+}
 
 /** Opt-in for the grant. Off by default: a wallet does not move funds unasked. */
 export interface GrantPermissionsOptions {
@@ -95,11 +145,15 @@ export async function buildSpenderPrefundCall(
     // and picking one ourselves would move funds the permission never mentioned.
     if (!token) return null;
 
+    const ceiling = ceilingFor(args.permissions, token);
+    if (ceiling === null) return null;
+
     // `exchangeRate` is wei to the token's smallest unit, so this reads as
     // "what PREFUND_GAS costs, in this token, at this moment, on this chain".
     const exchangeRate = await args.read.exchangeRate(token);
     if (exchangeRate === null) return null;
-    const amount = (PREFUND_GAS * (await args.read.gasPrice()) * exchangeRate) / 10n ** 18n;
+    const priced = (PREFUND_GAS * (await args.read.gasPrice()) * exchangeRate) / 10n ** 18n;
+    const amount = priced < ceiling ? priced : ceiling;
     if (amount === 0n) return null;
 
     // Re-granting to the same spender, which the CLI does whenever a session is
@@ -146,12 +200,24 @@ function paymasterFeeIn(token: Address, context?: Record<string, unknown>): bigi
     }
 }
 
+/**
+ * Whether a spend entry names `token`.
+ *
+ * The address arrives as whatever the requester wrote, so the comparison is
+ * case-insensitive and tolerates surrounding space. One place, because the two
+ * callers below would otherwise each carry their own copy of that rule and only
+ * one of them would get fixed the day it turns out to be wrong.
+ */
+function isSameToken(candidate: string | undefined, token: Address): boolean {
+    return candidate?.trim().toLowerCase() === token.toLowerCase();
+}
+
 /** The first token the permission authorises spending, native ones aside. */
 function firstErc20Spend(permissions: PermissionsDetail): Address | null {
     for (const spend of permissions.spends ?? []) {
         const token = spend.token?.trim();
         if (!token) continue;
-        if (token.toLowerCase() === NATIVE_TOKEN.toLowerCase()) continue;
+        if (isSameToken(token, NATIVE_TOKEN)) continue;
         return token as Address;
     }
     return null;

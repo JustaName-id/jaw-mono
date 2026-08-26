@@ -97,7 +97,11 @@ export default class X402Status extends BaseCommand {
       spent,
       sessionCap,
       periodCap,
-      periodSpent: periodSpend?.spent ?? null,
+      // Top-ups, not payments: the period cap mirrors the on-chain allowance
+      // and the top-up is what draws it down, exactly as `topUpCeiling`
+      // measures it. Payments lag by whatever float the payer still holds,
+      // which kept this check quiet while the grant was already drained.
+      periodSpent: periodSpend?.toppedUp ?? null,
       periodLabel,
       outdated: isLegacySession(session),
       // Same units as the formatted balances. Exact in a double: the reserve
@@ -123,7 +127,9 @@ export default class X402Status extends BaseCommand {
           spentThisSession: spent.toString(),
           ...(periodSpend
             ? {
-                spentThisPeriod: periodSpend.spent.toString(),
+                // Same meter as the diagnose input above: what the on-chain
+                // allowance actually lost, so a script sees the grant drain.
+                spentThisPeriod: periodSpend.toppedUp.toString(),
                 periodEndsAt: new Date(periodSpend.window.end * 1000).toISOString(),
               }
             : {}),
@@ -144,16 +150,29 @@ export default class X402Status extends BaseCommand {
     this.log(`  caps    ${formatUsdc(policy.maxAmountPerPayment, decimals)} per payment`);
     // The granted cap first: it is the one the chain enforces, and the one a
     // refusal will quote back.
+    //
+    // The period figure counts top-ups where the session figure counts
+    // payments, because the two caps meter different things: `maxPerPeriod`
+    // mirrors the on-chain allowance, and the top-up is what draws that down.
+    // Counting payments here understated the grant by whatever float the payer
+    // still held: one 0.1 USDC payment behind a 5 USDC top-up printed 0.1
+    // against a cap the chain had already docked 5 from.
+    //
+    // "at least", on both figures, because both are summed from the local
+    // ledger and the ledger only sees what went through `payAndFetch`. The same
+    // permission can be spent by a `wallet_sendCalls` sent through `jaw_rpc`,
+    // which writes no row, so what is printed is a floor rather than a total.
     if (policy.maxPerPeriod !== undefined && periodLabel) {
-      const spentThisPeriod = periodSpend?.spent ?? 0n;
+      const usedThisPeriod = periodSpend?.toppedUp ?? 0n;
       const resets = periodSpend ? ` (resets ${new Date(periodSpend.window.end * 1000).toISOString()})` : '';
       this.log(
-        `          ${formatUsdc(spentThisPeriod.toString(), decimals)} of ${formatUsdc(policy.maxPerPeriod, decimals)} spent this ${periodLabel}${resets}`
+        `          at least ${formatUsdc(usedThisPeriod.toString(), decimals)} of ${formatUsdc(policy.maxPerPeriod, decimals)} used this ${periodLabel}${resets}`
       );
     }
     this.log(
-      `          ${formatUsdc(spent.toString(), decimals)} of ${formatUsdc(policy.maxTotalPerSession, decimals)} spent this session`
+      `          at least ${formatUsdc(spent.toString(), decimals)} of ${formatUsdc(policy.maxTotalPerSession, decimals)} spent this session`
     );
+    this.log("          counted from this CLI's ledger, which a direct jaw_rpc send bypasses");
     if (policy.topUpFloat) {
       this.log(`  float   tops the payer up to ${formatUsdc(policy.topUpFloat, decimals)} when it runs short`);
     }
