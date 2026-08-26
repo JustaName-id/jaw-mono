@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, useRef, type MutableRefObject } from 'react';
 import { debugLog } from '../lib/debug-log';
+import { createFlowLock } from '../lib/flow-lock';
+import { buildHandshakeFailure, routeHandshake, routeOwnsScreen } from '../lib/handshake-route';
 import { selectScreen, type Phase } from '../lib/select-screen';
 import { RequestModals } from '../components/RequestModals';
 import { extractTransactionData } from '../lib/tx-handler';
@@ -138,32 +140,26 @@ function KeysJawIdAppContent({
   phaseRef.current = phase;
   // The in-flight hint apply. Until it settles, a wiped partition reads empty.
   const hintApplyRef = useRef<Promise<unknown> | null>(null);
-  // Held while a flow awaits an answer. A ref, not state: handshakes arrive as
-  // concurrent handlers and state lands a commit too late to gate them.
-  const liveFlowRef = useRef(false);
-  const claimFlow = () => {
-    if (liveFlowRef.current) return false;
-    liveFlowRef.current = true;
-    return true;
-  };
-  const releaseFlow = () => {
-    liveFlowRef.current = false;
-  };
+  // One request at a time (lib/flow-lock). Claimed at handler entry, released
+  // wherever a flow ends — answered, failed, or dismissed.
+  const flowLock = useRef(createFlowLock()).current;
   // Holds the pending success→close timer so a new flow can cancel a previous
   // flow's auto-close (the embedded iframe stays mounted across flows).
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // True once this flow's response has been delivered — the flow is finished even
-  // though its modal lingers to show the delivered tick. `phase` cannot express
-  // this: 'done' is the terminal marker AND what unmounts the modal, so setting
-  // it would cut the tick short. Cleared when the next request takes over.
-  const flowDoneRef = useRef(false);
-
   /**
-   * Whether the flow on screen is over: it reached a terminal phase, or it
-   * delivered its response and lingers only to show the tick. Read from refs
-   * because both callers run inside the once-registered message listener.
+   * Put the dialog back to a blank slate once a flow is over.
+   *
+   * Called while it is hidden, not when the next request arrives: the SDK
+   * reveals the dialog before that request reaches us (postMessage shows first),
+   * so anything left on screen flashes back — a transaction the user just
+   * cancelled, or a "Please wait" caption for a request they have not seen. The
+   * skeleton is what the next screen grows out of anyway.
    */
-  const flowFinished = () => phaseRef.current === 'done' || phaseRef.current === 'failed' || flowDoneRef.current;
+  const clearScreen = useCallback(() => {
+    setPendingRequest(null);
+    setError(null);
+    setPhase('reading-passkeys');
+  }, []);
 
   /**
    * Schedule the dialog close after a flow completes. Cancelable: starting a new
@@ -176,23 +172,24 @@ function KeysJawIdAppContent({
       closeTimerRef.current = setTimeout(() => {
         closeTimerRef.current = null;
         communicator.requestClose();
+        clearScreen();
       }, ms);
     },
-    [communicator]
+    [communicator, clearScreen]
   );
 
   /**
    * Close out a flow whose response has already been delivered, holding the tick on
    * screen first.
    *
-   * Marks the flow done SYNCHRONOUSLY and lets the (cancelable) close timer carry the
-   * delay. Nothing is awaited, so there is no continuation that could outlive the flow
-   * and write over a newer request's screen — and if a new request does arrive during
-   * the hold, the listener cancels this timer and resets, which is exactly right.
+   * The flow already stopped owning the screen — onApprove dropped the lock before
+   * this runs — so only the tick and the (cancelable) close timer are left. Nothing
+   * is awaited, so there is no continuation that could outlive the flow and write
+   * over a newer request's screen; and if a new request does arrive during the hold,
+   * the listener cancels this timer and resets, which is exactly right.
    */
   const finishDeliveredFlow = useCallback(() => {
     setSignDelivered(true);
-    flowDoneRef.current = true;
     scheduleClose(SIGNED_TICK_MS + CLOSE_DELAY_MS);
   }, [scheduleClose]);
 
@@ -200,9 +197,8 @@ function KeysJawIdAppContent({
   // capture their own outside clicks). The shell already closed the dialog, so
   // its end only drops the flow.
   cancelFlowRef.current = () => {
-    releaseFlow();
-    flowDoneRef.current = true;
-    setPendingRequest(null);
+    flowLock.release();
+    clearScreen();
   };
   const cancelFlow = useCallback(() => {
     cancelFlowRef.current?.();
@@ -378,11 +374,10 @@ function KeysJawIdAppContent({
         message.event === 'DialogVisibility' &&
         (message.data as { visible?: boolean } | undefined)?.visible === false
       ) {
-        if (liveFlowRef.current) {
+        if (flowLock.isOpen()) {
           debugLog('👋 Dialog hidden with a flow still open — treating it as dismissed');
-          releaseFlow();
-          flowDoneRef.current = true;
-          setPendingRequest(null);
+          flowLock.release();
+          clearScreen();
         }
       }
 
@@ -404,15 +399,17 @@ function KeysJawIdAppContent({
           closeTimerRef.current = null;
         }
         // Reset only a FINISHED flow — an in-progress one (e.g. a cold connect's
-        // passkey screen) must survive. Finished means either a terminal `state`, or
-        // `flowDoneRef` for a flow that delivered its response and is only still on
-        // screen to show the tick. The SDK does not serialize requests, so a new one
-        // can genuinely arrive mid-tick; that is the case flowDoneRef covers.
-        if (flowFinished()) {
-          flowDoneRef.current = false;
+        // passkey screen) must survive. Finished from the moment the response was
+        // handed off, not when the tick stops: the SDK does not serialize requests,
+        // so a new one can genuinely arrive mid-tick.
+        if (flowLock.isFinished(phaseRef.current)) {
           setError(null);
           setPendingRequest(null);
-          setPhase('working');
+          // The skeleton, not 'working': the handler below has real work to do
+          // first (a connect rebuilds the session, keypair and all), and
+          // 'working' renders a "Please wait while we process your request"
+          // caption for a request the user has not been shown yet.
+          setPhase('reading-passkeys');
         }
 
         const rpcMessage = message as RPCRequestMessage;
@@ -452,8 +449,17 @@ function KeysJawIdAppContent({
     }
   }, [pendingRequest, phase, currentAccount]);
 
+  // A terminal phase is the end of the flow however it got there — including
+  // ways no answering callback covers, like the passkey read failing after the
+  // handshake handed ownership on. Without this the lock is held with nothing on
+  // screen to release it, and every later request is refused as busy.
+  useEffect(() => {
+    if (phase === 'done' || phase === 'failed') flowLock.release();
+  }, [phase, flowLock]);
+
   // Connect screen with no address: nothing can be approved, so answer the dApp.
-  // In an effect — rejecting from render would post twice under StrictMode.
+  // In an effect, not in the render that discovers it: onReject posts to the SDK
+  // and clears state, and a render must not do either.
   useEffect(() => {
     if (phase !== 'choosing-account') return;
     if (pendingRequest?.type !== SDKRequestType.CONNECT) return;
@@ -522,38 +528,36 @@ function KeysJawIdAppContent({
       ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', ...(chain.paymaster && { paymaster: chain.paymaster }) }
       : undefined;
 
-  // Unencrypted failure — no shared secret with this peer yet. The SDK throws on
-  // content.failure, so the dApp's promise rejects instead of hanging.
   const rejectHandshake = (request: RPCRequestMessage, code: number, message: string) => {
-    const failure: RPCResponseMessage = {
-      requestId: request.id,
-      id: crypto.randomUUID() as MessageID,
-      sender: '',
-      correlationId: request.correlationId,
-      content: { failure: { code, message } },
-      timestamp: new Date(),
-    };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    communicator.sendMessage(failure as any);
+    communicator.sendMessage(buildHandshakeFailure(request, code, message) as any);
   };
 
   // Handle handshake request (unencrypted)
   const handleHandshakeRequest = async (request: RPCRequestMessage) => {
-    let holdsFlow = false;
+    // Checked before the first await: a second handshake while a request is still
+    // on screen would rotate the peer key and take over pendingRequest, stranding
+    // a flow neither side times out.
+    if (flowLock.isOpen()) {
+      debugLog('⛔ Handshake while a request is still open — refusing as busy');
+      rejectHandshake(request, standardErrorCodes.rpc.resourceUnavailable, 'A request is already in progress');
+      return;
+    }
+    flowLock.claim();
+
+    // Only two paths leave a flow owning the screen: the cold-start ack (whose
+    // request lands next and re-claims) and a connect (whose modal answers via
+    // onApprove/onReject). Every other exit — invalid, 4100, unrecognised
+    // method, a throw — answered or gave up, and must let the lock go. Tracking
+    // that in a `finally` rather than at each `return` is what stops the next
+    // early exit added here from wedging the gate.
+    let ownsScreen = false;
+
     try {
       if (!('handshake' in request.content) || !request.content.handshake) {
         console.error('❌ Invalid handshake request');
         return;
       }
-
-      // Before the first await: a second handshake would rotate the peer key and
-      // take over pendingRequest, stranding a flow neither side times out.
-      if (!claimFlow()) {
-        debugLog('⛔ Handshake while a flow is still unanswered — refusing as busy');
-        rejectHandshake(request, standardErrorCodes.rpc.resourceUnavailable, 'A request is already in progress');
-        return;
-      }
-      holdsFlow = true;
 
       // Get origin and set it as current context
       const origin = communicator.getOrigin() || '';
@@ -578,36 +582,37 @@ function KeysJawIdAppContent({
 
       // Check for existing session
       const existingSession = await cryptoHandler.getSession(origin);
+      const route = routeHandshake({ hasHandshake: true, method, hasSession: !!existingSession });
+
+      // First request before any connect. Returning silently hangs the dApp
+      // (no timeout, isAlive() stays true). 4100 is what JAWProvider reads as
+      // "connect first"; minting a session would approve an origin the user
+      // never did.
+      if (route === 'connect-first') {
+        debugLog('🔑 Handshake without session — answering 4100 (connect first)');
+        rejectHandshake(
+          request,
+          standardErrorCodes.provider.unauthorized,
+          'No connection for this origin; call wallet_connect first'
+        );
+        // The transport opened the dialog before posting; nothing here will
+        // close it. Safe only on this branch — no session, no live flow.
+        communicator.requestClose();
+        return;
+      }
 
       // Pure key exchange — the SDK's cold-start signal, sent only from its
-      // no-signer branch. Means the dApp holds no signer. A reload with a live
-      // one never lands here: the SDK restores its signer and uses the normal path.
-      if (method === 'handshake') {
-        // First request before any connect. Returning silently hangs the dApp
-        // (no timeout, isAlive() stays true). 4100 is what JAWProvider reads as
-        // "connect first"; minting a session would approve an origin the user
-        // never did.
-        if (!existingSession) {
-          debugLog('🔑 Handshake without session — answering 4100 (connect first)');
-          rejectHandshake(
-            request,
-            standardErrorCodes.provider.unauthorized,
-            'No connection for this origin; call wallet_connect first'
-          );
-          // The transport opened the dialog before posting; nothing here will
-          // close it. Safe only on this branch — no session, no live flow.
-          communicator.requestClose();
-          releaseFlow();
-          return;
-        }
-
+      // no-signer branch. A reload with a live signer never lands here.
+      if (route === 'cold-start' && existingSession) {
         if (existingSession.peerPublicKey !== peerPublicKey) {
           // Update peer key if changed
           await cryptoHandler.getSessionManager().updatePeerKey(origin, peerPublicKey);
         }
 
         // Our authState outlives a dApp disconnect (different origin, no expiry),
-        // so a cold start drops it and re-asks.
+        // so a cold start drops it and re-asks. Only the clearing is conditional
+        // — running it unconditionally is what let a bare handshake wipe a live
+        // flow.
         if (existingSession.authState) {
           await cryptoHandler.getSessionManager().updateSession(origin, { authState: null });
           await refetchAuthRef.current();
@@ -615,21 +620,22 @@ function KeysJawIdAppContent({
           setCurrentAccount(null);
           setPendingRequest(null);
           setError(null);
-          // Must drive, not just clear: the request handler only ever `return`s,
-          // so nothing else would put a screen up. Also replaces a stale
-          // 'working' phase, which would otherwise still resolve to a modal.
-          driveAccountScreen();
         }
 
-        // Acknowledge the handshake
+        // Always drive: the request handler only ever `return`s, so nothing else
+        // puts a screen up, and the listener may have just parked the phase at
+        // 'working' — which renders as an endless "Processing…" with no request.
+        driveAccountScreen();
+
+        // Acknowledge the handshake; the request it belongs to arrives next.
         const response = await cryptoHandler.createHandshakeResponse(request.id, { accounts: [] });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         communicator.sendMessage(response as unknown as Message);
+        ownsScreen = routeOwnsScreen(route);
         return;
       }
 
-      // For eth_requestAccounts and wallet_connect
-      if (method === 'eth_requestAccounts' || method === 'wallet_connect') {
+      if (route === 'connect') {
         // Always create a fresh session with new keys for each connection request
         if (existingSession) {
           debugLog('🗑️ Deleting old session for:', origin);
@@ -646,6 +652,16 @@ function KeysJawIdAppContent({
         // Reload session after creation
         await cryptoHandler.loadSession(origin);
 
+        // The session was just recreated with no authState, so the client-side
+        // mirror has to follow it. A surviving currentAccount lets the
+        // account-selection effect jump straight to the approval screen, and the
+        // user connects off a ceremony this session never had — after an
+        // ephemeral wallet_sendCalls, connect would complete with no passkey at
+        // all. Drive a screen too: nothing else here puts one up.
+        setCurrentAccount(null);
+        await refetchAuthRef.current();
+        driveAccountScreen();
+
         // Set up pending request (for both new connections and SIWE)
         setPendingRequest({
           origin,
@@ -657,7 +673,7 @@ function KeysJawIdAppContent({
           params: Array.isArray(params) ? params : [],
           chain: toRequestChain(chain),
           onApprove: async (result: unknown) => {
-            releaseFlow();
+            flowLock.release();
             const response = await cryptoHandler.createHandshakeResponse(
               request.id,
               result as { accounts: Array<{ address: string; capabilities?: Record<string, unknown> }> }
@@ -665,29 +681,43 @@ function KeysJawIdAppContent({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(response as any);
           },
-          onReject: async () => {
-            // 'cancelled', not the default: only that settles the dApp's promise.
-            releaseFlow();
+          onReject: async (error: string, errorCode?: number) => {
+            // Answer for real, with the caller's code. Closing alone leaves the
+            // dApp to settle on the SDK's own dismissal 4001 — which flattens a
+            // passkey failure into "user rejected", and in popup context only
+            // settles because the window-close poller catches it. The peer key
+            // is not exchanged until this handshake resolves, so the failure
+            // goes out unencrypted; CrossPlatformSigner.handshake reads
+            // content.failure before it touches `sender`.
+            flowLock.release();
             setPendingRequest(null);
-            communicator.requestClose('cancelled');
+            rejectHandshake(request, errorCode ?? standardErrorCodes.provider.userRejectedRequest, error);
+            // 'completed', not 'cancelled': a response is on its way, and
+            // 'cancelled' would have the SDK reject the same promise again.
+            communicator.requestClose();
           },
         });
 
         // Fresh session has no account - checkForPasskeys flow will handle passkey creation/selection
-      } else {
-        // Unrecognised method — nothing will answer it, so don't hold the lock.
-        releaseFlow();
+        ownsScreen = routeOwnsScreen(route);
       }
     } catch (err) {
       console.error('❌ Failed to handle handshake:', err);
       setError(err instanceof Error ? err.message : 'Handshake failed');
       setPhase('failed');
-      if (holdsFlow) releaseFlow();
+    } finally {
+      if (!ownsScreen) flowLock.release();
     }
   };
 
   // Handle encrypted request
   const handleEncryptedRequest = async (request: RPCRequestMessage) => {
+    // Claimed, never refused: an encrypted request is the dApp's only copy of
+    // that call, so it must be served. The claim is what makes a *handshake*
+    // arriving mid-transaction refusable, and what lets the dismissal backstop
+    // recognise an Escape out of a sign or send screen.
+    flowLock.claim();
+
     try {
       // Load session for this origin
       const origin = communicator.getOrigin() || '';
@@ -701,10 +731,12 @@ function KeysJawIdAppContent({
       // session is stale (decrypt fails) — Safari storage partitioning can leave
       // the iframe with a session whose keys no longer match the SDK's.
       const emitReconnectRequired = (reason: string) => {
-        // The SDK answers this by reconnecting with a NEW handshake, so holding
-        // the lock here would refuse the very recovery it asks for.
-        releaseFlow();
         console.warn(`⚠️ ${reason} — requesting reconnect for origin:`, origin);
+        // Answered, and nothing goes on screen. The SDK's recovery for this
+        // sentinel is another handshake (CrossPlatformSigner.reconnectInIframe),
+        // so holding the lock here would have the busy gate refuse the very
+        // reconnect this response asks for.
+        flowLock.release();
         const reconnectResponse: RPCResponseMessage = {
           requestId: request.id,
           id: crypto.randomUUID() as MessageID,
@@ -816,7 +848,6 @@ function KeysJawIdAppContent({
           );
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           communicator.sendMessage(failure as any);
-          releaseFlow();
           setError(extractErr instanceof Error ? extractErr.message : 'Invalid transaction parameters');
           setPhase('failed');
           return;
@@ -834,7 +865,7 @@ function KeysJawIdAppContent({
         params: Array.isArray(params) ? params : [],
         chain: requestChain,
         onApprove: async (result: unknown) => {
-          releaseFlow();
+          flowLock.release();
           const response = await cryptoHandler.createEncryptedResponse(
             request.id || '',
             request.correlationId || '',
@@ -844,8 +875,7 @@ function KeysJawIdAppContent({
           communicator.sendMessage(response as any);
         },
         onReject: async (error: string, errorCode?: number) => {
-          releaseFlow();
-          flowDoneRef.current = true;
+          flowLock.release();
           // Send standard error response (default: EIP-1193 code 4001)
           try {
             const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
@@ -869,7 +899,6 @@ function KeysJawIdAppContent({
       // reads auth straight from the session manager via useAuth.
     } catch (err) {
       console.error('❌ Failed to handle encrypted request:', err);
-      releaseFlow();
       setError(err instanceof Error ? err.message : 'Failed to decrypt request');
       setPhase('failed');
     }
@@ -1282,12 +1311,9 @@ function KeysJawIdAppContent({
                 await pendingRequest.onApprove(response);
                 // Delivery confirmed — show the tick (held through the handoff + beat).
                 setSignDelivered(true);
-                // Marked here, NOT left to the finishDeliveredFlow() below: the handoff is awaited
-                // in between, and across that await the listener's reset guard sees neither a
-                // terminal state nor flowDoneRef, so a request arriving in the gap is not cleared.
-                // The continuation would then land on the new request's screen and close the popup
-                // with it unanswered.
-                flowDoneRef.current = true;
+                // Nothing to mark for the handoff awaited below: onApprove already
+                // dropped the lock, so a request arriving in that gap reads this flow
+                // as finished and resets the screen for itself.
                 // Only after approval (never on mere authentication, which the
                 // user may still cancel): let the SDK persist the account hint
                 // dApp-side, so the next embedded visit can show "Continue as"
@@ -1349,10 +1375,6 @@ function KeysJawIdAppContent({
               };
 
               await pendingRequest.onApprove(response);
-              // Same reason as the SIWE path above: the response is delivered, so mark the flow
-              // done before the awaited handoff rather than leaving it to the setPhase('done')
-              // that only runs after it.
-              flowDoneRef.current = true;
               // Only after approval (never on mere authentication, which the
               // user may still cancel): let the SDK persist the account hint
               // dApp-side, so the next embedded visit can show "Continue as"
