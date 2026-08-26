@@ -1,6 +1,17 @@
 'use client';
 
-import type { LogEntry } from '../execution-log';
+import { useState } from 'react';
+import { focusRing } from './primitives';
+
+/** One entry in a page's execution log — the input `latestResponse` reads. */
+export type LogEntry = {
+  timestamp: Date;
+  // 'approval' marks the step where the embedded JAW dialog asks the user to
+  // sign/approve with their passkey — surfaced explicitly so builders see it.
+  type: 'request' | 'response' | 'error' | 'approval';
+  method: string;
+  data: unknown;
+};
 
 export interface DerivedResponse {
   ok: boolean;
@@ -39,6 +50,17 @@ export function latestResponse(logs: LogEntry[], method: string): DerivedRespons
 }
 
 export function ResponsePanel({ response, running = false }: { response: DerivedResponse | null; running?: boolean }) {
+  const [copied, setCopied] = useState(false);
+
+  // Signatures, tx hashes and encoded calldata are the point of a playground —
+  // the retired MethodModal / EncodeDataModal both offered this.
+  const handleCopy = async () => {
+    if (!response) return;
+    await navigator.clipboard.writeText(response.body);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const meta = running
     ? 'Executing…'
     : response
@@ -57,9 +79,20 @@ export function ResponsePanel({ response, running = false }: { response: Derived
 
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2.5">
         <span className="text-shell-ink-2 text-[13.5px] font-medium tracking-[-0.005em]">Response</span>
-        <span className={`text-[13px] ${metaInk}`}>{meta}</span>
+        <span className="flex items-center gap-2.5">
+          <span className={`text-[13px] ${metaInk}`}>{meta}</span>
+          {response && (
+            <button
+              type="button"
+              onClick={handleCopy}
+              className={`border-shell-line-2 text-shell-ink-3 hover:text-shell-ink cursor-pointer rounded-full border bg-transparent px-2.5 py-1 text-[11.5px] transition-colors ${focusRing}`}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          )}
+        </span>
       </div>
       <div className="border-shell-line bg-shell-code min-h-[120px] rounded-[14px] border px-[22px] py-5">
         <pre className={`m-0 whitespace-pre-wrap break-words font-mono text-sm leading-[1.7] ${bodyInk}`}>

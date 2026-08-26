@@ -9,7 +9,7 @@ import { ShellSidebar, type ShellView } from '../../components/shell/sidebar';
 import { ConfigCard } from '../../components/shell/config-card';
 import { MethodList } from '../../components/shell/method-list';
 import { MethodDetail } from '../../components/shell/method-detail';
-import { ResponsePanel, latestResponse } from '../../components/shell/response-panel';
+import { ResponsePanel, latestResponse, type LogEntry } from '../../components/shell/response-panel';
 import { ExecutePanel, useMethodParams } from '../../components/shell/execute-panel';
 import { EncodePanel } from '../../components/shell/encode-panel';
 import { ThemeStudioControls, DialogPreviews } from '../../components/shell/theme-studio';
@@ -44,7 +44,6 @@ import {
 
 import { WagmiProviders } from './providers';
 import { type ModeType, type TransportModeType } from './config';
-import { type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
 import { WAGMI_METHODS, type WagmiMethod } from '../../lib/wagmi-methods';
 import { reverseResolveEnsName } from '../../lib/ens-resolver';
@@ -95,9 +94,11 @@ function WagmiPageContent({
   // JAW Wagmi Hooks
   const { mutateAsync: jawConnect } = useConnect();
   const { mutateAsync: jawDisconnect } = useDisconnect();
-  const { mutateAsync: grantPermissions, isPending: isGrantingPermissions } = useGrantPermissions();
-  const { mutateAsync: revokePermissions, isPending: isRevokingPermissions } = useRevokePermissions();
-  const { mutateAsync: sign, isPending: isSigning } = useSign();
+  // The mutations' own isPending flags are redundant: every call sits inside
+  // handleExecute, which runMethod already brackets with runningMethodId.
+  const { mutateAsync: grantPermissions } = useGrantPermissions();
+  const { mutateAsync: revokePermissions } = useRevokePermissions();
+  const { mutateAsync: sign } = useSign();
 
   // State for query addresses (allows querying for arbitrary addresses)
   const [permissionsAddress, setPermissionsAddress] = useState<string | undefined>();
@@ -127,6 +128,9 @@ function WagmiPageContent({
   });
 
   const [view, setView] = useState<ShellView>('playground');
+  // null falls through to WAGMI_METHODS[0] (jaw_connect / useConnect) below, and
+  // the sidebar highlights whatever that resolves to — the natural first step,
+  // mirroring /core's wallet_connect.
   const [activeMethodId, setActiveMethodId] = useState<string | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   // Theme draft: the mock previews follow it live, Save commits via onThemeChange.
@@ -136,7 +140,8 @@ function WagmiPageContent({
   useEffect(() => {
     setDraftTheme(JSON.parse(savedTheme) as JawTheme);
   }, [savedTheme]);
-  const [isExecuting, setIsExecuting] = useState(false);
+  // Which method is mid-flight, so a different method's panel doesn't claim it.
+  const [runningMethodId, setRunningMethodId] = useState<string | null>(null);
   const [ensName, setEnsName] = useState<string | null>(null);
 
   // Theme sync: push theme changes to the live keys dialog via the connector's
@@ -187,8 +192,6 @@ function WagmiPageContent({
       if (NEEDS_PASSKEY_APPROVAL.has(method.hookType)) {
         addLog('approval', method.name, 'Awaiting approval in the JAW dialog — the user signs with their passkey.');
       }
-
-      setIsExecuting(true);
 
       try {
         let result: unknown;
@@ -399,8 +402,6 @@ function WagmiPageContent({
           status: 'error',
         });
         throw error;
-      } finally {
-        setIsExecuting(false);
       }
     },
     [
@@ -437,15 +438,12 @@ function WagmiPageContent({
     ]
   );
 
-  // Same aggregate the retired MethodModal received as `isExecuting`, so the
-  // inline panels reflect the JAW hook mutations too, not just handleExecute.
-  const isPending = isGrantingPermissions || isRevokingPermissions || isSigning || isExecuting;
-
   // ---- shell wiring (mirrors /core) --------------------------------------
   const themeMeta = activePresetLabel(theme) ?? (theme.colors ? 'Custom' : 'Default');
   const surface = transportMode === 'popup' ? ('popup' as const) : ('iframe' as const);
   const activeMethod = WAGMI_METHODS.find((m) => m.id === activeMethodId) ?? WAGMI_METHODS[0] ?? null;
   const [methodParams, setMethodParam] = useMethodParams(activeMethod);
+  const isRunningActive = runningMethodId !== null && runningMethodId === activeMethod?.id;
   const dispatchNote = `${surface === 'popup' ? 'Popup' : 'Iframe (default)'} · ${
     mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'
   }`;
@@ -474,10 +472,13 @@ function WagmiPageContent({
         logUiError(method.name, err);
         return;
       }
+      setRunningMethodId(method.id);
       try {
         await handleExecute(method, built);
       } catch {
         // Already logged inside handleExecute.
+      } finally {
+        setRunningMethodId(null);
       }
     },
     [address, chainId, handleExecute, logUiError]
@@ -520,7 +521,7 @@ function WagmiPageContent({
               />
               <MethodList
                 methods={WAGMI_METHODS}
-                selectedId={activeMethodId}
+                selectedId={activeMethod?.id ?? null}
                 onSelect={(m) => setActiveMethodId(m.id)}
                 isConnected={isConnected}
                 transport={surface}
@@ -566,14 +567,14 @@ function WagmiPageContent({
                       context={{ address, chainId: chainId ? String(chainId) : undefined }}
                       isConnected={isConnected}
                       dispatchNote={dispatchNote}
-                      running={isPending}
+                      running={isRunningActive}
                       onRun={(resolved) => runMethod(activeMethod, resolved)}
                       onError={(message) => addLog('error', activeMethod.name, message)}
                     />
                   )}
                 </MethodDetail>
                 {activeMethod.category !== 'utility' && (
-                  <ResponsePanel response={latestResponse(logs, activeMethod.name)} running={isPending} />
+                  <ResponsePanel response={latestResponse(logs, activeMethod.name)} running={isRunningActive} />
                 )}
               </>
             ) : null}

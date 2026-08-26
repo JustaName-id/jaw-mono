@@ -319,10 +319,11 @@ export function ThemeStudioControls({
 }
 
 // ---------------------------------------------------------------------------
-// Dialog previews — the REAL SDK dialogs, not replicas. The shell is the
-// exported DialogShell from @jaw.id/ui and every inner element carries the same
-// classes the real ConnectDialog / TransactionDialog / PermissionDialog emit, so
-// these cannot drift from what ships in the iframe.
+// Dialog previews. The frame is the real exported DialogShell from @jaw.id/ui
+// and the tokens come from the SDK's own theme resolution, but the CONTENTS are
+// hand-mirrored from OnboardingDialog / TransactionDialog — same classes, copied
+// by hand. They therefore CAN drift: if either dialog's markup changes, these
+// must be updated to match. Keep them honest or drop them.
 //
 // Two things make that possible and are easy to break:
 //   1. `data-jaw-ui` on the container. Every utility @jaw.id/ui ships compiles to

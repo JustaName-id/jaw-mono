@@ -12,10 +12,9 @@ import { ConfigCard } from '../../components/shell/config-card';
 import { MethodList } from '../../components/shell/method-list';
 
 import { MethodDetail } from '../../components/shell/method-detail';
-import { ResponsePanel, latestResponse } from '../../components/shell/response-panel';
+import { ResponsePanel, latestResponse, type LogEntry } from '../../components/shell/response-panel';
 import { ExecutePanel, useMethodParams } from '../../components/shell/execute-panel';
 import { EncodePanel } from '../../components/shell/encode-panel';
-import { type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
 import { RPC_METHODS, type RpcMethod } from '../../lib/rpc-methods';
 import { activePresetLabel } from '../../lib/jaw-theme-presets';
@@ -68,7 +67,8 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
   const [chainId, setChainId] = useState<string>(defaultChainId);
   const [ensName, setEnsName] = useState<string | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
+  // Which method is mid-flight, so a different method's panel doesn't claim it.
+  const [runningMethodId, setRunningMethodId] = useState<string | null>(null);
   // v2 shell UI state: sidebar view and highlighted method.
   const [view, setView] = useState<ShellView>('playground');
   // wallet_connect is the default selection — the natural first step of a session.
@@ -247,6 +247,7 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
   const surface = transportMode === 'popup' ? ('popup' as const) : ('iframe' as const);
   const activeMethod = RPC_METHODS.find((m) => m.id === activeMethodId) ?? RPC_METHODS[0] ?? null;
   const [methodParams, setMethodParam] = useMethodParams(activeMethod);
+  const isRunningActive = runningMethodId !== null && runningMethodId === activeMethod?.id;
   const dispatchNote = `${surface === 'popup' ? 'Popup' : 'Iframe (default)'} · ${
     mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'
   }`;
@@ -275,13 +276,13 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
         logUiError(method.method, err);
         return;
       }
-      setIsRunning(true);
+      setRunningMethodId(method.id);
       try {
         await handleExecute(method.method, built);
       } catch {
         // Already logged inside handleExecute.
       } finally {
-        setIsRunning(false);
+        setRunningMethodId(null);
       }
     },
     [accounts, chainId, handleExecute, logUiError]
@@ -289,14 +290,15 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
 
   // Straight to the keys dialog: plain passkey auth, no SIWE capabilities (Leo's call).
   const toggleConnect = () => {
+    // Registry id and RPC method name coincide for both of these entries.
     const methodName = isConnected ? 'wallet_disconnect' : 'eth_requestAccounts';
-    setIsRunning(true);
+    setRunningMethodId(methodName);
     setActiveMethodId(methodName);
     void handleExecute(methodName, [])
       .catch(() => {
         // Already logged inside handleExecute.
       })
-      .finally(() => setIsRunning(false));
+      .finally(() => setRunningMethodId(null));
   };
 
   return (
@@ -322,7 +324,7 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
               />
               <MethodList
                 methods={RPC_METHODS}
-                selectedId={activeMethodId}
+                selectedId={activeMethod?.id ?? null}
                 onSelect={(m) => setActiveMethodId(m.id)}
                 isConnected={isConnected}
                 transport={surface}
@@ -374,14 +376,14 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
                       context={{ address: accounts[0], chainId: chainId || undefined }}
                       isConnected={isConnected}
                       dispatchNote={dispatchNote}
-                      running={isRunning}
+                      running={isRunningActive}
                       onRun={(resolved) => runMethod(activeMethod, resolved)}
                       onError={(message) => addLog('error', activeMethod.method, message)}
                     />
                   )}
                 </MethodDetail>
                 {activeMethod.category !== 'utility' && (
-                  <ResponsePanel response={latestResponse(logs, activeMethod.method)} running={isRunning} />
+                  <ResponsePanel response={latestResponse(logs, activeMethod.method)} running={isRunningActive} />
                 )}
               </>
             ) : null}

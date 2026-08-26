@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { opensDialog, methodNeedsAttention, NEEDS_DISCONNECTED, type PlaygroundMethod } from '../../lib/method-ui-meta';
+import { opensDialog, methodNeedsAttention, type PlaygroundMethod } from '../../lib/method-ui-meta';
 import { segClass, SegGroup } from './primitives';
 
 export interface MethodDetailProps {
@@ -132,11 +132,7 @@ export function MethodDetail({
                 <path d="M12 3v9" />
                 <path d="M7.5 6.5a7 7 0 109 0" />
               </svg>
-              {gated
-                ? 'Connect to run'
-                : NEEDS_DISCONNECTED.has(method.method)
-                  ? 'Disconnect to see the dialog'
-                  : 'Connect to run'}
+              {gated ? 'Connect to run' : 'Disconnect to see the dialog'}
             </button>
           )}
         </div>
