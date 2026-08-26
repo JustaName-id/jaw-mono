@@ -68,44 +68,129 @@ export const DEFAULT_X402_POLICY: X402Policy = {
   allowedNetworks: Object.keys(USDC_BY_NETWORK),
 };
 
+/** A spend entry as the grant request writes it on the wire. */
+interface GrantSpendEntry {
+  token: string;
+  allowance: string;
+  unit?: string;
+  multiplier?: number;
+}
+
+/**
+ * Approximate seconds one window lasts, used only to order windows from
+ * shortest to longest. `month` is calendar-based on chain; thirty days is close
+ * enough for ordering. A unit `normalizePeriod` does not recognise ranks as
+ * unbounded: a window we cannot place is read as one that never resets, which
+ * is the reading that never approves more than the chain does.
+ */
+const APPROX_WINDOW_SECONDS: Record<Exclude<PeriodUnit, 'forever'>, number> = {
+  minute: 60,
+  hour: 3_600,
+  day: 86_400,
+  week: 604_800,
+  month: 2_592_000,
+};
+
+function windowSeconds(unit: string | undefined, multiplier?: number): number {
+  const period = normalizePeriod(unit, multiplier);
+  if (!period || period.unit === 'forever') return Infinity;
+  return APPROX_WINDOW_SECONDS[period.unit] * period.multiplier;
+}
+
 /**
  * Pull the USDC spend limit out of a granted permission's `spends` so the policy
- * can be seeded from it. Matches the granted entry against the registry USDC for
+ * can be seeded from it. Matches the granted entries against the registry USDC for
  * the session chain (case-insensitive); the allowance is a hex string on the wire,
  * returned as base-units decimal. Returns undefined when the permission grants no
  * registry-USDC spend (nothing to seed, defaults hold). Stores the registry's
  * canonical address, not the permission's literal token string: they match
  * case-insensitively and the allowlist this seeds compares addresses that way too.
+ *
+ * A permission may carry several spend entries for the same token, and the
+ * contract applies every one of them over its own window, so the grant is a
+ * conjunction of caps that a single number-plus-period cannot represent. The
+ * closest one pair gets is the smallest allowance over the longest window among
+ * the entries: anything that fits under that fits under every entry whose window
+ * nests inside the longest one, because each such entry allows at least that
+ * much over a window no longer than its own. Usually it over-restricts, and the
+ * chain stays the final word either way.
+ *
+ * The nesting is a real condition, not a formality. A month is not a whole
+ * number of weeks, so `[5 USDC/week, 6 USDC/month]` seeds 5 per month, and the
+ * contract meters each entry from the permission start in whole durations of its
+ * own unit. Five payments late in one month plus one early in the next sit
+ * inside a single chain week and revert with ExceededSpendLimit, even though the
+ * local month counter had reset. `topUpCeiling` reads the same seed, so the
+ * reverting op can be the top-up pull rather than the payment. What the pair
+ * does close is the much wider hole of seeding from the first entry, or from the
+ * smallest number regardless of window, both of which over-approve even when the
+ * windows do nest.
+ *
+ * An entry whose allowance cannot be read is skipped with a warning rather than
+ * trusted or allowed to sink the whole seed: dropping everything would land on
+ * the default policy, whose allowlists are wider than the grant's, so the
+ * unreadable entry would loosen enforcement instead of tightening it. When no
+ * entry is readable there is nothing to seed from and the defaults hold.
  */
 export function extractGrantedSpend(
-  spends: ReadonlyArray<{ token: string; allowance: string; unit?: string; multiplier?: number }> | undefined,
+  spends: ReadonlyArray<GrantSpendEntry> | undefined,
   chainId: number,
-  anchor: Date = new Date()
+  anchor: Date = new Date(),
+  warn?: (message: string) => void
 ): GrantedSpend | undefined {
   const usdc = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === chainId);
   if (!usdc) return undefined;
-  const spend = spends?.find((s) => s.token.toLowerCase() === usdc.address.toLowerCase());
-  if (!spend) return undefined;
-  let allowance: string;
-  try {
-    const parsed = BigInt(spend.allowance);
-    // A negative allowance (BigInt('-0x100') parses fine) would seed a negative
-    // cap and make checkPolicy reject or misbehave — treat it as no grant.
-    if (parsed < 0n) return undefined;
-    allowance = parsed.toString();
-  } catch {
-    return undefined; // malformed allowance: fall back to defaults rather than a bad cap
+  let dropped = 0;
+  let readable = 0;
+  let tightest: { entry: GrantSpendEntry; allowance: bigint } | undefined;
+  let widest: { entry: GrantSpendEntry; seconds: number } | undefined;
+  for (const candidate of spends ?? []) {
+    if (!eqAddr(candidate.token, usdc.address)) continue;
+    // The canonical parser: '' reads as unset rather than 0n, negatives are
+    // rejected, and a malformed string cannot throw mid-seed.
+    const parsed = parseNonNegativeBigInt(candidate.allowance);
+    if (parsed === undefined) {
+      dropped++;
+      continue;
+    }
+    readable++;
+    if (tightest === undefined || parsed < tightest.allowance) tightest = { entry: candidate, allowance: parsed };
+    const seconds = windowSeconds(candidate.unit, candidate.multiplier);
+    if (widest === undefined || seconds > widest.seconds) widest = { entry: candidate, seconds };
   }
-  // Keep the period alongside the number. An allowance without its unit is
+  if (dropped > 0) {
+    warn?.(
+      tightest === undefined
+        ? 'The granted USDC spend limit could not be read; no cap was seeded from the grant and the default x402 policy applies.'
+        : `Ignored ${dropped} unreadable USDC spend ${dropped === 1 ? 'entry' : 'entries'} in the grant; the cap is seeded from the readable ones.`
+    );
+  }
+  if (tightest === undefined || widest === undefined) return undefined;
+  // Keep the window alongside the number. An allowance without its window is
   // dimensionless, and reading a per-period figure as a per-session one caps a
   // multi-period grant at a single period's worth for its whole life.
   // Normalised the way the SDK normalises it before encoding, so `year` lands on
   // the same month-based window the permission actually enforces. An unrecognised
-  // unit records no period rather than guessing, falling back to session-wide.
-  const period = normalizePeriod(spend.unit, spend.multiplier);
+  // unit records no period rather than guessing, falling back to session-wide,
+  // which is the never-resets reading `windowSeconds` already ranked it by.
+  const period = normalizePeriod(widest.entry.unit, widest.entry.multiplier);
+  // When the number and the window come from different entries the seed is
+  // tighter than anything actually granted: `[100 USDC/day, 1000 USDC/month]`
+  // becomes 100 per month. That is the intended trade, but the user meets it
+  // later as a refusal quoting a cap they never granted, and `maxPerPeriod` is
+  // not settable from the CLI, so say it here while `jaw session setup` is still
+  // cheap to re-run.
+  if (readable > 1 && tightest.entry !== widest.entry) {
+    const window = period ? describePeriod(period.unit, period.multiplier) : 'session';
+    warn?.(
+      `The grant carries ${readable} USDC spend entries and a single cap cannot represent all of them; ` +
+        `the x402 policy was seeded at the smallest allowance (${tightest.allowance} base units) over the longest ` +
+        `window (per ${window}), which can be far tighter than any single entry. Grant a single spend entry to avoid it.`
+    );
+  }
   return {
     token: usdc.address,
-    allowance,
+    allowance: tightest.allowance.toString(),
     network: usdc.wireNetwork,
     ...(period ? { unit: period.unit, multiplier: period.multiplier, periodAnchor: anchor.toISOString() } : {}),
   };
@@ -146,17 +231,22 @@ export function policyFromGrant(grant?: GrantedSpend): X402Policy {
  * approved; an explicit `jaw config set x402.*` wins per field, so a user can
  * tighten further.
  *
- * Nothing is clamped. An earlier revision pinned `maxTotalPerSession` to the
- * grant, which was only needed because the grant's per-period allowance was
- * being written into that session-wide field: config had to be prevented from
- * raising a cap that was already wrong. Now that the grant lands on
- * `maxPerPeriod` instead, the two caps measure different things and cannot
- * contradict each other, so config is free to set its own session ceiling. The
- * per-period cap keeps mirroring the chain regardless of what config says, and
- * `maxPerPeriod` is not settable from the CLI.
+ * The per-period cap always mirrors the chain: it is seeded from the grant and
+ * `maxPerPeriod` is not settable from the CLI. `maxTotalPerSession` is the
+ * user's own ceiling and is normally left alone, since it and the per-period cap
+ * measure different things and cannot contradict each other. The exception is
+ * the grant that records no period at all: its allowance lands on
+ * `maxTotalPerSession` for want of a window, and config is spread last, so a
+ * `jaw config set x402.maxTotalPerSession` would raise a grant-derived cap
+ * rather than tighten it. Where both supply that field, the smaller wins.
  */
 export function resolveX402Policy(configPolicy?: X402Policy, grantPolicy?: X402Policy): X402Policy {
   const merged: X402Policy = { ...DEFAULT_X402_POLICY, ...(grantPolicy ?? {}), ...(configPolicy ?? {}) };
+  const grantTotal = parseNonNegativeBigInt(grantPolicy?.maxTotalPerSession);
+  const configTotal = parseNonNegativeBigInt(configPolicy?.maxTotalPerSession);
+  if (grantTotal !== undefined && configTotal !== undefined && grantTotal < configTotal) {
+    merged.maxTotalPerSession = grantPolicy?.maxTotalPerSession;
+  }
   // The default session cap is the guardrail for an unconfigured setup that has
   // no grant to bound it. Once a grant supplies a per-period cap, that cap is
   // what the user approved on chain, and leaving the 10-USDC default sitting on

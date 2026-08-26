@@ -137,6 +137,27 @@ describe('resolveX402Policy — grant layer', () => {
     expect(policy.maxTotalPerSession).toBe('50000000');
   });
 
+  // The no-period grant is the one case where the grant and config land on the
+  // same field. Config is spread last, so without this the user's own number
+  // would replace the grant-derived cap outright rather than tighten it, and
+  // this path has no `maxPerPeriod` left to bound the session.
+  it('does not let config raise the session cap the grant seeded', () => {
+    const policy = resolveX402Policy({ maxTotalPerSession: '50000000' }, policyFromGrant(grant)); // 50 > 5 USDC
+    expect(policy.maxTotalPerSession).toBe('5000000');
+  });
+
+  // A cap that cannot be compared cannot be clamped, so the unreadable value is
+  // left where it is rather than quietly replaced by the grant's. checkPolicy
+  // refuses on it, which is the safe end: an unreadable session cap stops
+  // payments instead of silently becoming a different number.
+  it('leaves an unreadable config session cap alone and refuses on it', () => {
+    const policy = resolveX402Policy({ maxTotalPerSession: 'oops' }, policyFromGrant(grant));
+    expect(policy.maxTotalPerSession).toBe('oops');
+    // The reason, not just the refusal: `base` is on the granted asset and
+    // network, so a refusal for any other cause would pass this test blind.
+    expect(checkPolicy(base, policy).reason).toContain('invalid maxTotalPerSession');
+  });
+
   // The session cap used to be pinned to the grant. That clamp only existed
   // because a per-period allowance was being written into a session-wide field,
   // and it silently rewrote whatever the user configured. With the allowance on
@@ -294,6 +315,144 @@ describe('extractGrantedSpend', () => {
   it('returns undefined for a negative allowance rather than seeding a negative cap', () => {
     const spends = [{ token: USDC_BASE, allowance: '-0x100' }];
     expect(extractGrantedSpend(spends, 8453)).toBeUndefined();
+  });
+
+  // The contract applies every spend entry granted for a token over its own
+  // window, so the grant is a conjunction one pair cannot represent. The seed
+  // takes the smallest allowance over the longest window: what fits under that
+  // fits under every entry, in whatever order the requester wrote them.
+  it('seeds the smallest allowance over the longest window from several entries', () => {
+    const anchor = new Date('2026-01-01T00:00:00.000Z');
+    const wideFirst = [
+      { token: USDC_BASE, allowance: '0x2FAF080', unit: 'day', multiplier: 1 }, // 50 USDC
+      { token: USDC_BASE, allowance: '0x4C4B40', unit: 'forever', multiplier: 1 }, // 5 USDC
+    ];
+    const tightFirst = [wideFirst[1], wideFirst[0]];
+
+    const a = extractGrantedSpend(wideFirst, 8453, anchor);
+    const b = extractGrantedSpend(tightFirst, 8453, anchor);
+
+    expect(a?.allowance).toBe('5000000');
+    expect(a?.unit).toBe('forever');
+    expect(a).toEqual(b);
+  });
+
+  // The smallest number and the longest window can come from different entries:
+  // 5/day plus 6/week must not seed 5/day, which would re-approve 5 every day
+  // while the chain stops at 6 for the week.
+  it('combines the smallest allowance with the longest window across entries', () => {
+    const anchor = new Date('2026-01-01T00:00:00.000Z');
+    const spends = [
+      { token: USDC_BASE, allowance: '0x4C4B40', unit: 'day', multiplier: 1 }, // 5 USDC
+      { token: USDC_BASE, allowance: '0x5B8D80', unit: 'week', multiplier: 1 }, // 6 USDC
+    ];
+
+    const grant = extractGrantedSpend(spends, 8453, anchor);
+
+    expect(grant?.allowance).toBe('5000000');
+    expect(grant?.unit).toBe('week');
+  });
+
+  // Equal allowances used to keep whichever entry came first, and a short
+  // window first meant re-approving every reset while the long window was
+  // already exhausted on chain.
+  it('keeps the longest window when allowances tie, in either order', () => {
+    const anchor = new Date('2026-01-01T00:00:00.000Z');
+    const hourFirst = [
+      { token: USDC_BASE, allowance: '0x4C4B40', unit: 'hour', multiplier: 1 },
+      { token: USDC_BASE, allowance: '0x4C4B40', unit: 'day', multiplier: 1 },
+    ];
+    const dayFirst = [hourFirst[1], hourFirst[0]];
+
+    const a = extractGrantedSpend(hourFirst, 8453, anchor);
+    const b = extractGrantedSpend(dayFirst, 8453, anchor);
+
+    expect(a?.unit).toBe('day');
+    expect(a).toEqual(b);
+  });
+
+  // Dropping the whole seed on one bad entry would land on the defaults, whose
+  // allowlists are wider than the grant's: the untrusted entry would loosen
+  // enforcement instead of tightening it. Skip it, warn, seed from the rest.
+  it('skips unreadable entries with a warning and seeds from the readable ones', () => {
+    const warnings: string[] = [];
+    const mixedMalformed = [
+      { token: USDC_BASE, allowance: '0x4C4B40' },
+      { token: USDC_BASE, allowance: 'not-hex' },
+    ];
+    const mixedNegative = [
+      { token: USDC_BASE, allowance: '0x4C4B40' },
+      { token: USDC_BASE, allowance: '-0x100' },
+    ];
+
+    const a = extractGrantedSpend(mixedMalformed, 8453, new Date(), (m) => warnings.push(m));
+    const b = extractGrantedSpend(mixedNegative, 8453, new Date(), (m) => warnings.push(m));
+
+    expect(a?.allowance).toBe('5000000');
+    expect(b?.allowance).toBe('5000000');
+    expect(warnings).toHaveLength(2);
+  });
+
+  // BigInt('') is 0n, which would win every tightest comparison and seed a cap
+  // that refuses all payments. The canonical parser reads '' as unset instead.
+  it('treats an empty allowance as unreadable, not as a zero cap', () => {
+    const warnings: string[] = [];
+    const emptyAlone = [{ token: USDC_BASE, allowance: '' }];
+    const emptyBeside = [
+      { token: USDC_BASE, allowance: '' },
+      { token: USDC_BASE, allowance: '0x4C4B40', unit: 'day', multiplier: 1 },
+    ];
+
+    expect(extractGrantedSpend(emptyAlone, 8453, new Date(), (m) => warnings.push(m))).toBeUndefined();
+    expect(extractGrantedSpend(emptyBeside, 8453)?.allowance).toBe('5000000');
+    expect(warnings).toHaveLength(1);
+  });
+
+  // The seed pairs the smallest allowance with the longest window, so when they
+  // come from different entries it is tighter than anything granted and the cap
+  // it produces cannot be raised from the CLI. Say so while setup is re-runnable.
+  it('warns when the seeded pair is assembled from different entries', () => {
+    const warnings: string[] = [];
+    const mixed = [
+      { token: USDC_BASE, allowance: '0x5F5E100', unit: 'day', multiplier: 1 }, // 100 USDC/day
+      { token: USDC_BASE, allowance: '0x3B9ACA00', unit: 'month', multiplier: 1 }, // 1000 USDC/month
+    ];
+
+    const grant = extractGrantedSpend(mixed, 8453, new Date(), (m) => warnings.push(m));
+
+    expect(grant?.allowance).toBe('100000000');
+    expect(grant?.unit).toBe('month');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('100000000');
+    expect(warnings[0]).toContain('month');
+  });
+
+  // Same entry on both sides of the pair: the seed is exactly what was granted,
+  // so there is nothing to warn about.
+  it('stays quiet when one entry supplies both the allowance and the window', () => {
+    const warnings: string[] = [];
+    const spends = [
+      { token: USDC_BASE, allowance: '0x3B9ACA00', unit: 'day', multiplier: 1 }, // 1000 USDC/day
+      { token: USDC_BASE, allowance: '0x5F5E100', unit: 'month', multiplier: 1 }, // 100 USDC/month
+    ];
+
+    expect(extractGrantedSpend(spends, 8453, new Date(), (m) => warnings.push(m))?.allowance).toBe('100000000');
+    expect(warnings).toEqual([]);
+  });
+
+  // A window we cannot place is read as one that never resets: no period is
+  // recorded, so the allowance lands session-wide, which never approves more
+  // than whatever window the chain actually enforces.
+  it('falls back to no period when the longest window has an unknown unit', () => {
+    const spends = [
+      { token: USDC_BASE, allowance: '0x4C4B40', unit: 'fortnight', multiplier: 1 },
+      { token: USDC_BASE, allowance: '0x2FAF080', unit: 'day', multiplier: 1 },
+    ];
+
+    const grant = extractGrantedSpend(spends, 8453);
+
+    expect(grant?.allowance).toBe('5000000');
+    expect(grant?.unit).toBeUndefined();
   });
 });
 
