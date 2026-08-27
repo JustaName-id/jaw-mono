@@ -42,6 +42,8 @@ export function getJaw() {
         // convention as playground.
         ...(keysUrl ? { keysUrl } : {}),
         showTestnets: true,
+        // ENS parent the demo issues subnames from (user.justan.id).
+        ens: process.env.NEXT_PUBLIC_ENS || '',
         // iframe requires a secure context; on plain http://localhost the SDK
         // falls back to the popup on its own.
         transportMode: 'iframe',
