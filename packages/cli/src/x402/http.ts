@@ -7,6 +7,7 @@ import { checkPolicy, type PolicyContext, type X402Policy } from './policy.js';
 import type { Payer } from './payer.js';
 import {
   X402_HEADERS,
+  isX402Scheme,
   type X402PaymentPayload,
   type X402Scheme,
   type X402PaymentRequired,
@@ -363,8 +364,8 @@ function selectRequirement(accepts: unknown[], opts: PayAndFetchOptions, ctx: Po
       continue;
     }
     const req = parsed.data as X402PaymentRequirement;
-    if (req.scheme !== 'exact' && req.scheme !== 'upto') {
-      reason = `unsupported scheme: ${req.scheme}`;
+    if (!isX402Scheme(req.scheme)) {
+      reason = `unsupported scheme: ${String(req.scheme)}`;
       continue;
     }
     if (opts.network && req.network !== opts.network) {

@@ -193,16 +193,16 @@ export default class X402Pay extends BaseCommand {
         const where = result.topUp.batchId ? ` (${result.topUp.batchId})` : ' (no call id returned to confirm it)';
         this.log(`\n  A top-up of ${formatUsdc(result.topUp.amount, topUpDecimals)} was sent first${where}.`);
       }
-      // A signed authorization went out and settlement did not confirm. Under
-      // `upto` it stays spendable up to its ceiling until it expires, which is
-      // what the caps now hold, so the figure has to be on screen: it is the
-      // budget the next payment will find missing.
+      // A signed authorization went out and settlement did not confirm, which
+      // is true of both schemes: the facilitator may have broadcast it anyway,
+      // so the ledger counts it and the caps drop by it. Under `upto` the
+      // figure is the whole ceiling rather than what was being paid. Either
+      // way it belongs on screen, because it is the budget the next payment
+      // will find missing and nothing else says so.
       const held = result.attemptedPayment;
-      if (held?.scheme === 'upto') {
-        this.log(
-          `\n  ${formatUsdc(held.authorized, priceDecimals(held.network))} stays authorized until it expires, ` +
-            'and your caps count it as spent until then.'
-        );
+      if (held) {
+        const figure = formatUsdc(held.authorized, priceDecimals(held.network));
+        this.log(`\n  ${figure} stays authorized until it expires, and your caps count it as spent until then.`);
       }
       this.exit(1);
     }
@@ -236,9 +236,11 @@ export default class X402Pay extends BaseCommand {
     this.log(
       `  amount   ${formatUsdc(result.payment?.amount, priceDecimals(result.payment?.network))} on ${sanitizeLine(result.payment?.network, 64)}`
     );
-    // Only when they differ, which is only ever under `upto`. Showing the
-    // charge alone would hide how much the signature could have taken.
-    if (result.payment && result.payment.authorized !== result.payment.amount) {
+    // Only under `upto`, and only when the two figures really differ. Compared
+    // as numbers: an advertised amount is validated as digits, not normalised,
+    // so `01000` and `1000` are the same money spelled two ways and would
+    // otherwise print a line claiming a gap that does not exist.
+    if (result.payment?.scheme === 'upto' && BigInt(result.payment.authorized) !== BigInt(result.payment.amount)) {
       this.log(`  of up to ${formatUsdc(result.payment.authorized, priceDecimals(result.payment.network))} authorized`);
     }
     this.log(`  payTo    ${result.payment?.payTo}`);

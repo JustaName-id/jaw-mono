@@ -8,6 +8,7 @@
 // UNTRUSTED — the MCP layer fences it before handing it to the agent.
 
 import { usdcForNetwork } from './asset-registry.js';
+import { isX402Scheme } from './types.js';
 
 const BAZAAR_BASE = 'https://api.cdp.coinbase.com/platform/v2/x402/discovery';
 // Coinbase's own docs cap search at 20 results per call.
@@ -29,9 +30,16 @@ export interface DiscoverParams {
   /** CAIP-2 network to prefer when picking the price to show. */
   network?: string;
   /**
-   * Only surface services at or below this USD price per call. A `upto` service
-   * is judged by its ceiling, since that is what a payment to it authorizes and
-   * what the spend caps will measure.
+   * Only surface services at or below this USD price per call, judged on the
+   * option we would actually pay: a `upto` service is measured by its ceiling,
+   * since that is what a payment authorizes and what the spend caps count.
+   *
+   * Asked of the Bazaar and then applied again here, because the two do not
+   * necessarily agree. The catalog filters on whichever of a service's options
+   * matched, and we go on to select a different one, the cheapest on the
+   * preferred network. An entry priced in an asset we cannot value is kept:
+   * there is no figure to compare, and dropping it would hide a service for
+   * being unfamiliar rather than for being expensive.
    */
   maxUsdPrice?: string;
   /** Only Coinbase-curated (health-probed) services. */
@@ -130,6 +138,11 @@ function toPrice(entry: Record<string, unknown>): ServicePrice | null {
   }
 
   const scheme = asString(entry.scheme);
+  // An option we cannot sign is not a price, it is a distraction. Left in, a
+  // catalog entry priced in a scheme this client refuses would be listed as the
+  // cheap one, chosen on that basis, and then paid through whatever other
+  // option the challenge offered, which is usually the expensive one.
+  if (!isX402Scheme(scheme)) return null;
   return {
     amount,
     kind: scheme === 'upto' ? 'ceiling' : 'price',
@@ -233,12 +246,33 @@ async function bazaarGet(path: string, search: URLSearchParams): Promise<Record<
  * Returns a compact, mapped view; the raw seller-authored strings inside it are
  * untrusted and must be fenced before reaching the model.
  */
+/**
+ * Drop what we would not pay, judged on the option we would actually pay.
+ *
+ * The Bazaar filters on whichever option matched its query, and `selectPrice`
+ * then picks the cheapest on the preferred network, which need not be the same
+ * one. Without this a caller asking for a cent per call can be handed a service
+ * whose selected option authorizes several dollars. Entries with no valuable
+ * asset are kept: there is nothing to compare them against, and hiding them
+ * would be hiding the unfamiliar rather than the expensive.
+ */
+function withinCap(services: DiscoveredService[], maxUsdPrice?: string): DiscoveredService[] {
+  const cap = maxUsdPrice === undefined ? NaN : Number(maxUsdPrice);
+  if (!Number.isFinite(cap)) return services;
+  return services.filter((s) => s.price?.approxUsd == null || s.price.approxUsd <= cap);
+}
+
 export async function discoverServices(params: DiscoverParams): Promise<DiscoverResult> {
   const network = params.network ?? DEFAULT_NETWORK;
 
   if (params.payTo) {
     const data = await bazaarGet('merchant', new URLSearchParams({ payTo: params.payTo }));
-    const services = asArray(data.resources).map((r) => mapService(r, network));
+    // The merchant endpoint takes no price filter, so this is the only place it
+    // gets applied for a seller listing.
+    const services = withinCap(
+      asArray(data.resources).map((r) => mapService(r, network)),
+      params.maxUsdPrice
+    );
     return { mode: 'merchant', count: services.length, partialResults: false, services };
   }
 
@@ -251,7 +285,10 @@ export async function discoverServices(params: DiscoverParams): Promise<Discover
   search.set('limit', String(limit));
 
   const data = await bazaarGet('search', search);
-  const services = asArray(data.resources).map((r) => mapService(r, network));
+  const services = withinCap(
+    asArray(data.resources).map((r) => mapService(r, network)),
+    params.maxUsdPrice
+  );
   return {
     mode: 'search',
     count: services.length,

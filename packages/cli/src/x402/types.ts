@@ -2,8 +2,21 @@
 // backend's `apps/ens/src/external/payment/x402-types.ts` so the buyer and
 // seller sides stay wire-compatible. v2 only (no v1 `X-PAYMENT` / `maxAmountRequired`).
 
-/** The settlement schemes this client can produce a payment for. */
-export type X402Scheme = 'exact' | 'upto';
+/**
+ * The settlement schemes this client can produce a payment for.
+ *
+ * One list, because more than one place has to answer the same question about
+ * an untrusted string off the wire: the policy refuses what it cannot bound,
+ * the challenge selector refuses what it cannot sign, and discovery must not
+ * advertise a price the payment path would then decline to pay.
+ */
+export const X402_SCHEMES = ['exact', 'upto'] as const;
+
+export type X402Scheme = (typeof X402_SCHEMES)[number];
+
+export function isX402Scheme(value: unknown): value is X402Scheme {
+  return typeof value === 'string' && (X402_SCHEMES as readonly string[]).includes(value);
+}
 
 /** One acceptable payment option from the server's `accepts` list. */
 export interface X402PaymentRequirement {

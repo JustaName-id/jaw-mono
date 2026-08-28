@@ -50,7 +50,17 @@ export function registerRpcTool(server: McpServer): void {
     recentSends.push(now);
   }
 
-  server.registerTool(
+  // Same explicit signature the other tools use. This one carried a
+  // `@ts-expect-error` on the handler instead, which stopped covering anything
+  // once the error moved to the schema argument: the directive then reports
+  // itself as unused, which is the failure mode that made the cast the house
+  // pattern in the first place.
+  type RegisterRpc = (
+    name: string,
+    config: { description: string; inputSchema: typeof rpcMethodSchema },
+    handler: (params: { method: string; params?: unknown; chainId?: number; session?: boolean }) => Promise<unknown>
+  ) => void;
+  (server.registerTool as unknown as RegisterRpc)(
     'jaw_rpc',
     {
       description:
@@ -65,8 +75,7 @@ export function registerRpcTool(server: McpServer): void {
         'and jaw://api-reference/{method} for detailed parameter formats and examples.',
       inputSchema: rpcMethodSchema,
     },
-    // @ts-expect-error — MCP SDK deep type inference with z.any() in schema
-    async (params: { method: string; params?: unknown; chainId?: number; session?: boolean }) => {
+    async (params) => {
       try {
         const config = loadConfig();
         const apiKey = resolveApiKey(config);

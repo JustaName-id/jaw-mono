@@ -175,7 +175,21 @@ export function registerPayTool(server: McpServer): void {
       )
   );
 
-  server.registerTool(
+  // Explicit signature rather than the SDK's inference, for the reason
+  // `jaw_config_set` documents: registerTool's generics walk the result type,
+  // and this file's results now carry a scheme union that tips the checker over
+  // its instantiation limit on some installs. A `@ts-expect-error` is no help,
+  // since it reports "unused" wherever the error does not fire.
+  type RegisterX402Log = (
+    name: string,
+    config: {
+      description: string;
+      inputSchema: typeof x402LogSchema;
+      annotations: { readOnlyHint: boolean };
+    },
+    handler: (params: { limit?: number }) => Promise<unknown>
+  ) => void;
+  (server.registerTool as unknown as RegisterX402Log)(
     'jaw_x402_log',
     {
       description:

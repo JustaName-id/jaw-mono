@@ -1,7 +1,7 @@
 import { USDC_BY_NETWORK } from './asset-registry.js';
 import { parseBigInt, parseNonNegativeBigInt } from './amount.js';
 import { describePeriod, normalizePeriod, type PeriodUnit } from './period.js';
-import type { X402PaymentRequirement } from './types.js';
+import { isX402Scheme, type X402PaymentRequirement } from './types.js';
 import type { GrantedSpend } from '../lib/session-config.js';
 
 /** The period a granted allowance resets over, carried into the policy. */
@@ -276,9 +276,8 @@ export function checkPolicy(
 ): PolicyResult {
   // The wire value is untrusted: it arrives as a plain string and is only cast
   // to the union, so this is a runtime check and not a redundant one.
-  const scheme: string = requirement.scheme;
-  if (scheme !== 'exact' && scheme !== 'upto') {
-    return { ok: false, reason: `unsupported scheme: ${scheme}` };
+  if (!isX402Scheme(requirement.scheme)) {
+    return { ok: false, reason: `unsupported scheme: ${String(requirement.scheme)}` };
   }
 
   if (has(policy.allowedNetworks) && !policy.allowedNetworks.includes(requirement.network)) {
