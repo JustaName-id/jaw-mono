@@ -70,30 +70,43 @@ describe('whyOwnerCannotFundSession', () => {
 });
 
 const SPENDER = '0x2222222222222222222222222222222222222222';
+const ONE_OP = 10_000n; // 0.01 USDC, the floor a session has to clear to send anything
 
 /**
- * The wallet decides whether to honour `capabilities.prefundSpender`, and one
- * that does not implement it drops the request without a word. Setup then looks
- * like it worked and the first payment fails on something that reads like a
- * paymaster problem, so the gap is caught here instead.
+ * The wallet decides whether to seed the session, and declines for eight
+ * different reasons of which "does not implement the capability" is only one.
+ * So this reports the observable state, that the session cannot pay, and never
+ * claims to know which of the eight it was.
  */
 describe('whySpenderCannotPay', () => {
-  const check = (readBalance: () => Promise<bigint>) =>
-    whySpenderCannotPay({ chainId: BASE_SEPOLIA, spender: SPENDER, readBalance });
+  const check = (readBalance: () => Promise<bigint>, timeoutMs = 50) =>
+    whySpenderCannotPay({ chainId: BASE_SEPOLIA, spender: SPENDER, readBalance, timeoutMs });
 
-  it('says nothing when the wallet seeded the session', async () => {
+  it('says nothing when the session can pay for an operation', async () => {
     expect(await check(async () => PREFUND)).toBeNull();
   });
 
-  it('accepts any amount above zero, since the wallet prices the seed itself', async () => {
-    expect(await check(async () => 1n)).toBeNull();
+  it('accepts exactly one operation, since that is all it has to clear', async () => {
+    expect(await check(async () => ONE_OP)).toBeNull();
   });
 
-  it('names the address and the amount when nothing arrived', async () => {
-    const reason = await check(async () => 0n);
+  // A session key is reused by default, so the address can carry dust from a
+  // previous life. Reading that as funded would miss the case on the common path.
+  it('reports dust below the cost of one operation', async () => {
+    const reason = await check(async () => ONE_OP - 1n);
     expect(reason).toContain(SPENDER);
-    expect(reason).toContain('0.1');
-    expect(reason).toContain('84532');
+    expect(reason).toContain('0.01');
+  });
+
+  it('reports an empty balance', async () => {
+    expect(await check(async () => 0n)).toContain('not enough to pay for its first operation');
+  });
+
+  it('offers the causes rather than naming one', async () => {
+    const reason = (await check(async () => 0n)) ?? '';
+    expect(reason).toContain('may not implement');
+    expect(reason).toContain('could not price');
+    expect(reason).toContain('allowance was too small');
   });
 
   it('stays quiet on a chain with no USDC, where gas is not charged in it', async () => {
@@ -101,9 +114,18 @@ describe('whySpenderCannotPay', () => {
   });
 
   it('stays quiet when the node cannot be read, since the session is already saved', async () => {
-    const reason = await check(async () => {
-      throw new Error('rpc down');
-    });
+    expect(
+      await check(async () => {
+        throw new Error('rpc down');
+      })
+    ).toBeNull();
+  });
+
+  it('gives up on a stalled node instead of holding the command open', async () => {
+    const started = Date.now();
+    // A read that never settles, which is what a stalled node looks like.
+    const reason = await check(() => new Promise<bigint>(() => undefined));
     expect(reason).toBeNull();
+    expect(Date.now() - started).toBeLessThan(1000);
   });
 });

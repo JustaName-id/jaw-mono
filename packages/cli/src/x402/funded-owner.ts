@@ -1,6 +1,6 @@
 import { usdcForNetwork } from './asset-registry.js';
 import { usdcBalance } from './balance.js';
-import { gasReserve } from './gas-reserve.js';
+import { firstOperationCost, gasReserve } from './gas-reserve.js';
 import { formatUsdc } from './status-report.js';
 
 /**
@@ -64,19 +64,22 @@ export async function whyOwnerCannotFundSession(check: OwnerFundingCheck): Promi
  *
  * The counterpart to the check above, on the other side of the grant. That one
  * refuses to grant when the account could not afford to seed the session; this
- * one runs after a grant the account could afford, and catches the case where
- * the seed never arrived anyway.
+ * one runs after a grant it could afford, and catches a session that came out
+ * unable to send anything.
  *
- * It arrives, or does not, entirely at the wallet's discretion. The grant asks
- * for it through `capabilities.prefundSpender`, and a capability a wallet does
- * not implement is dropped rather than refused, so a wallet running an older
- * build honours nothing and reports nothing. What the user sees without this is
- * a successful setup followed, at the first payment, by an error about sizing a
- * paymaster approval.
+ * Scoped to the x402 preset by its caller, and it has to be. The wallet seeds in
+ * whatever token the permission names, picking the first ERC-20 spend in it, and
+ * a permission that authorises no spend at all is correctly seeded with nothing.
+ * Reading USDC would then be reading the wrong token, or the wrong question. The
+ * preset is the one grant that always names USDC.
  *
- * Only an empty balance counts. The wallet prices the seed itself, off its own
- * paymaster's rate, so any amount above zero means it did the thing and second
- * guessing the figure here would invent false alarms.
+ * What it does NOT do is diagnose. `buildSpenderPrefundCall` declines for eight
+ * different reasons, of which a wallet not implementing the capability is only
+ * one: no exchange rate for the token, a granted allowance too small to price
+ * against, a paymaster context without gas, an owner balance that no longer
+ * covers the seed plus the grant's own fee. So the message states what is true
+ * and observable, that the session cannot pay, and offers the causes rather than
+ * asserting the one that is most often right.
  */
 export interface SpenderFundingCheck {
   chainId: number;
@@ -84,6 +87,13 @@ export interface SpenderFundingCheck {
   spender: `0x${string}`;
   /** Injected for tests. */
   readBalance?: (network: string, address: `0x${string}`) => Promise<bigint>;
+  /**
+   * How long to wait on the node. The session is already created and saved by
+   * the time this runs, so a stalled RPC must not hold the command open after
+   * its work is done: viem retries three times at ten seconds, which is most of
+   * a minute of silence for a warning nobody is waiting on.
+   */
+  timeoutMs?: number;
 }
 
 export async function whySpenderCannotPay(check: SpenderFundingCheck): Promise<string | null> {
@@ -97,21 +107,31 @@ export async function whySpenderCannotPay(check: SpenderFundingCheck): Promise<s
     (async (network: string, address: `0x${string}`) => BigInt((await usdcBalance(network, address)).raw));
 
   let held: bigint;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    held = await read(asset.wireNetwork, check.spender);
+    const expired = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('timed out')), check.timeoutMs ?? 5_000);
+    });
+    held = await Promise.race([read(asset.wireNetwork, check.spender), expired]);
   } catch {
-    // The session exists and is saved by the time this runs. An unreachable
-    // node is not a reason to end a successful setup with an alarm.
+    // An unreachable or slow node is not a reason to end a successful setup
+    // with an alarm.
     return null;
+  } finally {
+    clearTimeout(timer);
   }
-  if (held > 0n) return null;
 
-  const needed = gasReserve(asset);
+  // Not "holds nothing": a session key is reused by default, so the address can
+  // carry dust from a previous life. What matters is whether it can pay for one
+  // operation, and a wallet that seeded it priced that operation to do so.
+  const needed = firstOperationCost(asset);
+  if (held >= needed) return null;
+
   return (
-    `${check.spender} holds no USDC, so it cannot pay for its first operation. The session pays its ` +
-    `own gas, and the grant asked this wallet to send it a little along with the permission. It did ` +
-    `not, which means it does not support that yet: a capability a wallet does not know is dropped ` +
-    `rather than reported. Send ${formatUsdc(needed.toString(), asset.decimals)} on chain ` +
-    `${check.chainId} to that address and the session works from there.`
+    `${check.spender} holds ${formatUsdc(held.toString(), asset.decimals)} on chain ${check.chainId}, which is ` +
+    `not enough to pay for its first operation. The session pays its own gas, and the grant asked this wallet ` +
+    `to send it a little along with the permission. Nothing usable arrived: the wallet may not implement that ` +
+    `yet, or it could not price the transfer, or the granted allowance was too small to cover one. Send ` +
+    `${formatUsdc(needed.toString(), asset.decimals)} to that address and the session works from there.`
   );
 }

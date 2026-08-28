@@ -21,3 +21,16 @@ import type { UsdcAsset } from './asset-registry.js';
 export function gasReserve(asset: UsdcAsset): bigint {
   return 10n ** BigInt(asset.decimals) / 10n;
 }
+
+/**
+ * What one operation costs the session, in base units of `asset`.
+ *
+ * A cent, rounded up from the 0.0094 measured above so the figure stays a round
+ * number rather than pretending to a precision a gas price does not have. It is
+ * the floor a session has to clear to be able to send anything at all, which is
+ * a different question from `gasReserve`: that one decides how much to leave
+ * behind, this one decides whether there is enough to act.
+ */
+export function firstOperationCost(asset: UsdcAsset): bigint {
+  return 10n ** BigInt(asset.decimals) / 100n;
+}

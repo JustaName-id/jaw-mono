@@ -287,8 +287,15 @@ export default class SessionSetup extends BaseCommand {
       //      unable to pay for anything, and says nothing about it. The failure
       //      then surfaces at the first operation, in an error about sizing a
       //      paymaster approval, long after the user has left this screen.
-      const unfunded = await whySpenderCannotPay({ chainId, spender: sessionAddress });
-      if (unfunded) this.logToStderr(`\nWarning: ${unfunded}`);
+      //      Only under --x402: the wallet seeds in whatever token the
+      //      permission names, and that preset is the one grant that always
+      //      names USDC. A calls-only permission is correctly seeded with
+      //      nothing, and warning there would send someone to move real funds
+      //      for no reason.
+      if (flags.x402) {
+        const unfunded = await whySpenderCannotPay({ chainId, spender: sessionAddress });
+        if (unfunded) this.logToStderr(`\nWarning: ${unfunded}`);
+      }
 
       // 9. Output
       const summary = {
