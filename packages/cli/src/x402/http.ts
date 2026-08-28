@@ -7,6 +7,7 @@ import { checkPolicy, type PolicyContext, type X402Policy } from './policy.js';
 import type { Payer } from './payer.js';
 import {
   X402_HEADERS,
+  type X402PaymentPayload,
   type X402PaymentRequired,
   type X402PaymentRequirement,
   type X402SettleResponse,
@@ -110,6 +111,17 @@ const b64json = <T>(header: string | null): T | null => {
  * makes that claim true, and closes every sink at once. A receipt that fails
  * the check still reconciles by nonce, which the ledger also records.
  */
+/**
+ * The nonce that identifies this attempt on chain, whichever scheme produced it:
+ * EIP-3009 carries its own, Permit2 carries the one its bitmap consumes. Both
+ * are what an ambiguous settlement is reconciled by, so the ledger records
+ * either without caring which scheme it came from.
+ */
+function paymentNonceOf(payload: X402PaymentPayload): `0x${string}` {
+  const inner = payload.payload;
+  return 'authorization' in inner ? inner.authorization.nonce : inner.permit2Authorization.nonce;
+}
+
 function settledTxHash(receipt: X402SettleResponse | null): `0x${string}` | undefined {
   const tx = receipt?.transaction;
   return tx && /^0x[0-9a-fA-F]{64}$/.test(tx) ? tx : undefined;
@@ -463,7 +475,7 @@ export async function payAndFetch(
     asset: requirement.asset,
     network: requirement.network,
     payTo: requirement.payTo,
-    nonce: payload.payload.authorization.nonce,
+    nonce: paymentNonceOf(payload),
   };
   const proof = encodePaymentPayload(payload);
 
