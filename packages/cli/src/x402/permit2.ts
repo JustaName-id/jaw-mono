@@ -1,0 +1,81 @@
+/**
+ * Permit2 declarations for the x402 `upto` scheme.
+ *
+ * `upto` does not settle through EIP-3009 the way `exact` does. The client signs
+ * a Permit2 `permitWitnessTransferFrom` authorizing a ceiling, and the
+ * facilitator later calls the x402 proxy with the amount the run actually
+ * consumed, which the proxy refuses if it exceeds the ceiling. The witness binds
+ * both the recipient and the facilitator, so a signature is not useful to anyone
+ * else.
+ *
+ * Everything here is a declaration: the addresses, the structs, and the domain.
+ * Hashing them is viem's job. Choosing a nonce, a deadline, a spender or an
+ * amount, and deciding whether a challenge may be paid at all, belongs to the
+ * scheme module and the policy, not to this file.
+ */
+
+/**
+ * Canonical Permit2, the same address `JustaPermissionManager` pins as its
+ * `PERMIT2` constant. Deployed deterministically, so it does not vary per chain.
+ */
+export const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3' as const;
+
+/**
+ * `WITNESS_TYPE_STRING` from `x402UptoPermit2Proxy.sol`, reproduced verbatim.
+ * Permit2 concatenates it onto its own stub to form the full type, so the two
+ * halves below must stay exactly as the contracts spell them: the struct order
+ * (TokenPermissions before Witness) is the alphabetical order EIP-712 requires,
+ * and a single byte out of place produces a signature that no verifier accepts
+ * and no error explains.
+ */
+const UPTO_WITNESS_TYPE_STRING =
+  'Witness witness)TokenPermissions(address token,uint256 amount)Witness(address to,address facilitator,uint256 validAfter)';
+
+/** Permit2's `_PERMIT_TRANSFER_FROM_WITNESS_TYPEHASH_STUB`. */
+const PERMIT_TRANSFER_FROM_WITNESS_STUB =
+  'PermitWitnessTransferFrom(TokenPermissions permitted,address spender,uint256 nonce,uint256 deadline,';
+
+/** The canonical EIP-712 type string for what the payer signs under `upto`. */
+export const PERMIT2_UPTO_CONTENTS_TYPE = PERMIT_TRANSFER_FROM_WITNESS_STUB + UPTO_WITNESS_TYPE_STRING;
+
+/**
+ * The same structs as a viem types object. This is what actually gets signed, on
+ * both validation paths: viem derives the canonical type from it, which is what
+ * makes the string above a check on this rather than a second copy of it.
+ */
+export const PERMIT_WITNESS_TRANSFER_FROM_TYPES = {
+  PermitWitnessTransferFrom: [
+    { name: 'permitted', type: 'TokenPermissions' },
+    { name: 'spender', type: 'address' },
+    { name: 'nonce', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' },
+    { name: 'witness', type: 'Witness' },
+  ],
+  TokenPermissions: [
+    { name: 'token', type: 'address' },
+    { name: 'amount', type: 'uint256' },
+  ],
+  Witness: [
+    { name: 'to', type: 'address' },
+    { name: 'facilitator', type: 'address' },
+    { name: 'validAfter', type: 'uint256' },
+  ],
+} as const;
+
+/** What the payer authorizes: a ceiling, a spender, and the witness binding. */
+export interface UptoPermitMessage {
+  permitted: { token: `0x${string}`; amount: bigint };
+  spender: `0x${string}`;
+  nonce: bigint;
+  deadline: bigint;
+  witness: { to: `0x${string}`; facilitator: `0x${string}`; validAfter: bigint };
+}
+
+/**
+ * Permit2's EIP-712 domain. It carries no `version`, so passing an empty one
+ * would produce a domain separator the contract never computes and a signature
+ * it never accepts.
+ */
+export function permit2Domain(chainId: number): { name: string; chainId: number; verifyingContract: `0x${string}` } {
+  return { name: 'Permit2', chainId, verifyingContract: PERMIT2_ADDRESS };
+}
