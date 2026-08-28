@@ -31,10 +31,35 @@ jaw x402 pay https://api.example.com/resource --pay
 1. The CLI fetches the URL. Anything but a `402` comes back untouched, so this doubles as a plain fetch.
 2. The `402` carries the price in the `PAYMENT-REQUIRED` header. It is checked against your limits, and over a cap it is refused before anything is signed.
 3. If the payer is short on USDC, it pulls the shortfall from the owner account through the on-chain permission.
-4. The payment is signed with the session key ([EIP-3009](https://eips.ethereum.org/EIPS/eip-3009), a USDC transfer authorization) and the request is retried carrying the proof.
+4. The payment is signed with the session key and the request is retried carrying the proof. What gets signed depends on how the server priced the call: see [Fixed Prices and Ceilings](#fixed-prices-and-ceilings).
 5. The facilitator settles on chain and the server returns the resource.
 
 Every attempt is appended to a local ledger, paid, refused or failed. See [`jaw x402 log`](#jaw-x402-log).
+
+## Fixed Prices and Ceilings
+
+A server prices a call in one of two ways, and the difference is worth understanding before you read a refusal.
+
+| Scheme  | The `402` states | What moves                  | Signed with                                                                        |
+| ------- | ---------------- | --------------------------- | ---------------------------------------------------------------------------------- |
+| `exact` | a price          | that price                  | [EIP-3009](https://eips.ethereum.org/EIPS/eip-3009), a USDC transfer authorization |
+| `upto`  | a ceiling        | anything from zero up to it | [Permit2](https://github.com/Uniswap/permit2), a witness bound to the recipient    |
+
+`upto` exists for calls whose cost is not knowable in advance, like model inference or a query priced by the rows it returns. You authorize a ceiling, the server does the work, and it charges what the work came to. The proxy that settles it refuses any amount above the ceiling, and refuses any caller but the one named in the challenge, so a signature is worth the ceiling and nothing more, to one recipient, once.
+
+Two consequences follow, and both surprise people.
+
+**The caps measure the ceiling, not the expected charge.** No cap can be enforced against a number the server has not picked yet, and until settlement the signature is worth its ceiling to whoever holds it. So an endpoint advertising a 5 USDC ceiling is refused under the default 1 USDC per payment cap even if it would have charged a hundredth of a cent. The refusal says `up to 5000000` to make clear which number it is talking about. Raise the cap deliberately, or leave the endpoint unpayable.
+
+**A failed `upto` payment costs its whole ceiling against your caps.** Once signed and sent, the authorization stays spendable up to the ceiling until it expires, and nothing yet proves it went unused. Counting the charge instead would let a run of failures spend far past the cap, so the caps hold the ceiling. It is deliberately pessimistic: repeated failures eat budget faster than repeated successes.
+
+`jaw x402 log` reports the same figure the caps enforce, so a failed row shows what is held rather than what was attempted.
+
+### The One-Time Approval
+
+Permit2 moves the token through the standard ERC-20 allowance, so the first `upto` payment on a chain sends one extra on-chain approval from the payer before it signs. It happens once per chain, automatically, and its gas comes out of the payer in USDC like any other operation.
+
+It is the only call a session sends outside its permission, and it has to be: the permission manager checks every call against the granted list, which is transfers only. Being outside the permission is why it is deliberately narrow. It approves Permit2, for the registry USDC on the session's chain, and there is no argument that turns it into anything else.
 
 ## Setup
 
@@ -89,6 +114,8 @@ Every payment is bounded by a policy plus the per call ceiling. Nothing is unbou
 | `maxPerPeriod`        | none    | Seeded from the on chain grant  |
 | `--max-amount`        | none    | One call only                   |
 
+Under `upto` every one of these measures the ceiling the challenge advertised. See [Fixed Prices and Ceilings](#fixed-prices-and-ceilings).
+
 `maxPerPeriod` mirrors the permission and resets with it, so it is not settable from the CLI. Once a grant seeds it, it replaces the 10 USDC session default and is usually the only cap that binds. A `maxTotalPerSession` you set explicitly still applies on top.
 
 `maxTotalPerSession` is not a per-process cap. The running total is rebuilt from the ledger, so it survives restarts.
@@ -135,6 +162,8 @@ USDC deployments the CLI knows about:
 | Polygon Amoy | `eip155:80002` | 80002    |
 
 A server asking for any other asset is refused, so a lookalike token cannot be paid by mistake.
+
+`upto` needs its settlement proxy deployed, which is verified on Base and Base Sepolia. A `upto` challenge on any other network is refused before anything is signed, since a permit whose settlement contract is not there could never be honoured and would still hold its ceiling against your caps.
 
 ## Commands
 
@@ -197,6 +226,8 @@ jaw x402 log --output json
 | `--status` | Filter by `paid`, `failed` or `refused` |
 
 The ledger is also what `maxTotalPerSession` counts against, so it is the record of truth for the session cap, not a convenience log.
+
+The amount on a row is what the caps counted for it, which for a settled payment is what was charged and for a failed one is the ceiling it still holds. Under `exact` those are the same number, so only an `upto` row can show them apart.
 
 ## For AI Agents
 
