@@ -3,7 +3,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { recoverTypedDataAddress, recoverAddress, sliceHex } from 'viem';
 import type { X402PaymentRequirement } from './types.js';
 import { TRANSFER_WITH_AUTHORIZATION_TYPES } from './scheme-exact-evm.js';
-import { erc7739Digest } from './erc7739.js';
+import { hashTypedData as erc7739HashTypedData } from 'viem/experimental/erc7739';
 
 // Well-known Hardhat test key #1 — never used for real funds.
 const PK = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
@@ -89,28 +89,26 @@ describe('Eip3009EoaPayer delegation awareness', () => {
       expect.objectContaining({ address: account.address, functionName: 'eip712Domain' })
     );
     // The inner 65-byte signature recovers to the EOA over the envelope digest.
-    const { digest } = erc7739Digest(
-      {
-        domain: { name: 'USDC', version: '2', chainId: 84532, verifyingContract: requirement.asset },
-        types: TRANSFER_WITH_AUTHORIZATION_TYPES,
-        primaryType: 'TransferWithAuthorization',
-        message: {
-          from: account.address,
-          to: requirement.payTo,
-          value: 1000n,
-          validAfter: 0n,
-          validBefore: BigInt(1_000_000 + 600),
-          nonce: ('0x' + '11'.repeat(32)) as `0x${string}`,
-        },
+    const digest = erc7739HashTypedData({
+      domain: { name: 'USDC', version: '2', chainId: 84532, verifyingContract: requirement.asset },
+      types: TRANSFER_WITH_AUTHORIZATION_TYPES,
+      primaryType: 'TransferWithAuthorization',
+      message: {
+        from: account.address,
+        to: requirement.payTo,
+        value: 1000n,
+        validAfter: 0n,
+        validBefore: BigInt(1_000_000 + 600),
+        nonce: ('0x' + '11'.repeat(32)) as `0x${string}`,
       },
-      {
+      verifierDomain: {
         name: 'JustanAccount',
         version: '1',
         chainId: 84532n,
         verifyingContract: account.address,
         salt: ('0x' + '00'.repeat(32)) as `0x${string}`,
-      }
-    );
+      },
+    } as never);
     const recovered = await recoverAddress({ hash: digest, signature: sliceHex(sig, 0, 65) });
     expect(recovered.toLowerCase()).toBe(account.address.toLowerCase());
   });

@@ -1,13 +1,13 @@
 import { privateKeyToAccount } from 'viem/accounts';
 import { parseAbi } from 'viem';
 import { keystoreExists, loadSessionKey } from '../lib/keystore.js';
+import { hashTypedData as erc7739HashTypedData, wrapTypedDataSignature } from 'viem/experimental/erc7739';
 import {
   buildExactPayment,
   type BuildExactOptions,
   type ExactSigner,
   type ExactTypedData,
 } from './scheme-exact-evm.js';
-import { erc7739Digest, wrapErc7739Signature, type AccountEip712Domain } from './erc7739.js';
 import { publicClientFor } from './balance.js';
 import { usdcForNetwork } from './asset-registry.js';
 import type { X402PaymentPayload, X402PaymentRequirement } from './types.js';
@@ -33,6 +33,15 @@ export interface Payer {
 /** EIP-7702 delegation designator prefix (the EOA "has code" once delegated). */
 const EIP7702_CODE_PREFIX = '0xef0100';
 
+/** The EIP-712 domain of the delegated account, read from it on chain. */
+interface AccountEip712Domain {
+  name: string;
+  version: string;
+  chainId: bigint;
+  verifyingContract: `0x${string}`;
+  salt: `0x${string}`;
+}
+
 const EIP712_DOMAIN_ABI = parseAbi([
   'function eip712Domain() view returns (bytes1 fields, string name, string version, uint256 chainId, address verifyingContract, bytes32 salt, uint256[] extensions)',
 ]);
@@ -45,7 +54,7 @@ const EIP712_DOMAIN_ABI = parseAbi([
  * typed-data one (ecrecover path). Once the session was upgraded in place via
  * EIP-7702 (which the first userOp of a session does), USDC validates through
  * EIP-1271/ERC-7739 instead, so the payer detects the delegation designator and
- * signs the wrapped TypedDataSign envelope (see erc7739.ts).
+ * signs the wrapped TypedDataSign envelope (see `wrappedSigner`).
  */
 export class Eip3009EoaPayer implements Payer {
   readonly address: `0x${string}`;
@@ -109,13 +118,28 @@ export class Eip3009EoaPayer implements Payer {
     return (code ?? '0x').toLowerCase().startsWith(EIP7702_CODE_PREFIX);
   }
 
-  /** ERC-7739 wrapped signer for the delegated (EIP-1271) validation path. */
+  /**
+   * ERC-7739 wrapped signer for the delegated (EIP-1271) validation path.
+   *
+   * JustanAccount answers 1271 with Solady's ERC-7739 validation, which rejects
+   * raw signatures from on-chain callers by design (anti cross-account replay).
+   * So the key signs a nested TypedDataSign envelope carrying the account's own
+   * domain, and ships a blob the account unwraps. USDC v2.2 accepts
+   * arbitrary-length `bytes` signatures, so it travels on the normal x402 wire.
+   *
+   * The envelope and the blob come from viem, which derives the contents type
+   * from the typed data instead of taking a hand-written string, so the type
+   * cannot drift from what is being signed. `erc7739.vectors.test.ts` pins the
+   * bytes both produce against a payment that settled on chain.
+   */
   private wrappedSigner(): ExactSigner {
     return async (typedData: ExactTypedData) => {
-      const accountDomain = await this.readAccountDomain(typedData.domain.chainId);
-      const { digest, appDomainSeparator, contentsHash } = erc7739Digest(typedData, accountDomain);
+      const verifierDomain = await this.readAccountDomain(typedData.domain.chainId);
+      // viem's TypedData generics don't line up with our concrete shapes; the
+      // runtime calls take exactly the typed data we already build.
+      const digest = erc7739HashTypedData({ ...typedData, verifierDomain } as never);
       const signature = await this.signHash(digest);
-      return wrapErc7739Signature(signature, appDomainSeparator, contentsHash);
+      return wrapTypedDataSignature({ ...typedData, signature } as never);
     };
   }
 
