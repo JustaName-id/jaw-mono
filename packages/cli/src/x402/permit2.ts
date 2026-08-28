@@ -21,6 +21,30 @@
 export const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3' as const;
 
 /**
+ * `x402UptoPermit2Proxy`, the spender the payer authorizes and the only contract
+ * allowed to settle the permit.
+ *
+ * Pinned rather than read from the challenge. The spender is what a Permit2
+ * signature hands the ability to move funds to, so accepting a server-supplied
+ * one would authorize a stranger to pull up to the ceiling. This is the same
+ * rule the `exact` scheme already applies to the token address.
+ *
+ * Verified on chain on 2026-08-28, not just read from a repo: deployed at this
+ * address on both Base Mainnet and Base Sepolia with an identical codehash
+ * (`0x4662dc27...`), which is what a deterministic CREATE2 deployment should
+ * look like. The runtime bytecode contains the witness type string and the
+ * typehash below as literals, so the transcription is checked against the
+ * contract that will actually run and not only against its source.
+ *
+ * Two traps live near this address. The x402 README still lists Base Mainnet as
+ * having no `upto` deployment, which is stale. And Base Sepolia carries a second,
+ * legacy proxy at `0x402039b3d6E6BEC5A02c2C9fd937ac17A6940002` with different
+ * bytecode, predating the deterministic build; a challenge pointing there must
+ * be refused like any other unpinned spender.
+ */
+export const X402_UPTO_PROXY_ADDRESS = '0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002' as const;
+
+/**
  * `WITNESS_TYPE_STRING` from `x402UptoPermit2Proxy.sol`, reproduced verbatim.
  * Permit2 concatenates it onto its own stub to form the full type, so the two
  * halves below must stay exactly as the contracts spell them: the struct order

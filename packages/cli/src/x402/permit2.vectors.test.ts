@@ -4,6 +4,7 @@ import {
   PERMIT2_ADDRESS,
   PERMIT_WITNESS_TRANSFER_FROM_TYPES,
   permit2Domain,
+  X402_UPTO_PROXY_ADDRESS,
   type UptoPermitMessage,
 } from './permit2.js';
 
@@ -26,7 +27,7 @@ import {
 /** Fixed inputs. Values are arbitrary but must never change. */
 const message: UptoPermitMessage = {
   permitted: { token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', amount: 5_000_000n },
-  spender: '0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002',
+  spender: X402_UPTO_PROXY_ADDRESS,
   nonce: BigInt('0xf3746613c2d920b5fdabc0856f2aeb2d4f88ee6037b8cc5d04a71a4462f13480'),
   deadline: 1_740_672_154n,
   witness: {
