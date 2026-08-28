@@ -117,6 +117,20 @@ describe('buildUptoPayment refusals', () => {
     await expect(build({ ...requirement, extra: { name: 'USDC' } })).rejects.toThrow(/facilitatorAddress/);
   });
 
+  it('refuses a chain the settlement proxy was never verified on', async () => {
+    const polygon = {
+      ...requirement,
+      network: 'eip155:137',
+      asset: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as `0x${string}`,
+    };
+    await expect(build(polygon)).rejects.toThrow(/only verified on/);
+  });
+
+  it('caps the deadline the server may ask for', async () => {
+    const forever = { ...requirement, maxTimeoutSeconds: 31_536_000 };
+    expect(authOf(await build(forever)).deadline).toBe(String(1_000_000 + 3600));
+  });
+
   it('refuses a facilitator that is not an address', async () => {
     const bad = { ...requirement, extra: { facilitatorAddress: 'not-an-address' } };
     await expect(build(bad)).rejects.toThrow(/facilitatorAddress/);

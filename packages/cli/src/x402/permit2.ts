@@ -45,6 +45,20 @@ export const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3' as c
 export const X402_UPTO_PROXY_ADDRESS = '0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002' as const;
 
 /**
+ * The chains the proxy above was verified on, and therefore the only ones an
+ * `upto` payment may be signed for.
+ *
+ * The asset registry is wider than this: it also carries USDC on Polygon and
+ * Amoy, and nothing about a deterministic address makes a contract exist on a
+ * chain nobody deployed it to. Signing a permit whose spender has no code
+ * produces an authorization that can never settle, and by the ledger's own rule
+ * a failed attempt reserves its whole ceiling against the cap, so the cost of
+ * guessing lands on the user. Allow what was checked, refuse the rest, and widen
+ * this when a deployment is confirmed rather than assumed.
+ */
+export const UPTO_VERIFIED_CHAIN_IDS: readonly number[] = [8453, 84532];
+
+/**
  * `WITNESS_TYPE_STRING` from `x402UptoPermit2Proxy.sol`, reproduced verbatim.
  * Permit2 concatenates it onto its own stub to form the full type, so the two
  * halves below must stay exactly as the contracts spell them: the struct order

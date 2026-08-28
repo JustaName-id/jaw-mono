@@ -144,8 +144,22 @@ describe('sumSpentSince with a ceiling that differs from the charge', () => {
     expect(sumSpentSince(PAYER)).toBe(1000n);
   });
 
-  it('does not let a hand-edited ceiling take the cap down', () => {
+  // The row still counts what it can be read for. An unparseable ceiling
+  // reading as zero would have let one corrupt field, or a torn write, shrink
+  // an enforced cap, which is the opposite of what a conservative rule does.
+  it('falls back to the charge when the ceiling is unreadable', () => {
     entry({ status: 'failed', amount: '1000', authorized: 'not-a-number' });
+    entry({ status: 'paid', amount: '25' });
+    expect(sumSpentSince(PAYER)).toBe(1025n);
+  });
+
+  it('takes the larger of the two, so neither field alone can shrink the cap', () => {
+    entry({ status: 'failed', amount: '9000', authorized: '40' });
+    expect(sumSpentSince(PAYER)).toBe(9000n);
+  });
+
+  it('ignores a negative figure instead of subtracting it', () => {
+    entry({ status: 'paid', amount: '-5000' });
     entry({ status: 'paid', amount: '25' });
     expect(sumSpentSince(PAYER)).toBe(25n);
   });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { payAndFetch } from './http.js';
+import { settledAmountOf, payAndFetch } from './http.js';
 import type { Payer } from './payer.js';
 import type { X402PaymentPayload, X402PaymentRequirement } from './types.js';
 
@@ -786,5 +786,52 @@ describe('payAndFetch spend figures', () => {
     expect(result.wouldPay).toMatchObject({ amount: '1000', authorized: '1000' });
     expect(result.wouldPay).not.toHaveProperty('nonce');
     expect(result.wouldPay).not.toHaveProperty('deadline');
+  });
+});
+
+/**
+ * What a server may and may not do to the figure the caps count.
+ *
+ * The dangerous shape is a 200 with `success: true` and a charge of nothing: no
+ * proxy call, no settlement, and the cumulative caps never move while the
+ * authorization stays live and spendable until its deadline. Repeat that and the
+ * only bound left is the per-payment cap, applied an unlimited number of times.
+ */
+describe('settledAmountOf', () => {
+  const TX = ('0x' + 'ab'.repeat(32)) as `0x${string}`;
+  const ceiling = '5000000';
+
+  it('reads the settled figure from a receipt that evidences a settlement', () => {
+    expect(settledAmountOf({ success: true, transaction: TX, amount: '40' }, 'upto', ceiling)).toBe('40');
+  });
+
+  it('refuses to come down for a receipt that names no transaction', () => {
+    expect(settledAmountOf({ success: true, amount: '0' }, 'upto', ceiling)).toBe(ceiling);
+  });
+
+  it('refuses to come down for a receipt that does not claim success', () => {
+    expect(settledAmountOf({ success: false, transaction: TX, amount: '0' }, 'upto', ceiling)).toBe(ceiling);
+  });
+
+  it('refuses to come down for a malformed transaction hash', () => {
+    expect(
+      settledAmountOf({ success: true, transaction: '0xnope' as `0x${string}`, amount: '0' }, 'upto', ceiling)
+    ).toBe(ceiling);
+  });
+
+  it('falls back to the ceiling when the receipt omits the amount', () => {
+    expect(settledAmountOf({ success: true, transaction: TX }, 'upto', ceiling)).toBe(ceiling);
+  });
+
+  it('clamps a receipt claiming more than was authorized', () => {
+    expect(settledAmountOf({ success: true, transaction: TX, amount: '9999999' }, 'upto', ceiling)).toBe(ceiling);
+  });
+
+  it('never reads the receipt at all under exact, where the amount was fixed', () => {
+    expect(settledAmountOf({ success: true, transaction: TX, amount: '1' }, 'exact', '1000')).toBe('1000');
+  });
+
+  it('falls back to the ceiling when there is no receipt', () => {
+    expect(settledAmountOf(null, 'upto', ceiling)).toBe(ceiling);
   });
 });

@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { usdcForNetwork } from './asset-registry.js';
 import {
   PERMIT_WITNESS_TRANSFER_FROM_TYPES,
+  UPTO_VERIFIED_CHAIN_IDS,
   X402_UPTO_PROXY_ADDRESS,
   permit2Domain,
   type UptoPermitMessage,
@@ -54,6 +55,15 @@ export interface BuildUptoOptions {
 const SETTLEMENT_WINDOW_FLOOR = 600;
 
 /**
+ * And a ceiling, because the server picks this number too. A challenge is free
+ * to advertise a year, and the deadline is what decides how long a failed
+ * attempt keeps its ceiling reserved against the cap, so an absurd window parks
+ * the user's budget for as long as the server likes. An hour is generous for
+ * verify, submit and mine.
+ */
+const SETTLEMENT_WINDOW_CEILING = 3600;
+
+/**
  * Backdating for clock skew. `validAfter` is a floor the proxy checks against
  * block time, and a client running a minute ahead of the chain would sign an
  * authorization that is not valid yet. Widening it downward only shortens the
@@ -82,6 +92,14 @@ export async function buildUptoPayment(
 
   const asset = usdcForNetwork(requirement.network);
   if (!asset) throw new Error(`Unsupported x402 network: ${requirement.network}`);
+  // The registry knows more chains than the proxy was verified on, and a permit
+  // pointing at a spender with no code is one nobody can settle.
+  if (!UPTO_VERIFIED_CHAIN_IDS.includes(asset.chainId)) {
+    throw new Error(
+      `x402 upto is not available on ${requirement.network}: the settlement proxy is only verified on ` +
+        `chain ids ${UPTO_VERIFIED_CHAIN_IDS.join(', ')}`
+    );
+  }
   // Same rule the exact scheme applies: `requirement.asset` is server-supplied,
   // and signing over an arbitrary token would authorize a transfer of something
   // we never agreed to move. The registry is the source of truth.
@@ -102,7 +120,11 @@ export async function buildUptoPayment(
   }
 
   const nowSec = opts.now ?? Math.floor(Date.now() / 1000);
-  const deadline = BigInt(nowSec + Math.max(requirement.maxTimeoutSeconds || 0, SETTLEMENT_WINDOW_FLOOR));
+  const window = Math.min(
+    Math.max(requirement.maxTimeoutSeconds || 0, SETTLEMENT_WINDOW_FLOOR),
+    SETTLEMENT_WINDOW_CEILING
+  );
+  const deadline = BigInt(nowSec + window);
   const validAfter = BigInt(Math.max(nowSec - VALID_AFTER_SLACK, 0));
   const nonce = opts.nonce ?? (`0x${randomBytes(32).toString('hex')}` as `0x${string}`);
 

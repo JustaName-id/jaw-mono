@@ -96,43 +96,57 @@ export function readX402Log(limit?: number): X402LogEntry[] {
 }
 
 /**
+ * What one row contributes to a spend cap.
+ *
+ * The single definition of the rule, exported because more than one place needs
+ * it and the three copies that existed before this had already drifted apart by
+ * hand. `jaw x402 log` reports against it, and the caps enforce against it, so
+ * the number a user reads and the number that refuses their next payment are
+ * the same number.
+ *
+ * A settled payment costs what settled. A failed one costs the ceiling it
+ * authorized, because an authorization that was signed and sent stays spendable
+ * up to that ceiling until its nonce is consumed or its deadline passes, and
+ * nothing yet proves either. Under `exact` the two figures are equal and this
+ * is the rule that has always applied.
+ *
+ * Every parse failure reads as zero and the failed case takes the larger of the
+ * two, so one unparseable field cannot shrink an enforced cap: a torn write or a
+ * hand edit can only ever leave the cap where it was or higher. Negatives clamp
+ * for the same reason, since `BigInt('-5')` parses fine and would otherwise
+ * subtract.
+ */
+export function spendFigureOf(entry: X402LogEntry): bigint {
+  if (entry.status !== 'paid' && entry.status !== 'failed') return 0n;
+  const parse = (value?: string): bigint => {
+    if (!value) return 0n;
+    try {
+      const parsed = BigInt(value);
+      return parsed > 0n ? parsed : 0n;
+    } catch {
+      return 0n;
+    }
+  };
+  if (entry.status === 'paid') return parse(entry.amount);
+  const ceiling = parse(entry.authorized);
+  const charge = parse(entry.amount);
+  return ceiling > charge ? ceiling : charge;
+}
+
+/**
  * Sum a payer's settled and attempted payments since an ISO instant (its whole
  * history when `since` is omitted).
  *
- * The single definition of what counts against a spend cap. Reading it from the
- * ledger rather than an in-memory counter is what makes a cap survive a process
- * restart, which an agent could otherwise relaunch its way past. Every caller
- * that enforces or reports a cap must go through here: three copies of this rule
- * had already drifted apart from each other by hand.
- *
- * A settled payment costs what settled. A failed one costs the ceiling it
- * authorized. See the comment on the branch for why the two differ.
+ * Reading it from the ledger rather than an in-memory counter is what makes a
+ * cap survive a process restart, which an agent could otherwise relaunch its way
+ * past. What each row costs is `spendFigureOf`.
  */
 export function sumSpentSince(payerAddress: string, since?: string): bigint {
   const payer = payerAddress.toLowerCase();
   return readX402Log().reduce((total, entry) => {
-    // 'failed' counts too: the authorization was signed and sent, so the
-    // facilitator may have broadcast it anyway. Counting it can only under-spend
-    // the cap, never breach it.
-    if (entry.status !== 'paid' && entry.status !== 'failed') return total;
-    // What a failed attempt costs is not what it tried to pay, it is what the
-    // signature is still worth to whoever holds it, which is the whole ceiling.
-    // Under `exact` the two are the same number and this changes nothing. Under
-    // `upto` they are not: an unconsumed Permit2 authorization stays spendable
-    // up to the ceiling until its nonce is used or its deadline passes, so a
-    // failed attempt has to reserve all of it. This deliberately over-counts,
-    // and keeps over-counting, until a reconciliation pass can prove the nonce
-    // went unused. Older entries have no `authorized` and fall back to `amount`,
-    // which is what they meant when they were written.
-    const figure = entry.status === 'failed' ? (entry.authorized ?? entry.amount) : entry.amount;
-    if (!figure) return total;
     if (entry.payer?.toLowerCase() !== payer) return total;
     if (since && entry.at < since) return total;
-    try {
-      return total + BigInt(figure);
-    } catch {
-      return total; // a hand-edited amount must not take the cap down
-    }
+    return total + spendFigureOf(entry);
   }, 0n);
 }
 

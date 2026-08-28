@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { payAndFetchSchema, x402LogSchema, x402BalanceSchema } from '../tools.js';
 import { mcpError, mcpResult, mcpPaymentResult } from '../helpers.js';
-import { parseBigInt, parseNonNegativeBigInt } from '../../x402/amount.js';
+import { parseNonNegativeBigInt } from '../../x402/amount.js';
 import { loadConfig } from '../../lib/config.js';
 import { Eip3009EoaPayer, sessionPayerAddress } from '../../x402/payer.js';
 import { payAndFetch } from '../../x402/http.js';
@@ -89,7 +89,7 @@ export function registerPayTool(server: McpServer): void {
             // safe while one process did all the paying; with the lock admitting
             // other processes, a memoised total would miss what they spent and
             // wave through a payment the cap should have stopped.
-            let sessionSpent = sumSpentSince(payer.address, session?.createdAt);
+            const sessionSpent = sumSpentSince(payer.address, session?.createdAt);
 
             // Locate the grant period containing now, and count spend inside it.
             // Recomputed per payment because the window moves on its own, and
@@ -135,18 +135,11 @@ export function registerPayTool(server: McpServer): void {
               network: params.network,
             });
 
-            // A failed settlement counts too: the signed authorization went out,
-            // so the transfer may have been broadcast regardless of what the
-            // server answered. And it counts for the ceiling it authorized, not
-            // for what it tried to pay, because that is what the signature is
-            // still worth to whoever holds it. Mirrors sumSpentSince exactly:
-            // the two are read back against the same cap.
-            const spentDetails = result.paid ? result.payment : result.attemptedPayment;
-            if (spentDetails) {
-              const figure = result.paid ? spentDetails.amount : spentDetails.authorized;
-              const amount = parseBigInt(figure);
-              if (amount !== null) sessionSpent += amount;
-            }
+            // What this payment costs the cap is not accumulated here. It used
+            // to be, and nothing read it: `sessionSpent` is re-read from the
+            // ledger at the top of every call, which is what makes the cap
+            // survive a restart. Keeping a second running total in memory only
+            // invited it to disagree with the one that enforces.
 
             // Record payment attempts (not free passthroughs) to the audit ledger.
             const settled = result.payment ?? result.attemptedPayment;

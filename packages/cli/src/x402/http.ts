@@ -149,10 +149,22 @@ function paymentDeadlineOf(payload: X402PaymentPayload): string {
  * that omits it, or claims more than was authorized, falls back to the whole
  * ceiling: the one direction a server must not be able to move this number is
  * downward without having settled.
+ *
+ * Exported for its own tests. The `upto` path that reaches it is still gated
+ * off, and this rule decides how much of a user's budget a server can spend
+ * without paying for it, so it is not waiting for the gate to open to be
+ * covered.
  */
-function settledAmountOf(receipt: X402SettleResponse | null, scheme: string, authorized: string): string {
+export function settledAmountOf(receipt: X402SettleResponse | null, scheme: string, authorized: string): string {
   if (scheme !== 'upto') return authorized;
-  const reported = parseBigInt(receipt?.amount ?? '');
+  // A 200 is not a settlement. Without this a server answers success with
+  // `amount: 0`, never calls the proxy, and the cumulative caps never move
+  // while it accumulates live authorizations worth the ceiling each, every one
+  // of them settleable until its deadline. So the figure may only come down on
+  // a receipt that claims success AND names a well-formed transaction; anything
+  // else is read as the whole ceiling and costs the server its own budget.
+  if (receipt?.success !== true || !settledTxHash(receipt)) return authorized;
+  const reported = parseBigInt(receipt.amount ?? '');
   if (reported === null || reported < 0n) return authorized;
   const ceiling = parseBigInt(authorized);
   return ceiling !== null && reported > ceiling ? authorized : reported.toString();
