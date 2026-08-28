@@ -242,10 +242,26 @@ async function bazaarGet(path: string, search: URLSearchParams): Promise<Record<
 }
 
 /**
- * Search the x402 Bazaar (or, with `payTo`, list one seller's services).
- * Returns a compact, mapped view; the raw seller-authored strings inside it are
- * untrusted and must be fenced before reaching the model.
+ * Read the caller's price cap, or refuse it.
+ *
+ * It arrives as free text a model wrote, and both ways of getting it wrong fail
+ * quietly in opposite directions. `Number('')` is zero, a finite cap that
+ * filters away everything, and an empty string is also falsy where the query is
+ * built, so the Bazaar never sees it and the caller gets an empty page with no
+ * reason attached. `"$0.01"` is NaN, which disables the filter while the caller
+ * believes a cap is being enforced. Neither is something to guess at, so a cap
+ * that is not a plain non-negative number is an error rather than an
+ * interpretation.
  */
+function parseUsdCap(maxUsdPrice?: string): number | undefined {
+  if (maxUsdPrice === undefined) return undefined;
+  const cap = Number(maxUsdPrice);
+  if (maxUsdPrice.trim() === '' || !Number.isFinite(cap) || cap < 0) {
+    throw new Error(`maxUsdPrice must be a non-negative number of USD, got ${JSON.stringify(maxUsdPrice)}`);
+  }
+  return cap;
+}
+
 /**
  * Drop what we would not pay, judged on the option we would actually pay.
  *
@@ -256,14 +272,21 @@ async function bazaarGet(path: string, search: URLSearchParams): Promise<Record<
  * asset are kept: there is nothing to compare them against, and hiding them
  * would be hiding the unfamiliar rather than the expensive.
  */
-function withinCap(services: DiscoveredService[], maxUsdPrice?: string): DiscoveredService[] {
-  const cap = maxUsdPrice === undefined ? NaN : Number(maxUsdPrice);
-  if (!Number.isFinite(cap)) return services;
+function withinCap(services: DiscoveredService[], cap?: number): DiscoveredService[] {
+  if (cap === undefined) return services;
   return services.filter((s) => s.price?.approxUsd == null || s.price.approxUsd <= cap);
 }
 
+/**
+ * Search the x402 Bazaar (or, with `payTo`, list one seller's services).
+ * Returns a compact, mapped view; the raw seller-authored strings inside it are
+ * untrusted and must be fenced before reaching the model.
+ */
+
 export async function discoverServices(params: DiscoverParams): Promise<DiscoverResult> {
   const network = params.network ?? DEFAULT_NETWORK;
+
+  const cap = parseUsdCap(params.maxUsdPrice);
 
   if (params.payTo) {
     const data = await bazaarGet('merchant', new URLSearchParams({ payTo: params.payTo }));
@@ -271,7 +294,7 @@ export async function discoverServices(params: DiscoverParams): Promise<Discover
     // gets applied for a seller listing.
     const services = withinCap(
       asArray(data.resources).map((r) => mapService(r, network)),
-      params.maxUsdPrice
+      cap
     );
     return { mode: 'merchant', count: services.length, partialResults: false, services };
   }
@@ -287,7 +310,7 @@ export async function discoverServices(params: DiscoverParams): Promise<Discover
   const data = await bazaarGet('search', search);
   const services = withinCap(
     asArray(data.resources).map((r) => mapService(r, network)),
-    params.maxUsdPrice
+    cap
   );
   return {
     mode: 'search',

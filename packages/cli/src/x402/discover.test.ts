@@ -362,3 +362,28 @@ describe('discoverServices — what it declines to advertise', () => {
     expect(services[0].price?.approxUsd).toBeNull();
   });
 });
+
+/**
+ * The cap arrives as free text a model wrote, and both ways of getting it wrong
+ * used to fail quietly in opposite directions: an empty string filtered
+ * everything away, a currency symbol disabled the filter while the caller
+ * believed one was applied.
+ */
+describe('discoverServices — the price cap is a number or an error', () => {
+  it('refuses an empty cap instead of reading it as zero', async () => {
+    await expect(discoverServices({ query: 'x', maxUsdPrice: '' })).rejects.toThrow(/non-negative number/);
+  });
+
+  it('refuses a cap with a currency symbol instead of ignoring it', async () => {
+    await expect(discoverServices({ query: 'x', maxUsdPrice: '$0.01' })).rejects.toThrow(/non-negative number/);
+  });
+
+  it('refuses a negative cap', async () => {
+    await expect(discoverServices({ query: 'x', maxUsdPrice: '-1' })).rejects.toThrow(/non-negative number/);
+  });
+
+  it('takes a plain number', async () => {
+    fetchMock.mockResolvedValueOnce(mockJson({ resources: [] }));
+    await expect(discoverServices({ query: 'x', maxUsdPrice: '0.01' })).resolves.toBeTruthy();
+  });
+});
