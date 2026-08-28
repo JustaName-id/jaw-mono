@@ -1,6 +1,7 @@
 import { encodeFunctionData, erc20Abi } from 'viem';
-import { usdcForNetwork } from './asset-registry.js';
-import { usdcBalance, type BalanceReader } from './balance.js';
+import { usdcForNetwork, type UsdcAsset } from './asset-registry.js';
+import { publicClientFor, usdcBalance, type BalanceReader } from './balance.js';
+import { PERMIT2_ADDRESS } from './permit2.js';
 import { parseBigInt } from './amount.js';
 import { gasReserve } from './gas-reserve.js';
 import { errorMessage } from '../lib/errors.js';
@@ -31,7 +32,26 @@ import type { X402PaymentRequirement } from './types.js';
 /** The slice of the session auto-mode bridge the funder needs. */
 export interface TopUpExecutor {
   request(method: string, params?: unknown): Promise<unknown>;
+  /**
+   * Approve Permit2 to move `token` on the payer's own behalf, returning the
+   * batch id. Deliberately narrow and deliberately separate from `request`: it
+   * is the one call the session makes outside its permission, so it takes a
+   * token and nothing else, and it cannot be used to send anything but that
+   * approval. Optional so an executor that never pays `upto` need not have it.
+   */
+  approvePermit2?(token: `0x${string}`): Promise<string>;
 }
+
+/** Reads an ERC-20 allowance. Injected for tests. */
+export type AllowanceReader = (asset: UsdcAsset, owner: `0x${string}`, spender: `0x${string}`) => Promise<bigint>;
+
+const readAllowance: AllowanceReader = (asset, owner, spender) =>
+  publicClientFor(asset.chainId).readContract({
+    address: asset.address,
+    abi: erc20Abi,
+    functionName: 'allowance',
+    args: [owner, spender],
+  });
 
 export interface TopUpOptions {
   /**
@@ -62,6 +82,7 @@ export interface TopUpOptions {
   timeoutMs?: number;
   /** Injected for tests. */
   balanceReader?: BalanceReader;
+  allowanceReader?: AllowanceReader;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -133,6 +154,11 @@ export async function ensurePayerFunds(
     return { ok: false, reason: `non-numeric payment amount: ${requirement.amount}` };
   }
 
+  if (requirement.scheme === 'upto') {
+    const approved = await ensurePermit2Allowance(asset, payerAddress, price, executor, opts);
+    if (!approved.ok) return approved;
+  }
+
   const read = opts.balanceReader;
   const balance = read
     ? await read(asset, payerAddress)
@@ -196,6 +222,91 @@ export async function ensurePayerFunds(
     };
   }
 
+  const confirmed = await awaitCall(executor, batchId, opts, {
+    subject: 'top-up',
+    onChainFailure: 'top-up transaction failed on-chain (spending cap reached, or permission expired/revoked)',
+  });
+  return confirmed.ok
+    ? { ok: true, amount: amount.toString(), batchId }
+    : { ok: false, reason: confirmed.reason, amount: amount.toString(), batchId };
+}
+
+/**
+ * Make sure Permit2 may move the payer's token, granting the allowance once if
+ * it may not.
+ *
+ * `upto` settles through Permit2 rather than by EIP-3009, and Permit2 pulls the
+ * token through the canonical ERC-20 allowance. Without it the proxy cannot
+ * execute what the payer signed, so the payment fails at settlement and, by the
+ * ledger's rule, reserves its whole ceiling against the cap for nothing.
+ *
+ * Granted lazily and not at `jaw session setup`, because most sessions never
+ * touch an `upto` endpoint and a mandatory extra userOp would tax the common
+ * path for a feature it will not use. Granted for the maximum, because the
+ * alternative is an approval userOp before every payment, and the blast radius
+ * either way is the payer's float, which the top-up already keeps small.
+ *
+ * It is the one call the session sends outside its permission, and it has to
+ * be: `JustaPermissionManager` validates every call's selector against the
+ * grant and the x402 grant permits `transfer` only, so an approval routed
+ * through the permission reverts. Sent by the payer on its own balance it never
+ * reaches the manager, whose approval revocation and Permit2 lockdown both act
+ * on the granting account and only within their own execution.
+ */
+async function ensurePermit2Allowance(
+  asset: UsdcAsset,
+  payerAddress: `0x${string}`,
+  needed: bigint,
+  executor: TopUpExecutor,
+  opts: TopUpOptions
+): Promise<{ ok: boolean; reason?: string }> {
+  const read = opts.allowanceReader ?? readAllowance;
+  let allowance: bigint;
+  try {
+    allowance = await read(asset, payerAddress, PERMIT2_ADDRESS);
+  } catch (err) {
+    return { ok: false, reason: `could not read the payer's Permit2 allowance: ${errorMessage(err)}` };
+  }
+  if (allowance >= needed) return { ok: true };
+
+  if (!executor.approvePermit2) {
+    return {
+      ok: false,
+      reason:
+        `the payer has not approved Permit2 to move ${asset.address}, and this session cannot grant it. ` +
+        'Approve Permit2 once on this chain to pay upto challenges.',
+    };
+  }
+
+  let batchId: string;
+  try {
+    batchId = await executor.approvePermit2(asset.address);
+  } catch (err) {
+    return { ok: false, reason: `Permit2 approval refused: ${errorMessage(err)}` };
+  }
+
+  const confirmed = await awaitCall(executor, batchId, opts, {
+    subject: 'Permit2 approval',
+    onChainFailure: `Permit2 approval failed on-chain (batch ${batchId})`,
+  });
+  return confirmed.ok ? { ok: true } : { ok: false, reason: confirmed.reason };
+}
+
+/**
+ * Poll a submitted batch to a final state.
+ *
+ * Shared by the top-up and the Permit2 approval because both are userOps the
+ * payment cannot proceed without, and both have the same two ways of going
+ * wrong. The subject is threaded through so the reason still names which one
+ * failed, and the on-chain failure text is passed in because the causes differ:
+ * a top-up is refused by the permission, an approval is not sent through one.
+ */
+async function awaitCall(
+  executor: TopUpExecutor,
+  batchId: string,
+  opts: TopUpOptions,
+  labels: { subject: string; onChainFailure: string }
+): Promise<{ ok: boolean; reason?: string }> {
   const now = opts.now ?? Date.now;
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const pollMs = opts.pollMs ?? 2_000;
@@ -219,26 +330,16 @@ export async function ensurePayerFunds(
       });
       status = (await Promise.race([executor.request('wallet_getCallsStatus', batchId), expired])) as CallStatus;
     } catch (err) {
-      const msg = errorMessage(err);
-      return { ok: false, reason: `top-up status check failed: ${msg}`, amount: amount.toString(), batchId };
+      return { ok: false, reason: `${labels.subject} status check failed: ${errorMessage(err)}` };
     } finally {
       clearTimeout(timer);
     }
 
     const final = isFinalStatus(status);
-    if (final === 'ok') {
-      return { ok: true, amount: amount.toString(), batchId };
-    }
-    if (final === 'failed') {
-      return {
-        ok: false,
-        reason: 'top-up transaction failed on-chain (spending cap reached, or permission expired/revoked)',
-        amount: amount.toString(),
-        batchId,
-      };
-    }
+    if (final === 'ok') return { ok: true };
+    if (final === 'failed') return { ok: false, reason: labels.onChainFailure };
     if (now() >= deadline) {
-      return { ok: false, reason: `top-up not confirmed after ${timeoutMs}ms`, amount: amount.toString(), batchId };
+      return { ok: false, reason: `${labels.subject} not confirmed after ${timeoutMs}ms` };
     }
     await sleep(pollMs);
   }

@@ -305,3 +305,95 @@ describe('ensurePayerFunds, statuses the bridge can actually return', () => {
     expect(out.amount).toBeDefined();
   });
 });
+
+/**
+ * `upto` settles through Permit2, which pulls the token through the canonical
+ * ERC-20 allowance. Without that allowance the proxy cannot execute what the
+ * payer signed, so the payment fails at settlement and the ledger reserves its
+ * whole ceiling for nothing. The approval is granted once, lazily, and outside
+ * the permission, which is the only place it can be sent from.
+ */
+describe('Permit2 approval for upto', () => {
+  const uptoRequirement = (amount = '1000000') =>
+    ({ ...requirement(amount), scheme: 'upto' }) as X402PaymentRequirement;
+
+  const approving = (allowance: bigint, overrides?: Parameters<typeof fakeExecutor>[0]) => {
+    const base = fakeExecutor(overrides);
+    const approved: string[] = [];
+    const executor: TopUpExecutor = {
+      request: base.executor.request.bind(base.executor),
+      approvePermit2: async (token: `0x${string}`) => {
+        approved.push(token);
+        return '0xapproval1';
+      },
+    };
+    return {
+      executor,
+      approved,
+      requests: base.requests,
+      opts: {
+        ...instantly,
+        balanceReader: async () => 10_000_000n,
+        allowanceReader: async () => allowance,
+      },
+    };
+  };
+
+  test('grants the approval when the payer has none', async () => {
+    const { executor, approved, opts } = approving(0n);
+
+    const outcome = await ensurePayerFunds(uptoRequirement(), PAYER, executor, opts);
+
+    expect(outcome.ok).toBe(true);
+    expect(approved).toEqual([BASE_SEPOLIA_USDC]);
+  });
+
+  test('does not grant it again once the allowance covers the ceiling', async () => {
+    const { executor, approved, opts } = approving(10n ** 30n);
+
+    const outcome = await ensurePayerFunds(uptoRequirement(), PAYER, executor, opts);
+
+    expect(outcome.ok).toBe(true);
+    expect(approved).toEqual([]);
+  });
+
+  test('leaves the exact scheme alone, which never touches Permit2', async () => {
+    const { executor, approved, opts } = approving(0n);
+
+    await ensurePayerFunds(requirement(), PAYER, executor, opts);
+
+    expect(approved).toEqual([]);
+  });
+
+  test('refuses the payment when the approval cannot be confirmed', async () => {
+    const { executor, opts } = approving(0n, { status: async () => ({ status: 500 }) });
+
+    const outcome = await ensurePayerFunds(uptoRequirement(), PAYER, executor, opts);
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.reason).toContain('Permit2 approval failed on-chain');
+  });
+
+  test('refuses rather than signing when the allowance cannot be read', async () => {
+    const { executor, opts } = approving(0n);
+    const outcome = await ensurePayerFunds(uptoRequirement(), PAYER, executor, {
+      ...opts,
+      allowanceReader: async () => {
+        throw new Error('rpc down');
+      },
+    });
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.reason).toContain("could not read the payer's Permit2 allowance");
+  });
+
+  test('says so when the executor cannot grant an approval at all', async () => {
+    const { executor: base, opts } = approving(0n);
+    const executor: TopUpExecutor = { request: base.request.bind(base) };
+
+    const outcome = await ensurePayerFunds(uptoRequirement(), PAYER, executor, opts);
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.reason).toContain('cannot grant it');
+  });
+});
