@@ -333,6 +333,14 @@ interface Selection {
  * Pick the CHEAPEST `accepts` entry that satisfies the caller constraints +
  * policy. Choosing the lowest amount (rather than the first that passes) means a
  * multi-option server can't steer the agent onto a pricier option.
+ *
+ * Across schemes the comparison is on the same field, which is a price under
+ * `exact` and a ceiling under `upto`. That deliberately minimises what gets
+ * authorized rather than what is expected to be paid: an agent cannot predict
+ * its own consumption, and the number a signature is worth if it is misused is
+ * the ceiling. Equal figures break toward `exact` for the same reason, so a
+ * server cannot dangle a matching ceiling to move us onto the larger
+ * authorization.
  */
 function selectRequirement(accepts: unknown[], opts: PayAndFetchOptions, ctx: PolicyContext): Selection {
   const policy = opts.policy ?? {};
@@ -348,7 +356,7 @@ function selectRequirement(accepts: unknown[], opts: PayAndFetchOptions, ctx: Po
       continue;
     }
     const req = parsed.data as X402PaymentRequirement;
-    if (req.scheme !== 'exact') {
+    if (req.scheme !== 'exact' && req.scheme !== 'upto') {
       reason = `unsupported scheme: ${req.scheme}`;
       continue;
     }
@@ -384,7 +392,9 @@ function selectRequirement(accepts: unknown[], opts: PayAndFetchOptions, ctx: Po
       continue;
     }
 
-    if (!best || amount < bestAmount) {
+    const cheaper = !best || amount < bestAmount;
+    const fixedPriceTie = !!best && amount === bestAmount && best.scheme === 'upto' && req.scheme === 'exact';
+    if (cheaper || fixedPriceTie) {
       best = req;
       bestAmount = amount;
     }

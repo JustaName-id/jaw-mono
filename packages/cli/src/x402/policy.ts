@@ -253,17 +253,32 @@ const has = (list: string[] | undefined): list is string[] => Array.isArray(list
 const eqAddr = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /**
+ * How much of the user's budget a requirement asks for.
+ *
+ * Under `exact` that is the price. Under `upto` it is a ceiling the server may
+ * charge anything below, and the caps still measure it, because a signature is
+ * worth its ceiling to whoever holds it and no cap can be enforced against a
+ * number nobody knows yet. Saying so in the refusal is the difference between a
+ * user understanding why a five dollar ceiling was refused on a service that
+ * charges a fraction of a cent, and thinking the cap is broken.
+ */
+const asks = (requirement: X402PaymentRequirement): string =>
+  requirement.scheme === 'upto' ? `up to ${requirement.amount}` : requirement.amount;
+
+/**
  * Decide whether a chosen payment requirement is allowed to be paid. Returns the
  * first failing reason so the caller can refuse clearly instead of overpaying.
- * Only the `exact` scheme is supported.
  */
 export function checkPolicy(
   requirement: X402PaymentRequirement,
   policy: X402Policy,
   ctx: PolicyContext = {}
 ): PolicyResult {
-  if (requirement.scheme !== 'exact') {
-    return { ok: false, reason: `unsupported scheme: ${requirement.scheme}` };
+  // The wire value is untrusted: it arrives as a plain string and is only cast
+  // to the union, so this is a runtime check and not a redundant one.
+  const scheme: string = requirement.scheme;
+  if (scheme !== 'exact' && scheme !== 'upto') {
+    return { ok: false, reason: `unsupported scheme: ${scheme}` };
   }
 
   if (has(policy.allowedNetworks) && !policy.allowedNetworks.includes(requirement.network)) {
@@ -298,7 +313,7 @@ export function checkPolicy(
     if (amount > cap) {
       return {
         ok: false,
-        reason: `amount ${requirement.amount} exceeds maxAmountPerPayment ${policy.maxAmountPerPayment}`,
+        reason: `amount ${asks(requirement)} exceeds maxAmountPerPayment ${policy.maxAmountPerPayment}`,
       };
     }
   }
@@ -318,7 +333,7 @@ export function checkPolicy(
       return {
         ok: false,
         reason:
-          `payment ${requirement.amount} would exceed the granted ${policy.maxPerPeriod} per ${window} ` +
+          `payment ${asks(requirement)} would exceed the granted ${policy.maxPerPeriod} per ${window} ` +
           `(already spent ${spent} this ${window}${resets})`,
       };
     }
@@ -334,7 +349,7 @@ export function checkPolicy(
       return {
         ok: false,
         reason:
-          `payment ${requirement.amount} would exceed maxTotalPerSession ${policy.maxTotalPerSession} ` +
+          `payment ${asks(requirement)} would exceed maxTotalPerSession ${policy.maxTotalPerSession} ` +
           `(already spent ${spent} since the session was created; raise it with ` +
           `\`jaw config set x402.maxTotalPerSession <base units>\`)`,
       };

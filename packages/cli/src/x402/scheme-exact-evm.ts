@@ -55,6 +55,12 @@ export async function buildExactPayment(
   sign: ExactSigner,
   opts: BuildExactOptions = {}
 ): Promise<X402PaymentPayload> {
+  // Signing an `upto` ceiling as a fixed EIP-3009 transfer would move the whole
+  // ceiling and call it a price. The two builders each refuse the other's work.
+  if (requirement.scheme !== 'exact') {
+    throw new Error(`Not an exact requirement: ${requirement.scheme}`);
+  }
+
   const asset = usdcForNetwork(requirement.network);
   if (!asset) throw new Error(`Unsupported x402 network: ${requirement.network}`);
   // `requirement.asset` is server-controlled; signing with it as the

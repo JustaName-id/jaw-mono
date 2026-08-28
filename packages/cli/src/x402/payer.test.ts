@@ -149,3 +149,49 @@ describe('Eip3009EoaPayer delegation awareness', () => {
     await expect(payer.pay(requirement)).rejects.toThrow(/rpc down/);
   });
 });
+
+/**
+ * An `upto` payment moves tokens through Permit2's allowance. A payer that never
+ * approved it signs an authorization the proxy cannot execute, the settlement
+ * fails, and by the ledger's rule the failed attempt reserves its whole ceiling
+ * against the cap. So the allowance is read before signing, for the same reason
+ * the delegation check is: refusing costs a retry, guessing costs the budget.
+ */
+describe('Eip3009EoaPayer paying upto', () => {
+  const uptoRequirement = {
+    ...requirement,
+    scheme: 'upto' as const,
+    amount: '5000000',
+    extra: { facilitatorAddress: '0x1111111111111111111111111111111111111111' },
+  };
+
+  it('refuses before signing when Permit2 was never approved', async () => {
+    getCodeMock.mockResolvedValue('0x');
+    readContractMock.mockResolvedValue(0n);
+    const payer = Eip3009EoaPayer.fromSessionKey();
+
+    await expect(payer.pay(uptoRequirement)).rejects.toThrow(/approved Permit2/);
+  });
+
+  it('refuses when the allowance is smaller than the ceiling it would authorize', async () => {
+    getCodeMock.mockResolvedValue('0x');
+    readContractMock.mockResolvedValue(4_999_999n);
+    const payer = Eip3009EoaPayer.fromSessionKey();
+
+    await expect(payer.pay(uptoRequirement)).rejects.toThrow(/approved Permit2/);
+  });
+
+  it('signs a Permit2 authorization once the allowance covers it', async () => {
+    getCodeMock.mockResolvedValue('0x');
+    readContractMock.mockResolvedValue(2n ** 256n - 1n);
+    const payer = Eip3009EoaPayer.fromSessionKey();
+
+    const payload = await payer.pay(uptoRequirement, {
+      now: 1_000_000,
+      nonce: ('0x' + '11'.repeat(32)) as `0x${string}`,
+    });
+
+    expect(payload.payload).toHaveProperty('permit2Authorization');
+    expect(payload.payload).not.toHaveProperty('authorization');
+  });
+});

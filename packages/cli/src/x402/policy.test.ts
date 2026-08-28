@@ -26,9 +26,26 @@ describe('checkPolicy', () => {
     expect(checkPolicy(base, {})).toEqual({ ok: true });
   });
 
-  it('rejects a non-exact scheme', () => {
+  it('allows the two schemes this client can produce a payment for', () => {
+    expect(checkPolicy(base, {}).ok).toBe(true);
+    expect(checkPolicy({ ...base, scheme: 'upto' }, {}).ok).toBe(true);
+  });
+
+  it('rejects a scheme it cannot sign', () => {
+    // Off the wire the scheme is a plain string, so this is a runtime check.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(checkPolicy({ ...base, scheme: 'upto' as any }, {}).ok).toBe(false);
+    expect(checkPolicy({ ...base, scheme: 'permit2-batch' as any }, {}).ok).toBe(false);
+  });
+
+  /**
+   * Under `upto` the number the caps measure is a ceiling, not a price, and a
+   * refusal that read like a price would look broken to anyone paying a service
+   * that charges a fraction of it.
+   */
+  it('names the ceiling as a ceiling when it refuses one', () => {
+    const verdict = checkPolicy({ ...base, scheme: 'upto', amount: '5000000' }, { maxAmountPerPayment: '1000000' });
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reason).toContain('up to 5000000');
   });
 
   it('enforces maxAmountPerPayment', () => {

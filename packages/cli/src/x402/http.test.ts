@@ -835,3 +835,71 @@ describe('settledAmountOf', () => {
     expect(settledAmountOf(null, 'upto', ceiling)).toBe(ceiling);
   });
 });
+
+/**
+ * A server may offer both schemes at once. What the client minimises then is not
+ * what it expects to pay, it is what it authorizes: an agent cannot predict its
+ * own consumption, and a signature is worth its ceiling to anyone holding it.
+ */
+describe('choosing between schemes', () => {
+  const upto = (amount: string) => ({ ...REQUIREMENT, scheme: 'upto', amount });
+  const exact = (amount: string) => ({ ...REQUIREMENT, scheme: 'exact', amount });
+  const challengeOf = (...accepts: unknown[]) => b64({ x402Version: 2, resource: { url: URL_UNDER_TEST }, accepts });
+
+  const chosen = async (...accepts: unknown[]) => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeOf(...accepts) }, body: '{}' })
+    );
+    const result = await payAndFetch(URL_UNDER_TEST, payer, { dryRun: true });
+    return result.wouldPay;
+  };
+
+  it('takes the smaller figure whichever scheme carries it', async () => {
+    expect(await chosen(exact('900'), upto('400'))).toMatchObject({ amount: '400' });
+    expect(await chosen(upto('900'), exact('400'))).toMatchObject({ amount: '400' });
+  });
+
+  /** What the payer was actually asked to sign, which is where the scheme shows. */
+  const signed = async (...accepts: unknown[]) => {
+    const seen: X402PaymentRequirement[] = [];
+    const spy: Payer = {
+      address: payer.address,
+      pay: async (requirement) => {
+        seen.push(requirement);
+        return payer.pay(requirement);
+      },
+    };
+    fetchMock
+      .mockResolvedValueOnce(
+        mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeOf(...accepts) }, body: '{}' })
+      )
+      .mockResolvedValueOnce(mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receiptHeader }, body: '{}' }));
+    await payAndFetch(URL_UNDER_TEST, spy);
+    return seen[0];
+  };
+
+  it('breaks a tie toward the fixed price, whatever order they arrive in', async () => {
+    // Equal figures mean different things: one is what will be charged, the
+    // other only a bound on it. A server must not be able to dangle a matching
+    // ceiling to move us onto the larger authorization.
+    expect((await signed(upto('1000'), exact('1000'))).scheme).toBe('exact');
+    expect((await signed(exact('1000'), upto('1000'))).scheme).toBe('exact');
+  });
+
+  it('does sign the upto option when it is the only one', async () => {
+    expect((await signed(upto('1000'))).scheme).toBe('upto');
+  });
+
+  it('still refuses a scheme it cannot sign', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({
+        status: 402,
+        headers: { 'PAYMENT-REQUIRED': challengeOf({ ...REQUIREMENT, scheme: 'permit2-batch' }) },
+        body: '{}',
+      })
+    );
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+    expect(result.paid).toBe(false);
+    expect(result.refusedReason).toContain('unsupported scheme');
+  });
+});
