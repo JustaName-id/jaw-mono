@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { settledAmountOf, payAndFetch } from './http.js';
+import { buildUptoPayment } from './scheme-upto-evm.js';
+import { X402_UPTO_PROXY_ADDRESS } from './permit2.js';
 import type { Payer } from './payer.js';
 import type { X402PaymentPayload, X402PaymentRequirement } from './types.js';
 
@@ -901,5 +903,99 @@ describe('choosing between schemes', () => {
     const result = await payAndFetch(URL_UNDER_TEST, payer);
     expect(result.paid).toBe(false);
     expect(result.refusedReason).toContain('unsupported scheme');
+  });
+});
+
+/**
+ * The whole `upto` loop on the client side, in the shape a live settlement
+ * actually took on Base Sepolia: a ceiling quoted, a permit signed for it, and
+ * a receipt reporting a charge far below it.
+ *
+ * The payer here is the real builder rather than the stub the other tests use,
+ * so what the server receives is the payload that settled on chain.
+ */
+describe('payAndFetch against an upto endpoint', () => {
+  const CEILING = '100000';
+  const SETTLED = '1234';
+  const FACILITATOR = '0x1111111111111111111111111111111111111111';
+  const SEPOLIA_USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+
+  const uptoRequirement: X402PaymentRequirement = {
+    scheme: 'upto',
+    network: 'eip155:84532',
+    amount: CEILING,
+    asset: SEPOLIA_USDC,
+    payTo: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+    maxTimeoutSeconds: 120,
+    extra: { name: 'USDC', version: '2', facilitatorAddress: FACILITATOR },
+  };
+
+  const uptoPayer: Payer = {
+    address: '0x0000000000000000000000000000000000000001',
+    pay: (requirement) =>
+      buildUptoPayment(requirement, '0x0000000000000000000000000000000000000001', async () => '0xsig', {
+        now: 1_000_000,
+        nonce: ('0x' + '11'.repeat(32)) as `0x${string}`,
+      }),
+  };
+
+  it('signs the ceiling, is charged less, and reports both', async () => {
+    const challenge = b64({ x402Version: 2, resource: { url: URL_UNDER_TEST }, accepts: [uptoRequirement] });
+    const receipt = b64({
+      success: true,
+      transaction: RECEIPT_TX,
+      network: 'eip155:84532',
+      amount: SETTLED,
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challenge }, body: '{}' }))
+      .mockResolvedValueOnce(
+        mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receipt }, body: JSON.stringify({ data: 'ok' }) })
+      );
+
+    let fundedFor: string | undefined;
+    const result = await payAndFetch(URL_UNDER_TEST, uptoPayer, {
+      ensureFunds: async (req) => {
+        // The funder sizes against the ceiling, since that is what settlement
+        // may take, not against a charge nobody knows yet.
+        fundedFor = req.amount;
+        return { ok: true, skipped: true };
+      },
+    });
+
+    expect(fundedFor).toBe(CEILING);
+    expect(result.paid).toBe(true);
+    expect(result.body).toEqual({ data: 'ok' });
+    // What the caps count, and what the ledger will reconcile against.
+    expect(result.payment?.amount).toBe(SETTLED);
+    expect(result.payment?.authorized).toBe(CEILING);
+    expect(result.payment?.txHash).toBe(RECEIPT_TX);
+    // The server asked for 120s; the floor holds it open for ten minutes, since
+    // settlement has to be mined and not merely submitted.
+    expect(result.payment?.deadline).toBe(String(1_000_000 + 600));
+
+    // The proof the server received is a Permit2 authorization for the ceiling,
+    // pointed at the pinned proxy and nowhere else.
+    const retry = fetchMock.mock.calls[1][1] as { headers: Record<string, string> };
+    const sent = JSON.parse(Buffer.from(retry.headers['PAYMENT-SIGNATURE'], 'base64').toString());
+    expect(sent.payload.permit2Authorization.permitted.amount).toBe(CEILING);
+    expect(sent.payload.permit2Authorization.spender).toBe(X402_UPTO_PROXY_ADDRESS);
+    expect(sent.payload.permit2Authorization.witness.facilitator).toBe(FACILITATOR);
+  });
+
+  it('holds the ceiling when the server never says it settled', async () => {
+    const challenge = b64({ x402Version: 2, resource: { url: URL_UNDER_TEST }, accepts: [uptoRequirement] });
+    // Success with no transaction: nothing evidences a settlement, so the
+    // charge cannot come down and the server spends its own budget.
+    const hollow = b64({ success: true, amount: '0' });
+
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challenge }, body: '{}' }))
+      .mockResolvedValueOnce(mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': hollow }, body: '{}' }));
+
+    const result = await payAndFetch(URL_UNDER_TEST, uptoPayer);
+
+    expect(result.payment?.amount).toBe(CEILING);
   });
 });
