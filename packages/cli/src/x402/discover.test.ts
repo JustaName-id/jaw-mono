@@ -74,6 +74,7 @@ describe('discoverServices — search mode', () => {
     expect(svc.tags).toEqual(['ens', 'identity']);
     expect(svc.price).toEqual({
       amount: '1000',
+      kind: 'price',
       asset: USDC_BASE,
       network: 'eip155:8453',
       payTo: '0xabc',
@@ -252,5 +253,52 @@ describe('discoverServices — errors and hostile shapes', () => {
 
     await expect(discoverServices({ query: 'x' })).rejects.toThrow('size cap');
     expect(cancel).toHaveBeenCalled();
+  });
+});
+
+/**
+ * A catalog is read to compare numbers, and under `upto` the number is a
+ * ceiling. An agent that reads it as a price picks the wrong service and
+ * authorizes far more than it meant to.
+ */
+describe('discoverServices — a ceiling is not a price', () => {
+  const service = (accepts: unknown[]) => ({
+    resources: [{ resource: 'https://api.example.com/x', accepts }],
+  });
+  const option = (o: Record<string, unknown>) => ({
+    scheme: 'exact',
+    network: 'eip155:8453',
+    amount: '1000',
+    asset: USDC_BASE,
+    payTo: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+    ...o,
+  });
+
+  it('marks an upto option as a ceiling', async () => {
+    fetchMock.mockResolvedValueOnce(mockJson(service([option({ scheme: 'upto', amount: '5000000' })])));
+
+    const { services } = await discoverServices({ query: 'x' });
+
+    expect(services[0].price?.kind).toBe('ceiling');
+    expect(services[0].price?.scheme).toBe('upto');
+  });
+
+  it('breaks a tie toward the option that cannot grow', async () => {
+    fetchMock.mockResolvedValueOnce(mockJson(service([option({ scheme: 'upto' }), option({ scheme: 'exact' })])));
+
+    const { services } = await discoverServices({ query: 'x' });
+
+    expect(services[0].price?.kind).toBe('price');
+  });
+
+  it('still takes the smaller figure whichever kind carries it', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockJson(service([option({ amount: '9000' }), option({ scheme: 'upto', amount: '400' })]))
+    );
+
+    const { services } = await discoverServices({ query: 'x' });
+
+    expect(services[0].price?.amount).toBe('400');
+    expect(services[0].price?.kind).toBe('ceiling');
   });
 });

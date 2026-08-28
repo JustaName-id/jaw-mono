@@ -28,7 +28,11 @@ export interface DiscoverParams {
   query?: string;
   /** CAIP-2 network to prefer when picking the price to show. */
   network?: string;
-  /** Only surface services at or below this USD price per call. */
+  /**
+   * Only surface services at or below this USD price per call. A `upto` service
+   * is judged by its ceiling, since that is what a payment to it authorizes and
+   * what the spend caps will measure.
+   */
   maxUsdPrice?: string;
   /** Only Coinbase-curated (health-probed) services. */
   curatedOnly?: boolean;
@@ -41,6 +45,16 @@ export interface DiscoverParams {
 /** The cheapest payment option for a service, resolved for the caller. */
 export interface ServicePrice {
   amount: string;
+  /**
+   * What `amount` and `approxUsd` are.
+   *
+   * `price` means that is what a call costs. `ceiling` means the server may
+   * charge anything up to it and picks the figure after the work is done, so it
+   * is an upper bound and not an estimate. Spelled out rather than left for the
+   * reader to derive from `scheme`, because a catalog is read to compare
+   * numbers and these two are not the same kind of number.
+   */
+  kind: 'price' | 'ceiling';
   asset: string;
   network: string;
   payTo: string | null;
@@ -115,12 +129,14 @@ function toPrice(entry: Record<string, unknown>): ServicePrice | null {
     approxUsd = Number.isFinite(n) ? n : null;
   }
 
+  const scheme = asString(entry.scheme);
   return {
     amount,
+    kind: scheme === 'upto' ? 'ceiling' : 'price',
     asset,
     network,
     payTo: asString(entry.payTo),
-    scheme: asString(entry.scheme),
+    scheme,
     maxTimeoutSeconds: asNumber(entry.maxTimeoutSeconds),
     approxUsd,
   };
@@ -134,7 +150,14 @@ function selectPrice(accepts: unknown[], preferNetwork: string): ServicePrice | 
   if (prices.length === 0) return null;
   const matching = prices.filter((p) => p.network === preferNetwork);
   const pool = matching.length > 0 ? matching : prices;
-  return pool.reduce((min, p) => (BigInt(p.amount) < BigInt(min.amount) ? p : min));
+  // Smallest figure wins, and a tie goes to the fixed price. The same rule the
+  // payment path applies when a challenge offers both: equal numbers mean
+  // different things, and the one that cannot grow is the safer thing to show.
+  return pool.reduce((min, p) => {
+    const cheaper = BigInt(p.amount) < BigInt(min.amount);
+    const fixedPriceTie = BigInt(p.amount) === BigInt(min.amount) && min.kind === 'ceiling' && p.kind === 'price';
+    return cheaper || fixedPriceTie ? p : min;
+  });
 }
 
 function mapService(raw: unknown, preferNetwork: string): DiscoveredService {

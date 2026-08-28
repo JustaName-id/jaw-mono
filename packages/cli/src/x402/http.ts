@@ -8,6 +8,7 @@ import type { Payer } from './payer.js';
 import {
   X402_HEADERS,
   type X402PaymentPayload,
+  type X402Scheme,
   type X402PaymentRequired,
   type X402PaymentRequirement,
   type X402SettleResponse,
@@ -50,6 +51,12 @@ export interface PayAndFetchOptions {
 
 /** A payment as built/signed — the fields needed to audit or reconcile it. */
 export interface PaymentDetails {
+  /**
+   * Which scheme produced this. Carried because the two figures below mean
+   * different things depending on it, and every surface that shows them has to
+   * say which it is showing.
+   */
+  scheme: X402Scheme;
   /**
    * What actually left the payer, once the receipt says. Equal to `authorized`
    * under `exact`, and until settlement reports otherwise under `upto`.
@@ -480,6 +487,7 @@ export async function payAndFetch(
       paid: false,
       payer: payer.address,
       wouldPay: {
+        scheme: requirement.scheme,
         amount: requirement.amount,
         authorized: requirement.amount,
         asset: requirement.asset,
@@ -530,6 +538,7 @@ export async function payAndFetch(
     return refusal(`payment signing failed: ${errorMessage(err)}`, { topUp });
   }
   const details = {
+    scheme: requirement.scheme,
     // The ceiling until a receipt says otherwise, which is the conservative
     // reading for `upto` and the exact figure for `exact`.
     amount: requirement.amount,

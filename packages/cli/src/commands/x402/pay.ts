@@ -193,16 +193,35 @@ export default class X402Pay extends BaseCommand {
         const where = result.topUp.batchId ? ` (${result.topUp.batchId})` : ' (no call id returned to confirm it)';
         this.log(`\n  A top-up of ${formatUsdc(result.topUp.amount, topUpDecimals)} was sent first${where}.`);
       }
+      // A signed authorization went out and settlement did not confirm. Under
+      // `upto` it stays spendable up to its ceiling until it expires, which is
+      // what the caps now hold, so the figure has to be on screen: it is the
+      // budget the next payment will find missing.
+      const held = result.attemptedPayment;
+      if (held?.scheme === 'upto') {
+        this.log(
+          `\n  ${formatUsdc(held.authorized, priceDecimals(held.network))} stays authorized until it expires, ` +
+            'and your caps count it as spent until then.'
+        );
+      }
       this.exit(1);
     }
 
     if (result.wouldPay) {
       this.log('Would pay.\n');
+      // `upto` states a ceiling, not a price, and the server picks the charge
+      // afterwards. Printing "price" over that number would tell the user the
+      // one thing the scheme guarantees is not true.
+      const label = result.wouldPay.scheme === 'upto' ? 'up to  ' : 'price  ';
       this.log(
-        `  price    ${formatUsdc(result.wouldPay.amount, priceDecimals(result.wouldPay.network))} on ${sanitizeLine(result.wouldPay.network, 64)}`
+        `  ${label}  ${formatUsdc(result.wouldPay.amount, priceDecimals(result.wouldPay.network))} on ${sanitizeLine(result.wouldPay.network, 64)}`
       );
       this.log(`  payTo    ${result.wouldPay.payTo}`);
       this.log(`  from     ${payer.address}`);
+      if (result.wouldPay.scheme === 'upto') {
+        this.log('\n  The server charges anything up to that and decides after the work is done.');
+        this.log('  Your caps are measured against the ceiling, since the charge is not knowable yet.');
+      }
       this.log('\nNothing was signed or spent. Re-run with --pay to go through with it.');
       return;
     }
@@ -217,6 +236,11 @@ export default class X402Pay extends BaseCommand {
     this.log(
       `  amount   ${formatUsdc(result.payment?.amount, priceDecimals(result.payment?.network))} on ${sanitizeLine(result.payment?.network, 64)}`
     );
+    // Only when they differ, which is only ever under `upto`. Showing the
+    // charge alone would hide how much the signature could have taken.
+    if (result.payment && result.payment.authorized !== result.payment.amount) {
+      this.log(`  of up to ${formatUsdc(result.payment.authorized, priceDecimals(result.payment.network))} authorized`);
+    }
     this.log(`  payTo    ${result.payment?.payTo}`);
     if (result.topUp) {
       this.log(`  top-up   ${formatUsdc(result.topUp.amount, topUpDecimals)} pulled from the owner account`);
