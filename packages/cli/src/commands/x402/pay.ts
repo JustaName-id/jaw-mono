@@ -139,6 +139,8 @@ export default class X402Pay extends BaseCommand {
             payer: outcome.payer,
             status: outcome.paid ? 'paid' : outcome.attemptedPayment ? 'failed' : 'refused',
             amount: settled?.amount,
+            authorized: settled?.authorized,
+            deadline: settled?.deadline,
             asset: settled?.asset,
             network: settled?.network,
             payTo: settled?.payTo,

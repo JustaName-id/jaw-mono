@@ -50,7 +50,15 @@ export interface PayAndFetchOptions {
 
 /** A payment as built/signed — the fields needed to audit or reconcile it. */
 export interface PaymentDetails {
+  /**
+   * What actually left the payer, once the receipt says. Equal to `authorized`
+   * under `exact`, and until settlement reports otherwise under `upto`.
+   */
   amount: string;
+  /** The ceiling the signature authorized. What a failed attempt still costs. */
+  authorized: string;
+  /** When the authorization expires, for reconciling an ambiguous settlement. */
+  deadline?: string;
   asset: string;
   network: string;
   payTo: string;
@@ -84,11 +92,11 @@ export interface PayAndFetchResult {
   refusedReason?: string;
   /**
    * On a `dryRun`, the requirement that would have been paid. Absent when the
-   * resource was free or the policy refused (see `refusedReason`). Carries no
-   * nonce, deliberately: a nonce only exists once an authorization is signed,
-   * and a dry run never signs one.
+   * resource was free or the policy refused (see `refusedReason`). Carries
+   * neither nonce nor deadline, deliberately: both only exist once an
+   * authorization is signed, and a dry run never signs one.
    */
-  wouldPay?: Omit<PaymentDetails, 'nonce'>;
+  wouldPay?: Omit<PaymentDetails, 'nonce' | 'deadline'>;
 }
 
 const b64json = <T>(header: string | null): T | null => {
@@ -120,6 +128,34 @@ const b64json = <T>(header: string | null): T | null => {
 function paymentNonceOf(payload: X402PaymentPayload): `0x${string}` {
   const inner = payload.payload;
   return 'authorization' in inner ? inner.authorization.nonce : inner.permit2Authorization.nonce;
+}
+
+/** When the signed authorization stops being spendable, whichever scheme it is. */
+function paymentDeadlineOf(payload: X402PaymentPayload): string {
+  const inner = payload.payload;
+  return 'authorization' in inner ? inner.authorization.validBefore : inner.permit2Authorization.deadline;
+}
+
+/**
+ * What actually settled.
+ *
+ * Under `exact` the receipt is a confirmation and never a source. The
+ * authorization was for one fixed value and that is the value that moved, so a
+ * server reporting something smaller there would be talking our own spend caps
+ * down for free.
+ *
+ * Under `upto` the server does choose the figure, anywhere from zero to the
+ * ceiling, and the receipt is the only place it exists, so it is read. A receipt
+ * that omits it, or claims more than was authorized, falls back to the whole
+ * ceiling: the one direction a server must not be able to move this number is
+ * downward without having settled.
+ */
+function settledAmountOf(receipt: X402SettleResponse | null, scheme: string, authorized: string): string {
+  if (scheme !== 'upto') return authorized;
+  const reported = parseBigInt(receipt?.amount ?? '');
+  if (reported === null || reported < 0n) return authorized;
+  const ceiling = parseBigInt(authorized);
+  return ceiling !== null && reported > ceiling ? authorized : reported.toString();
 }
 
 function settledTxHash(receipt: X402SettleResponse | null): `0x${string}` | undefined {
@@ -423,6 +459,7 @@ export async function payAndFetch(
       payer: payer.address,
       wouldPay: {
         amount: requirement.amount,
+        authorized: requirement.amount,
         asset: requirement.asset,
         network: requirement.network,
         payTo: requirement.payTo,
@@ -471,7 +508,11 @@ export async function payAndFetch(
     return refusal(`payment signing failed: ${errorMessage(err)}`, { topUp });
   }
   const details = {
+    // The ceiling until a receipt says otherwise, which is the conservative
+    // reading for `upto` and the exact figure for `exact`.
     amount: requirement.amount,
+    authorized: requirement.amount,
+    deadline: paymentDeadlineOf(payload),
     asset: requirement.asset,
     network: requirement.network,
     payTo: requirement.payTo,
@@ -552,6 +593,10 @@ export async function payAndFetch(
     paid: true,
     topUp,
     payer: payer.address,
-    payment: { ...details, txHash: settledTxHash(receipt) },
+    payment: {
+      ...details,
+      amount: settledAmountOf(receipt, requirement.scheme, details.authorized),
+      txHash: settledTxHash(receipt),
+    },
   };
 }

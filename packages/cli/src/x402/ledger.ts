@@ -16,7 +16,25 @@ export interface X402LogEntry {
   payer: string;
   /** paid = settled; failed = signed+sent but settlement failed; refused = never signed. */
   status: 'paid' | 'failed' | 'refused';
+  /**
+   * What actually left the payer. Under `exact` that is the amount signed for.
+   * Under `upto` the server chooses it at settlement, anywhere from zero up to
+   * `authorized`, and the receipt is the only place it exists.
+   */
   amount?: string;
+  /**
+   * The ceiling the signature authorized, which is what a live authorization is
+   * worth to whoever holds it. Equal to `amount` under `exact`. Absent on
+   * entries written before the field existed, where `amount` was both.
+   */
+  authorized?: string;
+  /**
+   * When the authorization expires. Recorded but not yet read: reconciling a
+   * failed payment means proving its nonce was never consumed and its deadline
+   * has passed, and that check cannot be written against entries that never
+   * stored the deadline.
+   */
+  deadline?: string;
   asset?: string;
   network?: string;
   payTo?: string;
@@ -86,18 +104,32 @@ export function readX402Log(limit?: number): X402LogEntry[] {
  * restart, which an agent could otherwise relaunch its way past. Every caller
  * that enforces or reports a cap must go through here: three copies of this rule
  * had already drifted apart from each other by hand.
+ *
+ * A settled payment costs what settled. A failed one costs the ceiling it
+ * authorized. See the comment on the branch for why the two differ.
  */
 export function sumSpentSince(payerAddress: string, since?: string): bigint {
   const payer = payerAddress.toLowerCase();
   return readX402Log().reduce((total, entry) => {
-    // 'failed' counts too: the authorization was signed and sent, so in pull
-    // mode the facilitator may have broadcast the transfer anyway. Counting it
-    // can only under-spend the cap, never breach it.
-    if ((entry.status !== 'paid' && entry.status !== 'failed') || !entry.amount) return total;
+    // 'failed' counts too: the authorization was signed and sent, so the
+    // facilitator may have broadcast it anyway. Counting it can only under-spend
+    // the cap, never breach it.
+    if (entry.status !== 'paid' && entry.status !== 'failed') return total;
+    // What a failed attempt costs is not what it tried to pay, it is what the
+    // signature is still worth to whoever holds it, which is the whole ceiling.
+    // Under `exact` the two are the same number and this changes nothing. Under
+    // `upto` they are not: an unconsumed Permit2 authorization stays spendable
+    // up to the ceiling until its nonce is used or its deadline passes, so a
+    // failed attempt has to reserve all of it. This deliberately over-counts,
+    // and keeps over-counting, until a reconciliation pass can prove the nonce
+    // went unused. Older entries have no `authorized` and fall back to `amount`,
+    // which is what they meant when they were written.
+    const figure = entry.status === 'failed' ? (entry.authorized ?? entry.amount) : entry.amount;
+    if (!figure) return total;
     if (entry.payer?.toLowerCase() !== payer) return total;
     if (since && entry.at < since) return total;
     try {
-      return total + BigInt(entry.amount);
+      return total + BigInt(figure);
     } catch {
       return total; // a hand-edited amount must not take the cap down
     }

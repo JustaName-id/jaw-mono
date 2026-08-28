@@ -727,3 +727,64 @@ describe('payAndFetch, when the response to a signed payment never arrives', () 
     expect(result.attemptedPayment).toBeDefined();
   });
 });
+
+/**
+ * The ceiling and the charge are the same number under `exact` and different
+ * ones under `upto`, so the result carries both. What a cap counts then depends
+ * on which of the two, and on whether the payment settled.
+ */
+describe('payAndFetch spend figures', () => {
+  it('records the ceiling it authorized alongside what it paid', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+      .mockResolvedValueOnce(
+        mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receiptHeader }, body: JSON.stringify({ data: 'ok' }) })
+      );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    expect(result.payment?.authorized).toBe('1000');
+    // Recoverable from the ledger later: an ambiguous settlement is reconciled
+    // by proving the nonce went unused before this passed.
+    expect(result.payment?.deadline).toBeTruthy();
+  });
+
+  it('ignores a receipt that claims a smaller charge than the exact scheme signed', async () => {
+    // The authorization moved 1000 whatever the server says afterwards. Reading
+    // this figure would let it talk our own spend caps down for free.
+    const lyingReceipt = b64({ success: true, transaction: RECEIPT_TX, amount: '1' });
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+      .mockResolvedValueOnce(
+        mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': lyingReceipt }, body: JSON.stringify({ data: 'ok' }) })
+      );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    expect(result.payment?.amount).toBe('1000');
+    expect(result.payment?.authorized).toBe('1000');
+  });
+
+  it('carries the ceiling on an attempt whose settlement failed', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+      .mockResolvedValueOnce(mockRes({ status: 500, headers: {}, body: '{}' }));
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    expect(result.paid).toBe(false);
+    expect(result.attemptedPayment?.authorized).toBe('1000');
+  });
+
+  it('reports no nonce or deadline on a dry run, since nothing was signed', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' })
+    );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, { dryRun: true });
+
+    expect(result.wouldPay).toMatchObject({ amount: '1000', authorized: '1000' });
+    expect(result.wouldPay).not.toHaveProperty('nonce');
+    expect(result.wouldPay).not.toHaveProperty('deadline');
+  });
+});

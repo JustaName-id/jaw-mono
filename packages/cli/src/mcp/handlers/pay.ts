@@ -137,10 +137,14 @@ export function registerPayTool(server: McpServer): void {
 
             // A failed settlement counts too: the signed authorization went out,
             // so the transfer may have been broadcast regardless of what the
-            // server answered. Mirrors the 'failed' accounting in sumSpentSince.
+            // server answered. And it counts for the ceiling it authorized, not
+            // for what it tried to pay, because that is what the signature is
+            // still worth to whoever holds it. Mirrors sumSpentSince exactly:
+            // the two are read back against the same cap.
             const spentDetails = result.paid ? result.payment : result.attemptedPayment;
             if (spentDetails) {
-              const amount = parseBigInt(spentDetails.amount);
+              const figure = result.paid ? spentDetails.amount : spentDetails.authorized;
+              const amount = parseBigInt(figure);
               if (amount !== null) sessionSpent += amount;
             }
 
@@ -155,6 +159,8 @@ export function registerPayTool(server: McpServer): void {
                 payer: result.payer,
                 status: result.paid ? 'paid' : result.attemptedPayment ? 'failed' : 'refused',
                 amount: settled?.amount,
+                authorized: settled?.authorized,
+                deadline: settled?.deadline,
                 asset: settled?.asset,
                 network: settled?.network,
                 payTo: settled?.payTo,
