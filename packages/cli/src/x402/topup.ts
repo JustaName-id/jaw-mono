@@ -39,8 +39,15 @@ export interface TopUpExecutor {
    * token and nothing else, and it cannot be used to send anything but that
    * approval. Optional so an executor that never pays `upto` need not have it.
    */
-  approvePermit2?(token: `0x${string}`): Promise<string>;
+  approvePermit2?: GrantApproval;
 }
+
+/**
+ * Grant Permit2 the allowance, returning the batch id. Named because the
+ * allowance check hands it back once it has established the session can do it,
+ * which keeps the caller from having to assert it a second time.
+ */
+export type GrantApproval = (token: `0x${string}`) => Promise<string>;
 
 /** Reads an ERC-20 allowance. Injected for tests. */
 export type AllowanceReader = (asset: UsdcAsset, owner: `0x${string}`, spender: `0x${string}`) => Promise<bigint>;
@@ -169,11 +176,11 @@ export async function ensurePayerFunds(
   // sits at zero, and approving first meant the approval could not be priced
   // and the payment was refused without ever reaching the funding that would
   // have covered it.
-  let approvalNeeded = false;
+  let grantApproval: GrantApproval | null = null;
   if (requirement.scheme === 'upto') {
     const status = await permit2ApprovalStatus(asset, payerAddress, price, executor, opts);
     if (!status.ok) return { ok: false, reason: status.reason };
-    approvalNeeded = status.needed;
+    grantApproval = status.grant;
   }
 
   const read = opts.balanceReader;
@@ -185,11 +192,11 @@ export async function ensurePayerFunds(
   // approval is still owed the bar is the price plus something to be charged
   // against. The reserve is 0.1 USDC against roughly 0.01 an operation, so one
   // covers the approval with room to spare.
-  const needed = approvalNeeded ? price + gasReserve(asset) : price;
+  const needed = grantApproval ? price + gasReserve(asset) : price;
 
   if (balance >= needed) {
-    if (approvalNeeded) {
-      const granted = await grantPermit2Allowance(asset, executor, opts);
+    if (grantApproval) {
+      const granted = await grantPermit2Allowance(asset, grantApproval, executor, opts);
       // `skipped` says no principal moved, which stays true, but the approval
       // is a userOp the user paid for and it belongs in the trace either way.
       if (!granted.ok) return { ok: false, reason: granted.reason, approvalBatchId: granted.batchId };
@@ -264,8 +271,8 @@ export async function ensurePayerFunds(
   // trace: the caller writes its audit row from these fields, and money that
   // moved has to reach the ledger whatever happens next.
   let approvalBatchId: string | undefined;
-  if (approvalNeeded) {
-    const granted = await grantPermit2Allowance(asset, executor, opts);
+  if (grantApproval) {
+    const granted = await grantPermit2Allowance(asset, grantApproval, executor, opts);
     approvalBatchId = granted.batchId;
     if (!granted.ok) {
       return { ok: false, reason: granted.reason, amount: amount.toString(), batchId, approvalBatchId };
@@ -305,7 +312,7 @@ async function permit2ApprovalStatus(
   needed: bigint,
   executor: TopUpExecutor,
   opts: TopUpOptions
-): Promise<{ ok: true; needed: boolean } | { ok: false; reason: string }> {
+): Promise<{ ok: true; grant: GrantApproval | null } | { ok: false; reason: string }> {
   const read = opts.allowanceReader ?? readAllowance;
   let allowance: bigint;
   try {
@@ -313,7 +320,7 @@ async function permit2ApprovalStatus(
   } catch (err) {
     return { ok: false, reason: `could not read the payer's Permit2 allowance: ${errorMessage(err)}` };
   }
-  if (allowance >= needed) return { ok: true, needed: false };
+  if (allowance >= needed) return { ok: true, grant: null };
 
   // Refused here rather than after the top-up: a session that cannot grant the
   // allowance cannot pay this challenge at all, and moving funds first would
@@ -327,19 +334,21 @@ async function permit2ApprovalStatus(
     };
   }
 
-  return { ok: true, needed: true };
+  // Handed back rather than re-read later, so the type carries what the check
+  // established: past here, granting is something this session can do.
+  return { ok: true, grant: executor.approvePermit2 };
 }
 
 /** Send the approval and wait for it. Only called once the payer can pay for it. */
 async function grantPermit2Allowance(
   asset: UsdcAsset,
+  grant: GrantApproval,
   executor: TopUpExecutor,
   opts: TopUpOptions
 ): Promise<{ ok: boolean; reason?: string; batchId?: string }> {
   let batchId: string;
   try {
-    // Non-null: `permit2ApprovalStatus` refuses when the executor cannot grant.
-    batchId = await executor.approvePermit2!(asset.address);
+    batchId = await grant(asset.address);
   } catch (err) {
     return { ok: false, reason: `Permit2 approval refused: ${errorMessage(err)}` };
   }
