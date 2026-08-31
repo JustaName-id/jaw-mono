@@ -240,4 +240,36 @@ describe('jaw session revoke', () => {
     expect(h.saved).toEqual([{ orphans: [], ownPermissionRevoked: true }]);
     expect(h.deleted).toEqual({ keystore: true, config: true });
   });
+
+  /**
+   * A permission revoked from another device can never be revoked from here
+   * again, so without a way out that one id would keep the local session alive
+   * and this command failing every time it is run. Taking the way out is what
+   * loses the ids, which is why it is a flag and why they are printed.
+   */
+  it('deletes the local session under --force, and names what stays live', async () => {
+    h.session.orphanedPermissions = [{ id: '0xgone', chainId: 84532, expiry: Math.floor(Date.now() / 1000) + 86400 }];
+    h.failOn = '0xgone';
+
+    const lines = await runRevoke(['--force']);
+
+    expect(revokedIds()).toEqual(['0xcurrent']);
+    expect(h.deleted).toEqual({ keystore: true, config: true });
+    expect(lines.join('\n')).toMatch(/could not revoke 0xgone/);
+    expect(lines.join('\n')).toMatch(/stay live until they expire/);
+  });
+
+  it('reports under --force that the local session went anyway', async () => {
+    h.session.orphanedPermissions = [{ id: '0xgone', chainId: 84532, expiry: Math.floor(Date.now() / 1000) + 86400 }];
+    h.failOn = '0xgone';
+    const report = JSON.parse((await runRevoke(['--output', 'json', '--force'])).join('\n'));
+    expect(report).toMatchObject({ revoked: false, localSessionDeleted: true, failed: [{ id: '0xgone' }] });
+  });
+
+  it('keeps the local session without --force, so the rest stays retryable', async () => {
+    h.session.orphanedPermissions = [{ id: '0xgone', chainId: 84532, expiry: Math.floor(Date.now() / 1000) + 86400 }];
+    h.failOn = '0xgone';
+    await expect(runRevoke()).rejects.toThrow(/could not be revoked/);
+    expect(h.deleted).toEqual({ keystore: false, config: false });
+  });
 });

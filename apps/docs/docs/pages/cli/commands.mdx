@@ -188,7 +188,9 @@ Revoke the on-chain permission and delete local session files. Opens browser for
 jaw session revoke
 ```
 
-It revokes every permission the session key still holds, including ones the session no longer names. `jaw session setup` replaces a session rather than adding to it, and it does not always revoke what it replaces: declining the prompt keeps the old permission, and `--yes` never revokes. Those are recorded on the new session and revoked here, on their own chain if setup moved chains since. Expired ones are skipped, since they authorise nothing.
+It revokes the permissions earlier sessions left live on the account as well as the one this session names. `jaw session setup` replaces a session rather than adding to it, and it does not always revoke what it replaces: declining the prompt keeps the old permission, and `--yes` never revokes. Those are recorded on the new session and revoked here, on their own chain if setup moved chains since. Expired ones are skipped, since they authorise nothing.
+
+Each one is attempted on its own, so one that fails does not stop the rest. What could not be revoked is listed and the local session is kept so the command can be run again. One case never succeeds on a retry: a permission already revoked from another device, which the wallet reads from the relay and the relay no longer has. Pass `--force` to delete the local session anyway, and note the ids it prints, because deleting the session is what loses them.
 
 ---
 

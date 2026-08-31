@@ -1,3 +1,4 @@
+import { Flags } from '@oclif/core';
 import { BaseCommand } from '../../base-command.js';
 import { loadConfig } from '../../lib/config.js';
 import { getBridge } from '../../lib/bridge-singleton.js';
@@ -17,6 +18,12 @@ export default class SessionRevoke extends BaseCommand {
 
   static override flags = {
     ...BaseCommand.baseFlags,
+    force: Flags.boolean({
+      description:
+        'Delete the local session even if some permissions could not be revoked. They stay live on chain ' +
+        'until they expire, and their ids are printed because deleting the session is what loses them.',
+      default: false,
+    }),
   };
 
   async run(): Promise<void> {
@@ -123,13 +130,24 @@ export default class SessionRevoke extends BaseCommand {
     // The local files are what makes anything still live reachable. Deleting
     // them while something is left strands it exactly the way an unrecorded
     // permission was stranded before it was recorded.
-    if (failed.length === 0) {
+    //
+    // `--force` exists because one of these failures is permanent: a permission
+    // revoked from another device can never be revoked again, since core reads
+    // it from the relay and the relay no longer has it. Without a way out, that
+    // one id would keep the local session alive and this command failing
+    // forever. It is the user's call, and it is loud, because taking it is what
+    // loses the remaining ids.
+    const cleanedUp = failed.length === 0 || flags.force;
+    if (cleanedUp) {
       deleteKeystore();
       deleteSessionConfig();
     }
 
     if (format === 'json') {
-      this.outputResult({ revoked: failed.length === 0, skippedOnChain: false, revokedIds, failed }, format);
+      this.outputResult(
+        { revoked: failed.length === 0, skippedOnChain: false, revokedIds, failed, localSessionDeleted: cleanedUp },
+        format
+      );
     } else if (failed.length === 0) {
       this.log('Session revoked. On-chain permission removed and local keys deleted.');
       if (revokedIds.length > 1) {
@@ -140,10 +158,18 @@ export default class SessionRevoke extends BaseCommand {
       for (const failure of failed) {
         this.log(`  could not revoke ${failure.id}: ${failure.reason}`);
       }
-      this.log('\nLocal session files were kept so the rest can be retried. Run this again.');
+      this.log(
+        flags.force
+          ? '\nLocal session deleted anyway, as asked. Those permissions stay live until they expire, ' +
+              'and the ids above are the only record left of them.'
+          : '\nLocal session files were kept so the rest can be retried. Run this again, or pass --force ' +
+              'to delete the local session anyway if one of these was already revoked elsewhere.'
+      );
     }
 
-    if (failed.length > 0) {
+    // Not an error under --force: the user was told what would be left and
+    // asked for it anyway.
+    if (failed.length > 0 && !flags.force) {
       this.error(
         `${failed.length} of ${total} permissions could not be revoked. ` +
           'One already revoked elsewhere will keep failing, since the record it is read from is gone.',
