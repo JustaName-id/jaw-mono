@@ -262,3 +262,20 @@ describe('a chain with no client', () => {
     });
   });
 });
+
+/**
+ * These reads sit in commands that were local before them. viem retries three
+ * times at ten seconds, so an unreachable node would hold a status report open
+ * for most of a minute to add a fact every caller treats as optional.
+ */
+describe('a node that does not answer', () => {
+  it('gives up and reports not knowing', async () => {
+    const never = () => new Promise<never>(() => undefined);
+    await expect(readPermissionState(target, { manager: MANAGER, readContract: never, timeoutMs: 5 })).resolves.toEqual(
+      { status: 'unavailable' }
+    );
+    await expect(
+      readCurrentPeriod({ ...target, token: USDC }, { manager: MANAGER, readContract: never, timeoutMs: 5 })
+    ).resolves.toEqual({ status: 'unavailable' });
+  });
+});

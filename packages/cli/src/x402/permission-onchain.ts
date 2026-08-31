@@ -152,6 +152,31 @@ export interface ReadDeps {
   }) => Promise<unknown>;
   /** The permission manager, injectable so a test does not have to import core. */
   manager?: `0x${string}`;
+  /**
+   * How long to wait on the node.
+   *
+   * These reads sit in `session status` and `x402 status`, which were local
+   * commands before them, and in the payment path. viem retries three times at
+   * ten seconds, so an unreachable node would hold a status report open for
+   * most of a minute to add a fact that is optional in every caller. Timing out
+   * is the same answer as any other failed read: not knowing.
+   */
+  timeoutMs?: number;
+}
+
+const DEFAULT_TIMEOUT_MS = 5_000;
+
+/** Rejects the read once the node has had long enough. */
+async function within<T>(work: Promise<T>, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const expired = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('timed out')), timeoutMs);
+    });
+    return await Promise.race([work, expired]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function managerAddress(override?: `0x${string}`): Promise<`0x${string}`> {
@@ -201,11 +226,14 @@ export async function readPermissionState(target: PermissionReadTarget, deps: Re
 
   try {
     const address = await managerAddress(deps.manager);
-    const [hash, approved, revoked] = await Promise.all([
-      read({ address, abi: PERMISSION_MANAGER_ABI, functionName: 'getHash', args: [permission] }),
-      read({ address, abi: PERMISSION_MANAGER_ABI, functionName: 'isApproved', args: [permission] }),
-      read({ address, abi: PERMISSION_MANAGER_ABI, functionName: 'isRevoked', args: [permission] }),
-    ]);
+    const [hash, approved, revoked] = await within(
+      Promise.all([
+        read({ address, abi: PERMISSION_MANAGER_ABI, functionName: 'getHash', args: [permission] }),
+        read({ address, abi: PERMISSION_MANAGER_ABI, functionName: 'isApproved', args: [permission] }),
+        read({ address, abi: PERMISSION_MANAGER_ABI, functionName: 'isRevoked', args: [permission] }),
+      ]),
+      deps.timeoutMs
+    );
     if (typeof hash !== 'string' || hash.toLowerCase() !== target.permissionId.toLowerCase()) {
       return { status: 'mismatch' };
     }
@@ -256,12 +284,15 @@ export async function readCurrentPeriod(
 
   try {
     const address = await managerAddress(deps.manager);
-    const period = (await read({
-      address,
-      abi: PERMISSION_MANAGER_ABI,
-      functionName: 'getCurrentPeriod',
-      args: [permission, spendLimit],
-    })) as { start: number; end: number; spend: bigint } | undefined;
+    const period = (await within(
+      read({
+        address,
+        abi: PERMISSION_MANAGER_ABI,
+        functionName: 'getCurrentPeriod',
+        args: [permission, spendLimit],
+      }),
+      deps.timeoutMs
+    )) as { start: number; end: number; spend: bigint } | undefined;
     if (!period) return { status: 'unavailable' };
     return { status: 'ok', start: Number(period.start), end: Number(period.end), spend: BigInt(period.spend) };
   } catch (err) {
