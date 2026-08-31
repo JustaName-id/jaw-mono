@@ -7,7 +7,7 @@ import { Eip3009EoaPayer } from '../../x402/payer.js';
 import { payAndFetch } from '../../x402/http.js';
 import { appendX402Log, sumSpentSince } from '../../x402/ledger.js';
 import { resolveSessionX402Policy, topUpCeiling } from '../../x402/policy.js';
-import { currentPeriodSpend } from '../../x402/spend-window.js';
+import { currentPeriodSpendOnChain } from '../../x402/spend-window.js';
 import { ensurePayerFunds } from '../../x402/topup.js';
 import { parseNonNegativeBigInt } from '../../x402/amount.js';
 import { usdcForNetwork, USDC_BY_NETWORK } from '../../x402/asset-registry.js';
@@ -86,7 +86,7 @@ export default class X402Pay extends BaseCommand {
     // payer reads a total that does not yet include the payment just made, which
     // is the race the lock exists to close.
     const run = async () => {
-      const periodSpend = currentPeriodSpend(policy, payer.address, session);
+      const periodSpend = await currentPeriodSpendOnChain(policy, payer.address, session);
       // Re-read here, not before the lock: another process may have paid while
       // we waited our turn, and a stale total waves through a payment the cap
       // should have stopped. Same for the period window, which moves on its own.

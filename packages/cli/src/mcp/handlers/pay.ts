@@ -9,7 +9,7 @@ import { appendX402Log, readX402Log, sumSpentSince } from '../../x402/ledger.js'
 import { withPaymentLock } from '../../lib/payment-lock.js';
 import { usdcBalance } from '../../x402/balance.js';
 import { resolveSessionX402Policy, topUpCeiling } from '../../x402/policy.js';
-import { currentPeriodSpend } from '../../x402/spend-window.js';
+import { currentPeriodSpendOnChain } from '../../x402/spend-window.js';
 import { ensurePayerFunds } from '../../x402/topup.js';
 import { SessionBridge } from '../../lib/session-bridge.js';
 import { tryLoadSessionConfig } from '../../lib/session-config.js';
@@ -95,7 +95,7 @@ export function registerPayTool(server: McpServer): void {
             // Recomputed per payment because the window moves on its own, and
             // re-read from the ledger for the same reason sessionSpent is: a
             // payment made by another process falls inside this window too.
-            const periodSpend = currentPeriodSpend(policy, payer.address, session);
+            const periodSpend = await currentPeriodSpendOnChain(policy, payer.address, session);
 
             // Flow 2b: when a session (and its on-chain permission) exists, refill
             // the payer EOA through the permission whenever it can't cover a price.

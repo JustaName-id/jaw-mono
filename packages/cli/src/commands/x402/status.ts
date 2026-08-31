@@ -6,7 +6,7 @@ import { sessionPayerAddress } from '../../x402/payer.js';
 import { usdcBalance } from '../../x402/balance.js';
 import { sumSpentSince } from '../../x402/ledger.js';
 import { resolveSessionX402Policy } from '../../x402/policy.js';
-import { currentPeriodSpend } from '../../x402/spend-window.js';
+import { currentPeriodSpendOnChain } from '../../x402/spend-window.js';
 import { describePeriod } from '../../x402/period.js';
 import { parseBigInt } from '../../x402/amount.js';
 import { USDC_BY_NETWORK } from '../../x402/asset-registry.js';
@@ -84,8 +84,9 @@ export default class X402Status extends BaseCommand {
 
     // The cap that actually mirrors the permission, and what is left of it right
     // now. Without this the report was silent about the only cap a grant-seeded
-    // session enforces.
-    const periodSpend = currentPeriodSpend(policy, payer, session);
+    // session enforces. Asked of the chain first, which knows about pulls this
+    // CLI's ledger never saw.
+    const periodSpend = await currentPeriodSpendOnChain(policy, payer, session);
     const periodCap = parseBigInt(policy.maxPerPeriod);
     const periodLabel = policy.period ? describePeriod(policy.period.unit, policy.period.multiplier) : null;
 
@@ -136,6 +137,9 @@ export default class X402Status extends BaseCommand {
                 // Same meter as the diagnose input above: what the on-chain
                 // allowance actually lost, so a script sees the grant drain.
                 spentThisPeriod: periodSpend.toppedUp.toString(),
+                // Where that figure came from. From the ledger it is a floor,
+                // from the chain it is what the contract will meter against.
+                spentThisPeriodSource: periodSpend.source,
                 periodEndsAt: new Date(periodSpend.window.end * 1000).toISOString(),
               }
             : {}),
@@ -169,21 +173,26 @@ export default class X402Status extends BaseCommand {
     // still held: one 0.1 USDC payment behind a 5 USDC top-up printed 0.1
     // against a cap the chain had already docked 5 from.
     //
-    // "at least", on both figures, because both are summed from the local
-    // ledger and the ledger only sees what went through `payAndFetch`. The same
-    // permission can be spent by a `wallet_sendCalls` sent through `jaw_rpc`,
-    // which writes no row, so what is printed is a floor rather than a total.
+    // "at least" is dropped only for a period figure the contract answered.
+    // Everything summed from the local ledger is a floor: the ledger sees what
+    // went through `payAndFetch`, and the same permission can be spent by a
+    // `wallet_sendCalls` sent through `jaw_rpc`, which writes no row.
     if (policy.maxPerPeriod !== undefined && periodLabel) {
       const usedThisPeriod = periodSpend?.toppedUp ?? 0n;
       const resets = periodSpend ? ` (resets ${new Date(periodSpend.window.end * 1000).toISOString()})` : '';
+      const floor = periodSpend?.source === 'chain' ? '' : 'at least ';
       this.log(
-        `          at least ${formatUsdc(usedThisPeriod.toString(), decimals)} of ${formatUsdc(policy.maxPerPeriod, decimals)} used this ${periodLabel}${resets}`
+        `          ${floor}${formatUsdc(usedThisPeriod.toString(), decimals)} of ${formatUsdc(policy.maxPerPeriod, decimals)} used this ${periodLabel}${resets}`
       );
     }
     this.log(
       `          at least ${formatUsdc(spent.toString(), decimals)} of ${formatUsdc(policy.maxTotalPerSession, decimals)} spent this session`
     );
-    this.log("          counted from this CLI's ledger, which a direct jaw_rpc send bypasses");
+    this.log(
+      periodSpend?.source === 'chain'
+        ? "          the session figure is counted from this CLI's ledger, which a direct jaw_rpc send bypasses"
+        : "          counted from this CLI's ledger, which a direct jaw_rpc send bypasses"
+    );
     if (policy.topUpFloat) {
       this.log(`  float   tops the payer up to ${formatUsdc(policy.topUpFloat, decimals)} when it runs short`);
     }
