@@ -162,6 +162,27 @@ export function isLegacySession(config: Pick<SessionConfig, 'mode'>): boolean {
   return config.mode !== 'eip7702';
 }
 
+/**
+ * A permission this CLI granted and then stopped tracking.
+ *
+ * `session setup` replaces a session rather than adding to it, and it does not
+ * always revoke what it replaces: the interactive path takes no for an answer,
+ * and `--yes` never revokes at all. The session key is reused by default, so
+ * the address the session signs with then holds two live grants while the
+ * config names one. Its real authority is the sum of both, `x402 status`
+ * reports only the new one, and `session revoke` could not reach the old one
+ * at all, because the id lived in the file that was overwritten.
+ *
+ * Keeping the id is what makes it reachable again. Nothing here revokes on its
+ * own: setup already asked.
+ */
+export interface OrphanedPermission {
+  id: string;
+  chainId: number;
+  /** Unix seconds. */
+  expiry: number;
+}
+
 export interface SessionConfig {
   ownerAddress: string;
   sessionAddress: string;
@@ -173,6 +194,23 @@ export interface SessionConfig {
   grantedSpend?: GrantedSpend;
   /** The struct the on-chain reads need. Absent on older sessions; see the type. */
   permission?: GrantedPermission;
+  /** Permissions this key still holds that the session no longer names. */
+  orphanedPermissions?: OrphanedPermission[];
+}
+
+/**
+ * The orphans still worth carrying, newest first.
+ *
+ * An expired permission authorises nothing, so it is dropped rather than
+ * accumulating in the file for the life of the machine. Dropping it is the same
+ * decision `session revoke` makes when it skips the browser for an expired
+ * session.
+ */
+export function liveOrphans(
+  orphans: OrphanedPermission[] | undefined,
+  now: number = Date.now() / 1000
+): OrphanedPermission[] {
+  return (orphans ?? []).filter((orphan) => orphan.expiry > now);
 }
 
 /**

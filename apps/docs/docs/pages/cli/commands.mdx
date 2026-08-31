@@ -188,6 +188,8 @@ Revoke the on-chain permission and delete local session files. Opens browser for
 jaw session revoke
 ```
 
+It revokes every permission the session key still holds, including ones the session no longer names. `jaw session setup` replaces a session rather than adding to it, and it does not always revoke what it replaces: declining the prompt keeps the old permission, and `--yes` never revokes. Those are recorded on the new session and revoked here, on their own chain if setup moved chains since. Expired ones are skipped, since they authorise nothing.
+
 ---
 
 ## jaw disconnect

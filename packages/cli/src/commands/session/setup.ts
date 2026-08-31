@@ -10,7 +10,13 @@ import {
   loadSessionKey,
   tryLoadKeystoreAddress,
 } from '../../lib/keystore.js';
-import { parseGrantedPermission, saveSessionConfig, tryLoadSessionConfig } from '../../lib/session-config.js';
+import {
+  liveOrphans,
+  parseGrantedPermission,
+  saveSessionConfig,
+  tryLoadSessionConfig,
+  type OrphanedPermission,
+} from '../../lib/session-config.js';
 import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
 import { parsePermissionsConfig } from '../../lib/validation.js';
 import { extractGrantedSpend } from '../../x402/policy.js';
@@ -67,6 +73,10 @@ export default class SessionSetup extends BaseCommand {
     // 1. Check existing session
     let reuseKey: string | null = null;
     let oldPermissionRevoked = false;
+    // Permissions this key still holds that the new session will not name.
+    // Carried across the overwrite so `session revoke` can still reach them:
+    // the id used to live only in the file being replaced.
+    let orphaned: OrphanedPermission[] = [];
 
     if (keystoreExists()) {
       // A keystore can outlive its session-config: setup interrupted between the
@@ -76,6 +86,7 @@ export default class SessionSetup extends BaseCommand {
       // by hand, which strands the key while its on-chain permission stays live.
       const existing = tryLoadSessionConfig();
       const isActive = existing !== null && existing.expiry > Date.now() / 1000;
+      orphaned = liveOrphans(existing?.orphanedPermissions);
 
       // The prompt path uses readline against process.stdin. With non-TTY stdin
       // (pipes, heredocs, CI), readline races against the awaited bridge call
@@ -139,6 +150,12 @@ export default class SessionSetup extends BaseCommand {
             }
             oldPermissionRevoked = true;
             this.log('Old permission revoked.');
+          } else {
+            orphaned = [orphanOf(existing), ...orphaned];
+            this.log(
+              'Keeping the old permission. It stays live until it expires, and the new session will ' +
+                'not name it, so `jaw session revoke` will revoke both.'
+            );
           }
 
           const reuseAnswer = await ask('Reuse existing session key? (Y/n) ');
@@ -165,11 +182,17 @@ export default class SessionSetup extends BaseCommand {
             `revoked automatically because the permission id is unknown.`
         );
       } else if (isActive) {
-        // --yes mode: log warning but continue
+        // --yes mode never revokes, and the session key is reused by default,
+        // so the spender ends up holding two live grants. Recording the old id
+        // is what keeps its authority visible and revocable: before this, the
+        // warning was the only trace and the id was gone with the overwritten
+        // config.
+        orphaned = [orphanOf(existing), ...orphaned];
         this.logToStderr(
           `Warning: overwriting active session without revoking. ` +
             `Old permission ${existing.permissionId} on chain ${existing.chainId} ` +
-            `remains live until ${new Date(existing.expiry * 1000).toISOString()}.`
+            `remains live until ${new Date(existing.expiry * 1000).toISOString()}. ` +
+            `Recorded on the new session, so \`jaw session revoke\` will revoke it too.`
         );
       }
 
@@ -296,6 +319,7 @@ export default class SessionSetup extends BaseCommand {
           permission ? new Date(permission.start * 1000) : undefined
         ),
         ...(permission ? { permission } : {}),
+        ...(orphaned.length > 0 ? { orphanedPermissions: orphaned } : {}),
       });
 
       // 8.5 The grant asked the wallet to seed the spender. Check that it did.
@@ -397,4 +421,9 @@ export default class SessionSetup extends BaseCommand {
 
     return parsePermissionsConfig(raw);
   }
+}
+
+/** The part of a replaced session worth keeping: enough to revoke it later. */
+function orphanOf(session: { permissionId: string; chainId: number; expiry: number }): OrphanedPermission {
+  return { id: session.permissionId, chainId: session.chainId, expiry: session.expiry };
 }

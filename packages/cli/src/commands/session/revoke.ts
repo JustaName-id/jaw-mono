@@ -2,7 +2,7 @@ import { BaseCommand } from '../../base-command.js';
 import { loadConfig } from '../../lib/config.js';
 import { getBridge } from '../../lib/bridge-singleton.js';
 import { deleteKeystore, keystoreExists } from '../../lib/keystore.js';
-import { loadSessionConfig, deleteSessionConfig } from '../../lib/session-config.js';
+import { loadSessionConfig, deleteSessionConfig, liveOrphans } from '../../lib/session-config.js';
 import type { OutputFormat } from '../../lib/types.js';
 
 export default class SessionRevoke extends BaseCommand {
@@ -22,47 +22,77 @@ export default class SessionRevoke extends BaseCommand {
     }
 
     const sessionConfig = loadSessionConfig();
-    const isExpired = sessionConfig.expiry <= Date.now() / 1000;
+    const now = Date.now() / 1000;
 
-    if (isExpired) {
-      // Expired — skip browser, just wipe local files
+    // The session's own permission, plus any this key still holds that the
+    // session no longer names. `session setup` replaces a session rather than
+    // adding to it and does not always revoke what it replaces, so the key can
+    // be carrying more authority than the config's single id describes.
+    //
+    // Expired ones are skipped for the same reason an expired session skips the
+    // browser: they authorise nothing, and opening a window to say so is worse
+    // than saying nothing.
+    const targets = [
+      ...(sessionConfig.expiry > now
+        ? [{ id: sessionConfig.permissionId, chainId: sessionConfig.chainId, expiry: sessionConfig.expiry }]
+        : []),
+      ...liveOrphans(sessionConfig.orphanedPermissions, now),
+    ];
+
+    if (targets.length === 0) {
       deleteKeystore();
       deleteSessionConfig();
       if (format === 'json') {
-        this.outputResult({ revoked: true, skippedOnChain: true }, format);
+        this.outputResult({ revoked: true, skippedOnChain: true, revokedIds: [] }, format);
       } else {
         this.log('Session already expired. Cleaned up local files.');
       }
       return;
     }
 
-    // Active session — revoke on-chain
     const config = loadConfig();
     const apiKey = this.resolveApiKey(flags);
     if (!flags.quiet) {
-      this.log('Opening browser to revoke permission...');
+      this.log(
+        targets.length === 1
+          ? 'Opening browser to revoke permission...'
+          : `Opening browser to revoke ${targets.length} permissions...`
+      );
     }
 
-    const bridge = await getBridge({
-      keysUrl: config.keysUrl,
-      apiKey,
-      chainId: sessionConfig.chainId,
-      ens: config.ens,
-    });
-
+    // One bridge per chain, because an orphan can sit on a chain the current
+    // session does not use: setup takes --chain, so replacing a session can
+    // move it while leaving the old permission where it was.
+    const revokedIds: string[] = [];
     try {
-      await bridge.request('wallet_revokePermissions', [{ id: sessionConfig.permissionId }]);
+      for (const chainId of [...new Set(targets.map((t) => t.chainId))]) {
+        const bridge = await getBridge({ keysUrl: config.keysUrl, apiKey, chainId, ens: config.ens });
+        try {
+          for (const target of targets.filter((t) => t.chainId === chainId)) {
+            await bridge.request('wallet_revokePermissions', [{ id: target.id }]);
+            revokedIds.push(target.id);
+          }
+        } finally {
+          bridge.close();
+        }
+      }
     } finally {
-      bridge.close();
+      // The local files go only for what was actually revoked. Deleting them
+      // after a partial failure would strand whatever is left exactly the way
+      // an untracked orphan was stranded before it was recorded.
+      if (revokedIds.length === targets.length) {
+        deleteKeystore();
+        deleteSessionConfig();
+      }
     }
-
-    deleteKeystore();
-    deleteSessionConfig();
 
     if (format === 'json') {
-      this.outputResult({ revoked: true, skippedOnChain: false }, format);
+      this.outputResult({ revoked: true, skippedOnChain: false, revokedIds }, format);
     } else {
       this.log('Session revoked. On-chain permission removed and local keys deleted.');
+      if (revokedIds.length > 1) {
+        this.log(`Revoked ${revokedIds.length} permissions this key was holding.`);
+      }
     }
   }
 }

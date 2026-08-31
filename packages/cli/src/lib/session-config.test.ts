@@ -19,8 +19,14 @@ vi.mock('./paths.js', () => {
   };
 });
 
-const { saveSessionConfig, loadSessionConfig, tryLoadSessionConfig, deleteSessionConfig, parseGrantedPermission } =
-  await import('./session-config.js');
+const {
+  saveSessionConfig,
+  loadSessionConfig,
+  tryLoadSessionConfig,
+  deleteSessionConfig,
+  parseGrantedPermission,
+  liveOrphans,
+} = await import('./session-config.js');
 const { PATHS } = await import('./paths.js');
 
 beforeEach(() => {
@@ -201,5 +207,37 @@ describe('parseGrantedPermission', () => {
   it('leaves the field absent on a session written without one', () => {
     saveSessionConfig(SAMPLE_CONFIG);
     expect(loadSessionConfig().permission).toBeUndefined();
+  });
+});
+
+/**
+ * Permissions the key still holds that the session no longer names. They exist
+ * because `session setup` replaces a session without always revoking what it
+ * replaces, and the id used to be lost with the overwritten config.
+ */
+describe('liveOrphans', () => {
+  const now = 1_756_000_000;
+
+  it('is empty for a session that never orphaned anything', () => {
+    expect(liveOrphans(undefined, now)).toEqual([]);
+  });
+
+  it('keeps the ones that can still be used', () => {
+    const live = { id: '0xlive', chainId: 84532, expiry: now + 86400 };
+    expect(liveOrphans([live], now)).toEqual([live]);
+  });
+
+  // An expired permission authorises nothing, so carrying it would grow the
+  // file for the life of the machine and offer a revoke worth nothing.
+  it('drops the ones that have expired', () => {
+    const stale = { id: '0xstale', chainId: 84532, expiry: now - 1 };
+    const live = { id: '0xlive', chainId: 84532, expiry: now + 1 };
+    expect(liveOrphans([stale, live], now)).toEqual([live]);
+  });
+
+  it('round-trips through the session config', () => {
+    const orphans = [{ id: '0xorphan', chainId: 8453, expiry: now + 86400 }];
+    saveSessionConfig({ ...SAMPLE_CONFIG, orphanedPermissions: orphans });
+    expect(loadSessionConfig().orphanedPermissions).toEqual(orphans);
   });
 });

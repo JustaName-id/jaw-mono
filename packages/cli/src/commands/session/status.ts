@@ -1,6 +1,6 @@
 import { BaseCommand } from '../../base-command.js';
 import { keystoreExists } from '../../lib/keystore.js';
-import { isLegacySession, loadSessionConfig } from '../../lib/session-config.js';
+import { isLegacySession, liveOrphans, loadSessionConfig } from '../../lib/session-config.js';
 import { readLiveness, type PermissionLiveness } from '../../x402/permission-onchain.js';
 import type { OutputFormat } from '../../lib/types.js';
 
@@ -28,6 +28,10 @@ export default class SessionStatus extends BaseCommand {
     // leaves this file saying the session is fine. Fails soft to 'unknown',
     // which is what a session written before the struct was stored reports.
     const liveness = await readLiveness(config);
+    // What this key holds beyond the permission the session names. Before setup
+    // recorded these, the id was lost with the overwritten config and nothing
+    // could revoke them.
+    const alsoHolds = liveOrphans(config.orphanedPermissions, now);
 
     if (format === 'json') {
       this.outputResult(
@@ -35,6 +39,7 @@ export default class SessionStatus extends BaseCommand {
           ...config,
           expired: isExpired,
           permissionOnChain: liveness,
+          ...(alsoHolds.length > 0 ? { alsoHolds } : {}),
         },
         format
       );
@@ -49,6 +54,7 @@ export default class SessionStatus extends BaseCommand {
       this.log(`  Permission ID:    ${config.permissionId}${onChainNote(liveness)}`);
       this.log(`  Chain:            ${config.chainId}`);
       this.log(`  Expired:          ${new Date(config.expiry * 1000).toISOString()} (${ago} days ago)`);
+      if (alsoHolds.length > 0) this.log(alsoHoldsLine(alsoHolds.length));
       this.log('\nRun `jaw session setup` to create a new session.');
     } else {
       const remaining = Math.floor((config.expiry - now) / 86400);
@@ -72,6 +78,7 @@ export default class SessionStatus extends BaseCommand {
           ? '  Status:           Revoked on chain. Run `jaw session setup` to create a new session.'
           : `  Status:           Valid (${remaining} days remaining)`
       );
+      if (alsoHolds.length > 0) this.log(alsoHoldsLine(alsoHolds.length));
     }
   }
 }
@@ -86,4 +93,16 @@ function onChainNote(liveness: PermissionLiveness): string {
   if (liveness === 'unapproved') return '   (not approved on chain)';
   if (liveness === 'mismatch') return '   (does not match the stored permission)';
   return '';
+}
+
+/**
+ * Said whenever the key holds more than the session names, because that is the
+ * difference between what the config describes and what the key can actually
+ * do.
+ */
+function alsoHoldsLine(count: number): string {
+  return (
+    `  Also holds:       ${count} permission${count === 1 ? '' : 's'} this session does not name ` +
+    '(`jaw session revoke` removes them too)'
+  );
 }

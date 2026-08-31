@@ -65,6 +65,7 @@ vi.mock('../../lib/config.js', () => ({
 vi.mock('../../lib/session-config.js', () => ({
   tryLoadSessionConfig: () => h.session,
   isLegacySession: () => false,
+  liveOrphans: () => [],
 }));
 
 vi.mock('../../x402/payer.js', () => ({ sessionPayerAddress: () => h.payer }));

@@ -1,7 +1,7 @@
 import { BaseCommand } from '../../base-command.js';
 import { keystoreExists } from '../../lib/keystore.js';
 import { loadConfig } from '../../lib/config.js';
-import { isLegacySession, tryLoadSessionConfig } from '../../lib/session-config.js';
+import { isLegacySession, liveOrphans, tryLoadSessionConfig } from '../../lib/session-config.js';
 import { sessionPayerAddress } from '../../x402/payer.js';
 import { usdcBalance } from '../../x402/balance.js';
 import { sumSpentSince } from '../../x402/ledger.js';
@@ -58,6 +58,10 @@ export default class X402Status extends BaseCommand {
 
     const asset = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === session.chainId);
     const payer = sessionPayerAddress();
+    // Permissions this key still holds that the session does not name. The caps
+    // below describe one permission; the payer's real authority is the sum, and
+    // reporting only the current one understates it.
+    const alsoHolds = liveOrphans(session.orphanedPermissions, now);
 
     // Network reads, all of them failing soft. The local half of the answer
     // (caps, spend, expiry) is still worth printing, and an unreachable RPC is
@@ -122,6 +126,7 @@ export default class X402Status extends BaseCommand {
           problems,
           chainId: session.chainId,
           permission: { id: session.permissionId, onChain: liveness },
+          ...(alsoHolds.length > 0 ? { alsoHolds } : {}),
           owner: { address: session.ownerAddress, usdc: ownerBalance },
           payer: { address: payer, usdc: payerBalance },
           policy: {
@@ -161,6 +166,12 @@ export default class X402Status extends BaseCommand {
     // run of an older session is noise about a question nobody asked.
     if (liveness !== 'unknown') {
       this.log(`  perm    ${session.permissionId}   ${LIVENESS_LABEL[liveness]}`);
+    }
+    if (alsoHolds.length > 0) {
+      this.log(
+        `          this key also holds ${alsoHolds.length} permission${alsoHolds.length === 1 ? '' : 's'} ` +
+          'the caps below do not cover; `jaw session revoke` removes them too'
+      );
     }
     this.log(`  caps    ${formatUsdc(policy.maxAmountPerPayment, decimals)} per payment`);
     // The granted cap first: it is the one the chain enforces, and the one a
