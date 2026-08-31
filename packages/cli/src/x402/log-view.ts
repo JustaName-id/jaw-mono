@@ -61,7 +61,10 @@ export function renderSummary(entries: X402LogEntry[]): string {
   for (const entry of entries) {
     // An unrecognised status used to land on `counts` as a stray key and vanish
     // from the tally, so a malformed row silently shrank the reported total.
-    if (entry.status in counts) counts[entry.status] += 1;
+    // Own keys only: `in` walks the prototype, so a row saying `constructor`
+    // took the counted branch, landed on a key nothing reads, and disappeared
+    // from both tallies.
+    if (Object.hasOwn(counts, entry.status)) counts[entry.status] += 1;
     else unknown += 1;
     if ((entry.status === 'paid' || entry.status === 'failed') && entry.amount) {
       try {

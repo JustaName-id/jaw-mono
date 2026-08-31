@@ -56,7 +56,14 @@ export const USDC_BY_NETWORK: Record<string, UsdcAsset> = {
   },
 };
 
-/** Look up USDC metadata by CAIP-2 network id, or `undefined` if unsupported. */
+/**
+ * Look up USDC metadata by CAIP-2 network id, or `undefined` if unsupported.
+ *
+ * Own keys only. The network reaches here from a 402 challenge and from the
+ * Bazaar catalogue, both untrusted, and a plain index answers `constructor` or
+ * `toString` with something off the prototype: callers then read `.address` off
+ * a function and throw where they expected an unsupported network.
+ */
 export function usdcForNetwork(network: string): UsdcAsset | undefined {
-  return USDC_BY_NETWORK[network];
+  return Object.hasOwn(USDC_BY_NETWORK, network) ? USDC_BY_NETWORK[network] : undefined;
 }

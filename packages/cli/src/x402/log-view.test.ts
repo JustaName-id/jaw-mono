@@ -125,6 +125,15 @@ describe('renderSummary', () => {
     expect(summary).not.toContain('refused');
   });
 
+  // The ledger is a file a person can edit, and `in` reads the prototype: a row
+  // saying `constructor` was counted on a key nothing reads and vanished from
+  // both tallies, quietly shrinking the reported total.
+  it('counts a row naming a prototype member as unreadable, not as nothing', () => {
+    const summary = renderSummary([entry(), entry({ status: 'constructor' as X402LogEntry['status'] })]);
+    expect(summary).toContain('1 paid');
+    expect(summary).toContain('1 unreadable');
+  });
+
   it('survives a hand-edited amount instead of breaking the whole summary', () => {
     expect(renderSummary([entry({ amount: 'oops' }), entry({ amount: '1000' })])).toContain('0.001 USDC out');
   });
