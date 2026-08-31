@@ -16,10 +16,15 @@ function formatEip7702Auth(authorization: SignedAuthorization<number>): Record<s
         nonce: numberToHex(authorization.nonce),
         r: authorization.r ? numberToHex(BigInt(authorization.r), { size: 32 }) : pad('0x', { size: 32 }),
         s: authorization.s ? numberToHex(BigInt(authorization.s), { size: 32 }) : pad('0x', { size: 32 }),
-        // The 32-byte zero for a falsy yParity looks odd but mirrors viem's own
+        // The 32-byte zero for an absent yParity looks odd but mirrors viem's own
         // formatter byte-for-byte — the estimation payload must match what the
-        // send path produces, quirks included.
-        yParity: authorization.yParity ? numberToHex(authorization.yParity, { size: 1 }) : pad('0x', { size: 32 }),
+        // send path produces, quirks included. Absent, not falsy: half of all
+        // signatures have an even y, and reading 0 as "no value" sent those for
+        // estimation as 32 bytes while the send path sent them as `0x00`.
+        yParity:
+            typeof authorization.yParity !== 'undefined'
+                ? numberToHex(authorization.yParity, { size: 1 })
+                : pad('0x', { size: 32 }),
     };
 }
 

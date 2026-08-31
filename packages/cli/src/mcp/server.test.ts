@@ -346,6 +346,53 @@ describe('jaw_session_status', () => {
   });
 });
 
+describe('jaw_x402_balance', () => {
+  // The payer's float lives on the session's chain, and a top-up refuses to run
+  // anywhere else. Defaulting off config answered for Base mainnet on a Base
+  // Sepolia session and reported a funded payer as empty.
+  it('reads the session network by default, not the first one in config', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    const { saveSessionConfig } = await import('../lib/session-config.js');
+    saveKeystore('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d', '0xSessionAddr');
+    saveSessionConfig({
+      mode: 'eip7702',
+      ownerAddress: '0xOwner',
+      sessionAddress: '0xSessionAddr',
+      permissionId: '0xPerm',
+      chainId: 84532,
+      expiry: Math.floor(Date.now() / 1000) + 86400,
+    });
+    usdcBalanceMock.mockReset();
+    usdcBalanceMock.mockResolvedValue({ raw: '0', formatted: '0' });
+
+    const client = await connectClient();
+    await client.callTool({ name: 'jaw_x402_balance', arguments: {} });
+
+    expect(usdcBalanceMock.mock.calls[0][0]).toBe('eip155:84532');
+  });
+
+  it('still takes an explicit network over the session one', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    const { saveSessionConfig } = await import('../lib/session-config.js');
+    saveKeystore('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d', '0xSessionAddr');
+    saveSessionConfig({
+      mode: 'eip7702',
+      ownerAddress: '0xOwner',
+      sessionAddress: '0xSessionAddr',
+      permissionId: '0xPerm',
+      chainId: 84532,
+      expiry: Math.floor(Date.now() / 1000) + 86400,
+    });
+    usdcBalanceMock.mockReset();
+    usdcBalanceMock.mockResolvedValue({ raw: '0', formatted: '0' });
+
+    const client = await connectClient();
+    await client.callTool({ name: 'jaw_x402_balance', arguments: { network: 'eip155:8453' } });
+
+    expect(usdcBalanceMock.mock.calls[0][0]).toBe('eip155:8453');
+  });
+});
+
 describe('jaw_pay_and_fetch', () => {
   it('errors clearly when no session exists', async () => {
     const client = await connectClient();

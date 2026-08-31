@@ -1456,6 +1456,63 @@ describe('Account — ERC-20 paymaster approval', () => {
         expect(vi.mocked(sendCallsWithPermission).mock.calls[0][8]).toEqual(expectedApproval());
     });
 
+    // The wallet estimates the grant and passes the ceiling it measured in the
+    // context. The transfer to the spender is added here, after that estimate,
+    // so taking the caller's figure approved a batch one transfer short of the
+    // one that goes out.
+    it('measures the ceiling again when it adds a prefund transfer the caller could not have priced', async () => {
+        const { fetchTokenQuotes } = await import('./erc20Paymaster.js');
+        const { grantPermissions } = await import('../rpc/permissions.js');
+        const SPENDER = '0x2222222222222222222222222222222222222222' as `0x${string}`;
+
+        // The spender is empty and the account is not, which is the case the
+        // prefund exists for. The allowance answers separately: a fresh session
+        // has approved nothing.
+        vi.mocked(createPublicClient).mockReturnValue({
+            readContract: vi.fn(async ({ functionName, args }: { functionName: string; args?: unknown[] }) => {
+                if (functionName === 'allowance') return 0n;
+                return (args?.[0] as string)?.toLowerCase() === SPENDER.toLowerCase() ? 0n : 5_000_000n;
+            }),
+            // 0.001 gwei, the order Base charges, against a rate that puts the
+            // transfer at 0.006 USDC.
+            getGasPrice: vi.fn().mockResolvedValue(1_000_000n),
+        } as never);
+        vi.mocked(fetchTokenQuotes).mockResolvedValue([
+            {
+                tokenAddress: USDC,
+                paymasterAddress: ERC20_PAYMASTER_ADDRESS,
+                exchangeRate: 3_000_000_000n,
+                postOpGas: 40_000n,
+            },
+        ] as never);
+        vi.mocked(grantPermissions).mockResolvedValue({ permissionId: '0xperm' } as never);
+
+        const account = await makeAccount();
+        await account.grantPermissions(
+            9999999999,
+            SPENDER,
+            { spends: [{ token: USDC, allowance: '10000000', unit: 'day' }] } as never,
+            PAYMASTER_URL,
+            // A ceiling of one base unit: whatever the estimate returns, it is
+            // not this, so an approval for it proves the context was not trusted.
+            { token: USDC, gas: '1' },
+            undefined,
+            { prefundSpender: true }
+        );
+
+        const estimated = prepareUserOperation.mock.calls[0][0].calls as Array<{ to: string; data: `0x${string}` }>;
+        const transfers = estimated.filter(
+            (call) =>
+                call.to === USDC && decodeFunctionData({ abi: erc20Abi, data: call.data }).functionName === 'transfer'
+        );
+        expect(transfers).toHaveLength(1);
+
+        // Arg 8 carries the approval and the transfer. The approval is the
+        // re-measured ceiling, not the figure that came in the context.
+        const prepended = vi.mocked(grantPermissions).mock.calls.at(-1)?.[8] as Array<unknown>;
+        expect(prepended[0]).toEqual(expectedApproval());
+    });
+
     it('sizes a permission send over the permission-manager call, not the raw calls', async () => {
         const account = await makeAccount();
 

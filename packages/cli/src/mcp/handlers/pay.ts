@@ -216,15 +216,23 @@ export function registerPayTool(server: McpServer): void {
         'Read the session payer EOA’s USDC balance on a network. This is the payment float, not the ' +
         'budget: with an active session permission a shortfall refills itself from the user’s account ' +
         'on payment (bounded by the on-chain cap), so a low balance does not mean a payment will ' +
-        'fail. Useful to confirm a settlement or top-up landed. Defaults to the first allowed ' +
-        'network in the x402 config, else Base. Requires a session (jaw session setup).',
+        'fail. Useful to confirm a settlement or top-up landed. Defaults to the network the ' +
+        'session lives on. Requires a session (jaw session setup).',
       inputSchema: x402BalanceSchema,
       annotations: { readOnlyHint: true },
     },
     async (params: { network?: string }) => {
       try {
         const config = loadConfig();
-        const network = params.network ?? config.x402?.allowedNetworks?.[0] ?? 'eip155:8453';
+        const session = tryLoadSessionConfig();
+        // The payer's float lives where the session does: a top-up refuses to
+        // run on any other chain, so a default read off config answered for
+        // Base mainnet on a Base Sepolia session and reported a funded payer as
+        // empty. Config is the fallback for a session key with no session file
+        // beside it.
+        const network =
+          params.network ??
+          (session ? `eip155:${session.chainId}` : (config.x402?.allowedNetworks?.[0] ?? 'eip155:8453'));
         const payer = sessionPayerAddress();
         return mcpResult({ payer, ...(await usdcBalance(network, payer)) });
       } catch (err) {

@@ -86,6 +86,28 @@ describe('discoverServices — search mode', () => {
     expect(svc.trust).toEqual({ curated: null, calls30d: 13, payers30d: 7, lastCalledAt: '2026-08-02T00:00:00Z' });
   });
 
+  // The catalogue is a remote answer, and the network in it is whatever the
+  // server wrote. Looking it up against a plain object handed back a prototype
+  // member, and reading an address off it took down the whole call.
+  it('Given a catalogue entry naming a prototype member as its network, When mapping, Then it maps as unpriced instead of throwing', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockJson({
+        resources: [
+          {
+            resource: 'https://api.example/thing',
+            accepts: [{ scheme: 'exact', network: 'constructor', amount: '1000', asset: USDC_BASE, payTo: '0xabc' }],
+          },
+        ],
+      })
+    );
+
+    const result = await discoverServices({ query: 'x' });
+
+    expect(result.count).toBe(1);
+    expect(result.services[0].price?.network).toBe('constructor');
+    expect(result.services[0].price?.approxUsd).toBeNull();
+  });
+
   it('Given optional filters, When searching, Then maxUsdPrice, curatedOnly and a clamped limit are forwarded', async () => {
     fetchMock.mockResolvedValueOnce(mockJson({ resources: [] }));
 

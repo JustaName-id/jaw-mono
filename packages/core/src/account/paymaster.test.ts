@@ -85,6 +85,28 @@ describe('createPaymasterFunctions — estimation fallback', () => {
         });
     });
 
+    // Half of all signatures have an even y. Reading 0 as "no value" sent those
+    // for estimation as a 32-byte zero while the send path sent `0x00`, so the
+    // two payloads disagreed on the first operation of those sessions.
+    it('sends an even yParity as one byte, the way the send path does', async () => {
+        await functions.getPaymasterStubData({
+            ...baseUserOperation,
+            factory: '0x7702',
+            factoryData: '0x',
+            authorization: {
+                address: '0x00000000000000000000000000000000000000ee',
+                chainId: 84532,
+                nonce: 7,
+                r: '0x01',
+                s: '0x02',
+                yParity: 0,
+            },
+        } as unknown as Parameters<(typeof functions)['getPaymasterStubData']>[0]);
+
+        const [userOpForRpc] = paymasterClient.request.mock.calls[0][0].params as [Record<string, unknown>];
+        expect((userOpForRpc['eip7702Auth'] as Record<string, string>)['yParity']).toBe('0x00');
+    });
+
     it('omits eip7702Auth for a non-7702 userOp', async () => {
         await functions.getPaymasterStubData(
             baseUserOperation as unknown as Parameters<(typeof functions)['getPaymasterStubData']>[0]
