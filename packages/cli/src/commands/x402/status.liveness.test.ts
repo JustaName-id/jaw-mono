@@ -129,14 +129,19 @@ describe('jaw x402 status, on-chain liveness', () => {
   });
 
   /**
-   * A struct that does not hash to the granted id was answering about some
-   * other permission, so the report says the caps below are the local ones
-   * rather than pretending the chain confirmed them.
+   * A struct that does not hash to the granted id means the chain cannot be
+   * asked about this permission, and nothing more: the caps still apply and
+   * payments still go through. Reporting it as a blocker stopped agents paying
+   * against a healthy session over a local serialisation issue.
    */
-  it('reports a stored permission that does not match the granted one', async () => {
+  it('says a stored permission does not match without calling the session unready', async () => {
     h.liveness.value = 'mismatch';
     const report = JSON.parse((await runStatus(['--output', 'json'])).join('\n'));
-    expect(report.ready).toBe(false);
-    expect(report.problems.join(' ')).toMatch(/does not match the one that was granted/);
+    expect(report.permission.onChain).toBe('mismatch');
+    expect(report.ready).toBe(true);
+    expect(report.problems).toEqual([]);
+
+    const lines = await runStatus([]);
+    expect(lines.join('\n')).toMatch(/does not match the stored permission/);
   });
 });

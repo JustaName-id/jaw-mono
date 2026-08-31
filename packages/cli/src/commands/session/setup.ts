@@ -182,11 +182,12 @@ export default class SessionSetup extends BaseCommand {
             `revoked automatically because the permission id is unknown.`
         );
       } else if (isActive) {
-        // --yes mode never revokes, and the session key is reused by default,
-        // so the spender ends up holding two live grants. Recording the old id
-        // is what keeps its authority visible and revocable: before this, the
-        // warning was the only trace and the id was gone with the overwritten
-        // config.
+        // --yes never revokes, so the old permission stays live on the account
+        // after this one is granted. The key that could use it does not survive
+        // here (this path always generates a fresh one, and `saveKeystore`
+        // overwrites), but the grant does, and it is the grant that has to be
+        // revocable. Before this, the warning below was the only trace and the
+        // id went away with the overwritten config.
         orphaned = [orphanOf(existing), ...orphaned];
         this.logToStderr(
           `Warning: overwriting active session without revoking. ` +

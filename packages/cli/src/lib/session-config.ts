@@ -234,8 +234,19 @@ function writeSessionConfig(config: SessionConfig): void {
 }
 
 /**
- * Rewrite an existing session with a different orphan list, leaving the rest of
- * it alone.
+ * Record what a revoke has already done, so the rest of it can be retried.
+ *
+ * Revoking is not idempotent: core reads the permission from the relay before
+ * sending and deletes it from there afterwards, so a second attempt at an id
+ * already revoked fails before it sends anything. A session left naming an id
+ * that is gone therefore costs a browser round trip that can only fail, which
+ * is why what succeeded has to come out of the file as it succeeds.
+ *
+ * `ownPermissionRevoked` expires the session rather than adding a field for it.
+ * That is what the state is: the permission the session names has been revoked,
+ * so the session can no longer do anything, and `expiry` is already the flag
+ * every caller reads to decide that. It also stops the next revoke from
+ * attempting the dead id while it works through whatever is left.
  *
  * Separate from `saveSessionConfig` because that one stamps a fresh
  * `createdAt`, and `createdAt` is what the session total is counted from
@@ -243,10 +254,14 @@ function writeSessionConfig(config: SessionConfig): void {
  * would hand the session cap a clean slate as a side effect of revoking one
  * permission.
  */
-export function saveOrphanedPermissions(config: SessionConfig, orphans: OrphanedPermission[]): void {
+export function saveRevokeProgress(
+  config: SessionConfig,
+  progress: { orphans: OrphanedPermission[]; ownPermissionRevoked: boolean }
+): void {
   const next: SessionConfig = { ...config };
-  if (orphans.length > 0) next.orphanedPermissions = orphans;
+  if (progress.orphans.length > 0) next.orphanedPermissions = progress.orphans;
   else delete next.orphanedPermissions;
+  if (progress.ownPermissionRevoked) next.expiry = Math.floor(Date.now() / 1000);
   writeSessionConfig(next);
 }
 

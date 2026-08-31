@@ -6,8 +6,10 @@ import {
   loadSessionConfig,
   deleteSessionConfig,
   liveOrphans,
-  saveOrphanedPermissions,
+  saveRevokeProgress,
+  type OrphanedPermission,
 } from '../../lib/session-config.js';
+import { sanitizeLine } from '../../lib/terminal.js';
 import type { OutputFormat } from '../../lib/types.js';
 
 export default class SessionRevoke extends BaseCommand {
@@ -29,37 +31,25 @@ export default class SessionRevoke extends BaseCommand {
     const sessionConfig = loadSessionConfig();
     const now = Date.now() / 1000;
 
-    // The permissions this key still holds that the session no longer names,
-    // plus the session's own. `session setup` replaces a session rather than
-    // adding to it and does not always revoke what it replaces, so the key can
-    // be carrying more authority than the config's single id describes.
+    // What this key still holds. `session setup` replaces a session rather than
+    // adding to it and does not always revoke what it replaces, so there can be
+    // permissions live on chain that the config's single id does not name.
     //
     // Expired ones are skipped for the same reason an expired session skips the
     // browser: they authorise nothing, and opening a window to say so is worse
     // than saying nothing.
-    //
-    // The session's own permission goes last, and the orphans are dropped from
-    // the config one at a time as each is revoked, so that every state this
-    // command can stop in is one the next run picks up from. Revoking is not
-    // idempotent: `revokePermission` reads the permission from the relay first
-    // and deletes it from there afterwards, so a second attempt at an id
-    // already revoked fails before it sends anything. Revoking the session's
-    // own id first would therefore leave a config naming a permission the relay
-    // no longer has, and a retry would die on it before reaching the orphan it
-    // was run for.
     const orphans = liveOrphans(sessionConfig.orphanedPermissions, now);
-    const targets = [
-      ...orphans,
-      ...(sessionConfig.expiry > now
-        ? [{ id: sessionConfig.permissionId, chainId: sessionConfig.chainId, expiry: sessionConfig.expiry }]
-        : []),
-    ];
+    const own: OrphanedPermission | null =
+      sessionConfig.expiry > now
+        ? { id: sessionConfig.permissionId, chainId: sessionConfig.chainId, expiry: sessionConfig.expiry }
+        : null;
+    const total = orphans.length + (own ? 1 : 0);
 
-    if (targets.length === 0) {
+    if (total === 0) {
       deleteKeystore();
       deleteSessionConfig();
       if (format === 'json') {
-        this.outputResult({ revoked: true, skippedOnChain: true, revokedIds: [] }, format);
+        this.outputResult({ revoked: true, skippedOnChain: true, revokedIds: [], failed: [] }, format);
       } else {
         this.log('Session already expired. Cleaned up local files.');
       }
@@ -68,53 +58,102 @@ export default class SessionRevoke extends BaseCommand {
 
     const config = loadConfig();
     const apiKey = this.resolveApiKey(flags);
-    if (!flags.quiet) {
+    // Not in json mode: a script parsing the result should get the result, and
+    // a progress line ahead of it makes the output unparseable.
+    if (!flags.quiet && format !== 'json') {
       this.log(
-        targets.length === 1
-          ? 'Opening browser to revoke permission...'
-          : `Opening browser to revoke ${targets.length} permissions...`
+        total === 1 ? 'Opening browser to revoke permission...' : `Opening browser to revoke ${total} permissions...`
       );
     }
 
-    // One bridge per chain, because an orphan can sit on a chain the current
-    // session does not use: setup takes --chain, so replacing a session can
-    // move it while leaving the old permission where it was.
     const revokedIds: string[] = [];
+    const failed: Array<{ id: string; reason: string }> = [];
     let remaining = orphans;
-    try {
-      for (const chainId of [...new Set(targets.map((t) => t.chainId))]) {
-        const bridge = await getBridge({ keysUrl: config.keysUrl, apiKey, chainId, ens: config.ens });
-        try {
-          for (const target of targets.filter((t) => t.chainId === chainId)) {
+    let ownRevoked = false;
+
+    // Every permission is attempted on its own. One that cannot be revoked must
+    // not take the others down with it: a permission already revoked from
+    // another device fails here for good, because the relay no longer has the
+    // record it is read from, and letting that abort the batch would mean
+    // `session revoke` quietly returning without revoking the live permission
+    // the user ran it for.
+    const revokeOn = async (chainId: number, targets: OrphanedPermission[]): Promise<void> => {
+      let bridge;
+      try {
+        bridge = await getBridge({ keysUrl: config.keysUrl, apiKey, chainId, ens: config.ens });
+      } catch (err) {
+        // A bridge that will not open fails every permission on that chain, and
+        // says so once rather than once per id.
+        for (const target of targets) failed.push({ id: target.id, reason: describe(err) });
+        return;
+      }
+      try {
+        for (const target of targets) {
+          try {
             await bridge.request('wallet_revokePermissions', [{ id: target.id }]);
             revokedIds.push(target.id);
-            const left = remaining.filter((orphan) => orphan.id !== target.id);
-            if (left.length !== remaining.length) {
-              remaining = left;
-              saveOrphanedPermissions(sessionConfig, remaining);
-            }
+            if (target === own) ownRevoked = true;
+            else remaining = remaining.filter((orphan) => orphan.id !== target.id);
+            // Persisted as it goes, so that whatever this command stops in the
+            // middle of leaves a session naming only ids that are still live.
+            saveRevokeProgress(sessionConfig, { orphans: remaining, ownPermissionRevoked: ownRevoked });
+          } catch (err) {
+            failed.push({ id: target.id, reason: describe(err) });
           }
-        } finally {
-          bridge.close();
         }
+      } finally {
+        bridge.close();
       }
-    } finally {
-      // The local files go only for what was actually revoked. Deleting them
-      // after a partial failure would strand whatever is left exactly the way
-      // an untracked orphan was stranded before it was recorded.
-      if (revokedIds.length === targets.length) {
-        deleteKeystore();
-        deleteSessionConfig();
-      }
+    };
+
+    // Orphans first, one bridge per chain, because an orphan can sit on a chain
+    // the current session does not use: setup takes --chain, so replacing a
+    // session can move it while leaving the old permission where it was.
+    for (const chainId of [...new Set(orphans.map((orphan) => orphan.chainId))]) {
+      await revokeOn(
+        chainId,
+        orphans.filter((orphan) => orphan.chainId === chainId)
+      );
+    }
+    // The session's own permission last, and in its own pass rather than folded
+    // into the grouping above, which orders by chain and could otherwise put it
+    // before an orphan sharing its chain.
+    if (own) await revokeOn(own.chainId, [own]);
+
+    // The local files are what makes anything still live reachable. Deleting
+    // them while something is left strands it exactly the way an unrecorded
+    // permission was stranded before it was recorded.
+    if (failed.length === 0) {
+      deleteKeystore();
+      deleteSessionConfig();
     }
 
     if (format === 'json') {
-      this.outputResult({ revoked: true, skippedOnChain: false, revokedIds }, format);
-    } else {
+      this.outputResult({ revoked: failed.length === 0, skippedOnChain: false, revokedIds, failed }, format);
+    } else if (failed.length === 0) {
       this.log('Session revoked. On-chain permission removed and local keys deleted.');
       if (revokedIds.length > 1) {
         this.log(`Revoked ${revokedIds.length} permissions this key was holding.`);
       }
+    } else {
+      if (revokedIds.length > 0) this.log(`Revoked ${revokedIds.length} of ${total} permissions.`);
+      for (const failure of failed) {
+        this.log(`  could not revoke ${failure.id}: ${failure.reason}`);
+      }
+      this.log('\nLocal session files were kept so the rest can be retried. Run this again.');
+    }
+
+    if (failed.length > 0) {
+      this.error(
+        `${failed.length} of ${total} permissions could not be revoked. ` +
+          'One already revoked elsewhere will keep failing, since the record it is read from is gone.',
+        { exit: 1 }
+      );
     }
   }
+}
+
+/** A remote failure reason, fit to print: it reaches here from the browser. */
+function describe(err: unknown): string {
+  return sanitizeLine(err instanceof Error ? err.message : String(err), 200);
 }

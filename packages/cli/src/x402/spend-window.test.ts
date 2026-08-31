@@ -106,7 +106,17 @@ describe('currentPeriodSpendOnChain', () => {
     h.onChain = { status: 'ok', ...CHAIN_WINDOW, spend: 0n };
 
     const period = await currentPeriodSpendOnChain(POLICY, PAYER, SESSION, NOW);
-    expect(period).toMatchObject({ toppedUp: 5_000_000n, source: 'chain' });
+    // Reported as the ledger's, because that is what it is: our own estimate of
+    // a pull that has not been mined. Calling it the chain's would let the
+    // report print an estimate as a metered total. The window is still the
+    // contract's either way.
+    expect(period).toMatchObject({ toppedUp: 5_000_000n, source: 'ledger', window: CHAIN_WINDOW });
+  });
+
+  it('reports the chain as the source when the two agree', async () => {
+    h.toppedUp = 5_000_000n;
+    h.onChain = { status: 'ok', ...CHAIN_WINDOW, spend: 5_000_000n };
+    expect(await currentPeriodSpendOnChain(POLICY, PAYER, SESSION, NOW)).toMatchObject({ source: 'chain' });
   });
 
   it('counts the ledger over the window the contract is actually in', async () => {

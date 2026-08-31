@@ -27,10 +27,11 @@ const h = vi.hoisted(() => ({
     orphanedPermissions: [] as Array<{ id: string; chainId: number; expiry: number }>,
   },
   deleted: { keystore: false, config: false },
-  saved: [] as Array<Array<{ id: string }>>,
+  saved: [] as Array<{ orphans: Array<{ id: string }>; ownPermissionRevoked: boolean }>,
   requests: [] as Array<{ chainId: number; method: string; params: unknown }>,
   bridges: 0,
   failOn: null as string | null,
+  jsonLines: [] as string[],
 }));
 
 vi.mock('../../lib/config.js', () => ({ loadConfig: () => ({ apiKey: 'k' }) }));
@@ -48,8 +49,11 @@ vi.mock('../../lib/session-config.js', async (importOriginal) => ({
   deleteSessionConfig: () => {
     h.deleted.config = true;
   },
-  saveOrphanedPermissions: (_config: unknown, orphans: Array<{ id: string }>) => {
-    h.saved.push(orphans);
+  saveRevokeProgress: (
+    _config: unknown,
+    progress: { orphans: Array<{ id: string }>; ownPermissionRevoked: boolean }
+  ) => {
+    h.saved.push(progress);
   },
 }));
 
@@ -93,6 +97,7 @@ beforeEach(() => {
 async function runRevoke(argv: string[] = []): Promise<string[]> {
   const cmd = new SessionRevoke(argv, oclifConfig);
   const lines: string[] = [];
+  h.jsonLines = lines;
   Object.assign(cmd, {
     log: (message?: string) => {
       lines.push(String(message ?? ''));
@@ -161,9 +166,43 @@ describe('jaw session revoke', () => {
   it('keeps the local files when a revoke did not go through', async () => {
     h.session.orphanedPermissions = [{ id: '0xorphan', chainId: 84532, expiry: Math.floor(Date.now() / 1000) + 86400 }];
     h.failOn = '0xorphan';
-    await expect(runRevoke()).rejects.toThrow(/user rejected/);
-    expect(revokedIds()).toEqual([]);
+    await expect(runRevoke()).rejects.toThrow(/could not be revoked/);
     expect(h.deleted).toEqual({ keystore: false, config: false });
+  });
+
+  /**
+   * The case that matters most here. A permission revoked from keys.jaw.id or
+   * another machine can never be revoked again: core reads it from the relay
+   * first, and the relay no longer has it. Letting that abort the batch would
+   * mean the command a user runs to end their agent's spending authority
+   * returns without ending it, every time, for as long as the dead id is on
+   * file.
+   */
+  it('still revokes the live permission when an orphan cannot be revoked at all', async () => {
+    h.session.orphanedPermissions = [{ id: '0xgone', chainId: 84532, expiry: Math.floor(Date.now() / 1000) + 86400 }];
+    h.failOn = '0xgone';
+
+    await expect(runRevoke()).rejects.toThrow(/could not be revoked/);
+
+    expect(revokedIds()).toEqual(['0xcurrent']);
+    // Recorded as revoked, so the retry works through what is left instead of
+    // spending a browser round trip on an id that is already gone.
+    expect(h.saved.at(-1)).toEqual({
+      orphans: [{ id: '0xgone', chainId: 84532, expiry: expect.any(Number) }],
+      ownPermissionRevoked: true,
+    });
+  });
+
+  it('reports the failure without hiding what did get revoked', async () => {
+    h.session.orphanedPermissions = [{ id: '0xgone', chainId: 84532, expiry: Math.floor(Date.now() / 1000) + 86400 }];
+    h.failOn = '0xgone';
+    const lines = await runRevoke(['--output', 'json']).catch(() => h.jsonLines);
+    const report = JSON.parse(lines.join('\n'));
+    expect(report).toMatchObject({
+      revoked: false,
+      revokedIds: ['0xcurrent'],
+      failed: [{ id: '0xgone' }],
+    });
   });
 
   /**
@@ -180,17 +219,25 @@ describe('jaw session revoke', () => {
     ];
     h.failOn = '0xcurrent';
 
-    await expect(runRevoke()).rejects.toThrow(/user rejected/);
+    await expect(runRevoke()).rejects.toThrow(/could not be revoked/);
 
     expect(revokedIds()).toEqual(['0xorphanA', '0xorphanB']);
     // Written after each one, and the last write names nothing still to do:
     // the only permission left is the one the config already names.
-    expect(h.saved.map((orphans) => orphans.map((o) => o.id))).toEqual([['0xorphanB'], []]);
+    expect(h.saved.map((progress) => progress.orphans.map((o) => o.id))).toEqual([['0xorphanB'], []]);
+    expect(h.saved.every((progress) => !progress.ownPermissionRevoked)).toBe(true);
     expect(h.deleted).toEqual({ keystore: false, config: false });
   });
 
-  it('does not rewrite the session when there was nothing orphaned to drop', async () => {
+  /**
+   * Written before the files are deleted, and deliberately: a process killed
+   * between the revoke landing and the cleanup leaves a session that knows its
+   * permission is gone, rather than one that will spend a browser round trip
+   * failing on it.
+   */
+  it('records the session permission as spent before cleaning up', async () => {
     await runRevoke();
-    expect(h.saved).toEqual([]);
+    expect(h.saved).toEqual([{ orphans: [], ownPermissionRevoked: true }]);
+    expect(h.deleted).toEqual({ keystore: true, config: true });
   });
 });

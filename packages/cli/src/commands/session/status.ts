@@ -28,10 +28,13 @@ export default class SessionStatus extends BaseCommand {
     // leaves this file saying the session is fine. Fails soft to 'unknown',
     // which is what a session written before the struct was stored reports.
     const liveness = await readLiveness(config);
-    // What this key holds beyond the permission the session names. Before setup
-    // recorded these, the id was lost with the overwritten config and nothing
-    // could revoke them.
-    const alsoHolds = liveOrphans(config.orphanedPermissions, now);
+    // Permissions from earlier sessions that are still live on chain. Said in
+    // terms of the permission rather than of this key: setup generates a fresh
+    // key whenever it is not reusing one, and `--yes` always does, so the key
+    // that could exercise these is usually gone. The grant on the account is
+    // what outlives the session, and before setup recorded the id it could not
+    // be revoked at all.
+    const stillLive = liveOrphans(config.orphanedPermissions, now);
 
     if (format === 'json') {
       this.outputResult(
@@ -39,7 +42,7 @@ export default class SessionStatus extends BaseCommand {
           ...config,
           expired: isExpired,
           permissionOnChain: liveness,
-          ...(alsoHolds.length > 0 ? { alsoHolds } : {}),
+          ...(stillLive.length > 0 ? { stillLiveOnChain: stillLive } : {}),
         },
         format
       );
@@ -54,7 +57,7 @@ export default class SessionStatus extends BaseCommand {
       this.log(`  Permission ID:    ${config.permissionId}${onChainNote(liveness)}`);
       this.log(`  Chain:            ${config.chainId}`);
       this.log(`  Expired:          ${new Date(config.expiry * 1000).toISOString()} (${ago} days ago)`);
-      if (alsoHolds.length > 0) this.log(alsoHoldsLine(alsoHolds.length));
+      if (stillLive.length > 0) this.log(stillLiveLine(stillLive.length));
       this.log('\nRun `jaw session setup` to create a new session.');
     } else {
       const remaining = Math.floor((config.expiry - now) / 86400);
@@ -78,7 +81,7 @@ export default class SessionStatus extends BaseCommand {
           ? '  Status:           Revoked on chain. Run `jaw session setup` to create a new session.'
           : `  Status:           Valid (${remaining} days remaining)`
       );
-      if (alsoHolds.length > 0) this.log(alsoHoldsLine(alsoHolds.length));
+      if (stillLive.length > 0) this.log(stillLiveLine(stillLive.length));
     }
   }
 }
@@ -96,13 +99,12 @@ function onChainNote(liveness: PermissionLiveness): string {
 }
 
 /**
- * Said whenever the key holds more than the session names, because that is the
- * difference between what the config describes and what the key can actually
- * do.
+ * Said whenever earlier sessions left grants behind, because that is authority
+ * on the account which this session does not describe and nothing else reports.
  */
-function alsoHoldsLine(count: number): string {
+function stillLiveLine(count: number): string {
   return (
-    `  Also holds:       ${count} permission${count === 1 ? '' : 's'} this session does not name ` +
+    `  Still live:       ${count} permission${count === 1 ? '' : 's'} from earlier sessions ` +
     '(`jaw session revoke` removes them too)'
   );
 }

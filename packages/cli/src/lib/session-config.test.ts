@@ -26,7 +26,7 @@ const {
   deleteSessionConfig,
   parseGrantedPermission,
   liveOrphans,
-  saveOrphanedPermissions,
+  saveRevokeProgress,
 } = await import('./session-config.js');
 const { PATHS } = await import('./paths.js');
 
@@ -248,14 +248,14 @@ describe('liveOrphans', () => {
  * that a failure part way through leaves a file naming only ids that are still
  * live. Revoking is not idempotent, so a stale id in there breaks the retry.
  */
-describe('saveOrphanedPermissions', () => {
+describe('saveRevokeProgress', () => {
   const orphan = { id: '0xorphan', chainId: 8453, expiry: Math.floor(Date.now() / 1000) + 86400 };
 
   it('replaces the list without touching the rest of the session', () => {
     saveSessionConfig({ ...SAMPLE_CONFIG, orphanedPermissions: [orphan] });
     const before = loadSessionConfig();
 
-    saveOrphanedPermissions(before, []);
+    saveRevokeProgress(before, { orphans: [], ownPermissionRevoked: false });
 
     const after = loadSessionConfig();
     expect(after.orphanedPermissions).toBeUndefined();
@@ -271,7 +271,7 @@ describe('saveOrphanedPermissions', () => {
     saveSessionConfig({ ...SAMPLE_CONFIG, orphanedPermissions: [orphan] });
     const before = loadSessionConfig();
 
-    saveOrphanedPermissions(before, []);
+    saveRevokeProgress(before, { orphans: [], ownPermissionRevoked: false });
 
     expect(loadSessionConfig().createdAt).toBe(before.createdAt);
   });
@@ -279,7 +279,25 @@ describe('saveOrphanedPermissions', () => {
   it('keeps the file at 0o600', () => {
     saveSessionConfig(SAMPLE_CONFIG);
     fs.chmodSync(PATHS.sessionConfig, 0o644);
-    saveOrphanedPermissions(loadSessionConfig(), [orphan]);
+    saveRevokeProgress(loadSessionConfig(), { orphans: [orphan], ownPermissionRevoked: false });
     expect(fs.statSync(PATHS.sessionConfig).mode & 0o777).toBe(0o600);
+  });
+
+  /**
+   * A revoked permission leaves a session that can do nothing, and `expiry` is
+   * already the flag every caller reads to decide that. It is also what stops
+   * the next revoke from spending a browser round trip on an id the relay no
+   * longer has, since revoking is not idempotent.
+   */
+  it('expires the session once its own permission is revoked', () => {
+    saveSessionConfig({ ...SAMPLE_CONFIG, orphanedPermissions: [orphan] });
+    const before = loadSessionConfig();
+    expect(before.expiry).toBeGreaterThan(Date.now() / 1000);
+
+    saveRevokeProgress(before, { orphans: [orphan], ownPermissionRevoked: true });
+
+    const after = loadSessionConfig();
+    expect(after.expiry).toBeLessThanOrEqual(Math.ceil(Date.now() / 1000));
+    expect(after.orphanedPermissions).toEqual([orphan]);
   });
 });

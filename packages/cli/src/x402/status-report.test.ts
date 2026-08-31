@@ -77,8 +77,15 @@ describe('diagnose', () => {
     expect(diagnose({ ...healthy, liveness: 'unapproved' })[0]).toMatch(/no record of this permission/);
   });
 
-  it('flags a stored permission that does not hash to the granted one', () => {
-    expect(diagnose({ ...healthy, liveness: 'mismatch' })[0]).toMatch(/does not match the one that was granted/);
+  /**
+   * A mismatch says the struct on disk does not hash to the granted id, so the
+   * chain cannot be asked about this permission. Nothing about the permission
+   * is wrong: the caps still apply and payments still go through. Counting it
+   * as a problem flipped `ready` to false and stopped agents paying against a
+   * healthy session over a local serialisation issue.
+   */
+  it('does not treat a struct that fails to hash as a reason to stop paying', () => {
+    expect(diagnose({ ...healthy, liveness: 'mismatch' })).toEqual([]);
   });
 
   /**

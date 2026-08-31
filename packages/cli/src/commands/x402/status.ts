@@ -58,10 +58,13 @@ export default class X402Status extends BaseCommand {
 
     const asset = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === session.chainId);
     const payer = sessionPayerAddress();
-    // Permissions this key still holds that the session does not name. The caps
-    // below describe one permission; the payer's real authority is the sum, and
-    // reporting only the current one understates it.
-    const alsoHolds = liveOrphans(session.orphanedPermissions, now);
+    // Permissions from earlier sessions that are still live on chain and that
+    // the caps below do not describe. Said in terms of the permission rather
+    // than of this key: setup generates a fresh key whenever it is not reusing
+    // one, and `--yes` always does, so the key that could exercise these is
+    // usually gone from this machine. What is left is a grant on the account
+    // that nothing here meters and that outlives the session that made it.
+    const stillLive = liveOrphans(session.orphanedPermissions, now);
 
     // Network reads, all of them failing soft. The local half of the answer
     // (caps, spend, expiry) is still worth printing, and an unreachable RPC is
@@ -126,7 +129,7 @@ export default class X402Status extends BaseCommand {
           problems,
           chainId: session.chainId,
           permission: { id: session.permissionId, onChain: liveness },
-          ...(alsoHolds.length > 0 ? { alsoHolds } : {}),
+          ...(stillLive.length > 0 ? { stillLiveOnChain: stillLive } : {}),
           owner: { address: session.ownerAddress, usdc: ownerBalance },
           payer: { address: payer, usdc: payerBalance },
           policy: {
@@ -167,10 +170,10 @@ export default class X402Status extends BaseCommand {
     if (liveness !== 'unknown') {
       this.log(`  perm    ${session.permissionId}   ${LIVENESS_LABEL[liveness]}`);
     }
-    if (alsoHolds.length > 0) {
+    if (stillLive.length > 0) {
       this.log(
-        `          this key also holds ${alsoHolds.length} permission${alsoHolds.length === 1 ? '' : 's'} ` +
-          'the caps below do not cover; `jaw session revoke` removes them too'
+        `          ${stillLive.length} permission${stillLive.length === 1 ? '' : 's'} from earlier sessions ` +
+          'still live on this account; `jaw session revoke` removes them too'
       );
     }
     this.log(`  caps    ${formatUsdc(policy.maxAmountPerPayment, decimals)} per payment`);

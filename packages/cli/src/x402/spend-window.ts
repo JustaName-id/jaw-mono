@@ -16,9 +16,12 @@ export interface PeriodSpend {
    */
   toppedUp: bigint;
   /**
-   * Where the window and `toppedUp` came from. The ledger only sees what went
-   * through `payAndFetch`, so from it both are floors; from the chain they are
-   * the figures the contract will meter against.
+   * Where `toppedUp` came from, which is what decides whether it is a floor or
+   * a total: the ledger only sees what went through `payAndFetch`, while the
+   * chain's figure is what the contract will meter against. It describes the
+   * number and not the window, because the two can disagree: when the chain
+   * answers, the window is always the contract's, and `toppedUp` is whichever
+   * of the two figures is higher.
    */
   source: 'ledger' | 'chain';
 }
@@ -116,10 +119,15 @@ export async function currentPeriodSpendOnChain(
   const window = { start: onChain.start, end: onChain.end };
   const since = new Date(window.start * 1000).toISOString();
   const fromLedger = sumToppedUpSince(payerAddress, since);
+  // Which figure won decides the source, not the fact that the chain answered.
+  // When the ledger wins, the number is our own estimate of a pull that has not
+  // been mined yet, and calling it the contract's would print an estimate as a
+  // metered total.
+  const metered = onChain.spend >= fromLedger;
   return {
     window,
     spent: sumSpentSince(payerAddress, since),
-    toppedUp: onChain.spend > fromLedger ? onChain.spend : fromLedger,
-    source: 'chain',
+    toppedUp: metered ? onChain.spend : fromLedger,
+    source: metered ? 'chain' : 'ledger',
   };
 }

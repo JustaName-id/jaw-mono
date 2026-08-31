@@ -101,13 +101,13 @@ export function diagnose(facts: StatusFacts): string[] {
     );
   }
 
-  if (facts.liveness === 'mismatch') {
-    problems.push(
-      'The permission stored for this session does not match the one that was granted, so its ' +
-        'on-chain state cannot be read. Payments still work, and the caps shown below are the local ' +
-        'ones. Run `jaw session setup --x402` to resync.'
-    );
-  }
+  // `mismatch` is deliberately not here. It says the struct on disk does not
+  // hash to the granted id, so the chain cannot be asked about this permission,
+  // and nothing about the permission itself is wrong: the caps still apply and
+  // payments still go through. Putting it in `problems` flipped `ready` to
+  // false, which stops a script or an agent paying against a healthy session
+  // over a local serialisation problem. It is reported on the permission line
+  // instead.
 
   if (facts.outdated) {
     problems.push(
