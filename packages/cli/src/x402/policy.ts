@@ -262,8 +262,12 @@ const eqAddr = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
  * number nobody knows yet. Saying so in the refusal is the difference between a
  * user understanding why a five dollar ceiling was refused on a service that
  * charges a fraction of a cent, and thinking the cap is broken.
+ *
+ * Exported because the caps are not the only thing that refuses over this
+ * number: `--max-amount` does too, from the selection loop, and a refusal that
+ * spelled it differently there would teach the reader the ceiling is a price.
  */
-const asks = (requirement: X402PaymentRequirement): string =>
+export const asks = (requirement: X402PaymentRequirement): string =>
   requirement.scheme === 'upto' ? `up to ${requirement.amount}` : requirement.amount;
 
 /**

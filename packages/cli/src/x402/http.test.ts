@@ -891,6 +891,23 @@ describe('choosing between schemes', () => {
     return result.wouldPay;
   };
 
+  /**
+   * Every other refusal over this number says "up to" for an `upto` option. The
+   * `--max-amount` one used to print the ceiling bare, which is the one
+   * confusion the scheme has to avoid: a ceiling read as a price makes a five
+   * dollar authorization on a service charging a fraction of a cent look like a
+   * five dollar charge.
+   */
+  it('names a refused ceiling as a ceiling, --max-amount included', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeOf(upto('5000000')) }, body: '{}' })
+    );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, { maxAmount: '1000000' });
+
+    expect(result.refusedReason).toContain('amount up to 5000000 exceeds maxAmount');
+  });
+
   it('takes the smaller figure whichever scheme carries it', async () => {
     expect(await chosen(exact('900'), upto('400'))).toMatchObject({ amount: '400' });
     expect(await chosen(upto('900'), exact('400'))).toMatchObject({ amount: '400' });

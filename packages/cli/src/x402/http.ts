@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { errorMessage } from '../lib/errors.js';
 import { parseBigInt } from './amount.js';
 import { encodePaymentPayload } from './scheme-exact-evm.js';
-import { checkPolicy, type PolicyContext, type X402Policy } from './policy.js';
+import { asks, checkPolicy, type PolicyContext, type X402Policy } from './policy.js';
 import type { Payer } from './payer.js';
 import {
   X402_HEADERS,
@@ -415,7 +415,7 @@ function selectRequirement(accepts: unknown[], opts: PayAndFetchOptions, ctx: Po
         continue;
       }
       if (amount > cap) {
-        reason = `amount ${req.amount} exceeds maxAmount ${opts.maxAmount}`;
+        reason = `amount ${asks(req)} exceeds maxAmount ${opts.maxAmount}`;
         continue;
       }
     }
