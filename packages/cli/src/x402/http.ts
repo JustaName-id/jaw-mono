@@ -184,8 +184,19 @@ export function settledAmountOf(receipt: X402SettleResponse | null, scheme: stri
   // `amount: 0`, never calls the proxy, and the cumulative caps never move
   // while it accumulates live authorizations worth the ceiling each, every one
   // of them settleable until its deadline. So the figure may only come down on
-  // a receipt that claims success AND names a well-formed transaction; anything
-  // else is read as the whole ceiling and costs the server its own budget.
+  // a receipt that claims success and names something shaped like a
+  // transaction; anything else is read as the whole ceiling.
+  //
+  // Shaped like one is all it is. The hash is never looked up, so this raises
+  // the price of under-reporting to fabricating 64 hex characters and does not
+  // prove a settlement happened. A server willing to do that reports one base
+  // unit against a thousand-unit ceiling, leaves the Permit2 nonce unconsumed,
+  // and holds a live authorization for the full ceiling until the deadline
+  // while the caps counted one. What still bounds that is the on-chain
+  // permission's per-period allowance, which is where the payer's funds come
+  // from; what is defeated is this local accounting. Closing it means checking
+  // the amount against the transaction the receipt names, which is what the
+  // nonce and hash on every ledger row are stored for.
   if (receipt?.success !== true || !settledTxHash(receipt)) return authorized;
   const reported = parseBigInt(receipt.amount ?? '');
   if (reported === null || reported < 0n) return authorized;

@@ -825,8 +825,21 @@ describe('settledAmountOf', () => {
   const TX = ('0x' + 'ab'.repeat(32)) as `0x${string}`;
   const ceiling = '5000000';
 
-  it('reads the settled figure from a receipt that evidences a settlement', () => {
+  it('reads the settled figure from a receipt that claims a settlement', () => {
     expect(settledAmountOf({ success: true, transaction: TX, amount: '40' }, 'upto', ceiling)).toBe('40');
+  });
+
+  /**
+   * Locked in as a known limit, not as a guarantee. The hash is shape-checked
+   * and never looked up, so a server that fabricates 64 hex characters can
+   * report one base unit against the ceiling and keep a live authorization for
+   * the rest until the deadline. What bounds that is the on-chain permission,
+   * not this function; closing it needs the amount checked against the
+   * transaction the receipt names.
+   */
+  it('cannot tell a real transaction from 64 hex characters', () => {
+    const invented = ('0x' + 'f'.repeat(64)) as `0x${string}`;
+    expect(settledAmountOf({ success: true, transaction: invented, amount: '1' }, 'upto', ceiling)).toBe('1');
   });
 
   it('refuses to come down for a receipt that names no transaction', () => {
