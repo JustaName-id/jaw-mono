@@ -1146,8 +1146,26 @@ export class Account {
 
         const calls = prefundCall ? [prefundCall, permissionCall] : [permissionCall];
 
-        // Check if we need an ERC-20 approval for the paymaster
-        const approvalCall = await this.createErc20ApprovalCall(paymaster.url, paymaster.context, calls, smartAccount);
+        // Check if we need an ERC-20 approval for the paymaster.
+        //
+        // A `gas` in the context is a ceiling the caller sized, and the caller
+        // sized it off a batch that could not have had the prefund transfer in
+        // it: the wallet estimates the grant, and the transfer is added here.
+        // So when one was added, ask for the ceiling to be measured again with
+        // the batch that will actually be sent. The caller's figure stays as
+        // the fallback, because losing the grant to a sizing that could not run
+        // is worse than an approval that is a transfer short.
+        const resized = prefundCall && paymaster.context?.gas !== undefined;
+        const sizingContext = resized
+            ? Object.fromEntries(Object.entries(paymaster.context ?? {}).filter(([key]) => key !== 'gas'))
+            : paymaster.context;
+        let approvalCall: { to: Address; value?: bigint; data: Hex } | null;
+        try {
+            approvalCall = await this.createErc20ApprovalCall(paymaster.url, sizingContext, calls, smartAccount);
+        } catch (error) {
+            if (!resized) throw error;
+            approvalCall = await this.createErc20ApprovalCall(paymaster.url, paymaster.context, calls, smartAccount);
+        }
 
         return await grantSmartAccountPermissions(
             smartAccount,
