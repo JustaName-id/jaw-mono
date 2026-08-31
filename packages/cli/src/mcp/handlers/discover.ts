@@ -5,7 +5,20 @@ import { discoverServices, type DiscoverParams } from '../../x402/discover.js';
 import { tryLoadSessionConfig } from '../../lib/session-config.js';
 
 export function registerDiscoverTool(server: McpServer): void {
-  server.registerTool(
+  // The SDK's registerTool generic inference over this schema is deep enough
+  // that adding anything to the handler body trips TS2589. Called through an
+  // explicit signature so the deep instantiation never happens, the same way
+  // `jaw_config_set` is.
+  type RegisterDiscover = (
+    name: string,
+    config: {
+      description: string;
+      inputSchema: typeof discoverSchema;
+      annotations: { readOnlyHint: boolean; openWorldHint: boolean };
+    },
+    handler: (params: DiscoverParams) => Promise<unknown>
+  ) => void;
+  (server.registerTool as unknown as RegisterDiscover)(
     'jaw_discover',
     {
       description:
@@ -32,8 +45,14 @@ export function registerDiscoverTool(server: McpServer): void {
         // preferring the session's chain never hides a service. Defaulting to
         // Base showed a mainnet price to a session that could only pay on
         // Sepolia.
-        const network = params.network ?? sessionNetwork();
-        return mcpDiscoverResult(await discoverServices({ ...params, ...(network ? { network } : {}) }));
+        // Filled in place rather than copied into a new object: the SDK's
+        // registerTool inference over this schema is deep enough that building
+        // one here trips TS2589, the same way it does in the config handler.
+        if (!params.network) {
+          const network = sessionNetwork();
+          if (network) params.network = network;
+        }
+        return mcpDiscoverResult(await discoverServices(params));
       } catch (err) {
         return mcpError(err);
       }

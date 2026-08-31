@@ -117,6 +117,14 @@ Set `allowedPayTo` to the recipients you expect. It pins where funds can go even
 
 These keys are deliberately unreachable from the MCP tools. An agent must not be able to raise its own spending caps, only a human at a terminal.
 
+The same split covers what an agent may ask to be granted. An agent with shell access can run `jaw session setup --x402 --limit` itself, and without a bound the browser approval screen is the only check on the number it picks. Set a ceiling once, at a terminal:
+
+```bash
+jaw config set grantCeiling 10/day
+```
+
+A grant is refused when it asks for more than that allowance, or when it resets more often than that period, since the same allowance on a shorter period is more money over the same time. It is checked against the resolved permission, so a hand-written `--permissions` is bounded by it too. Unset means no ceiling.
+
 :::warning
 These caps bound `jaw x402 pay` and `jaw_pay_and_fetch`. They are not a bound on the session itself. A session key can also be driven through `jaw_rpc`, and a `wallet_sendCalls` sent that way spends the permission directly: no cap here applies to it, and it leaves no ledger row. `jaw x402 status` reads the period figure off the chain when it can, so it still sees that spend; the session total is counted from the ledger alone and stays a floor.
 

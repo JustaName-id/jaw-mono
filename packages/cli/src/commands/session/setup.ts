@@ -22,6 +22,7 @@ import { parsePermissionsConfig } from '../../lib/validation.js';
 import { extractGrantedSpend } from '../../x402/policy.js';
 import { buildX402Permissions, describeX402Grant, DEFAULT_X402_LIMIT } from '../../x402/grant-preset.js';
 import { whyOwnerCannotFundSession, whySpenderCannotPay } from '../../x402/funded-owner.js';
+import { whyGrantExceedsCeiling } from '../../x402/grant-ceiling.js';
 
 export default class SessionSetup extends BaseCommand {
   static override description =
@@ -213,6 +214,14 @@ export default class SessionSetup extends BaseCommand {
         limit: flags.limit,
         chainId,
       });
+
+      // 2.5 A ceiling the human set at a terminal, checked against the resolved
+      //      permission rather than the --limit string so a hand-written
+      //      --permissions is bounded by the same number. Before the browser,
+      //      because the point is to stop a number reaching a screen someone
+      //      clicks through.
+      const overCeiling = whyGrantExceedsCeiling(permissions, chainId, config.grantCeiling);
+      if (overCeiling) this.error(overCeiling);
 
       // 3. Resolve expiry
       const expiryDays = flags.expiry ?? config.sessionExpiry ?? 7;

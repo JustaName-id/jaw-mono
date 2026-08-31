@@ -1,8 +1,20 @@
 import { BaseCommand } from '../../base-command.js';
 import { setConfigValue, setX402PolicyValue } from '../../lib/config.js';
 import { isX402PolicyKey } from '../../x402/policy.js';
+import { parseLimit } from '../../x402/grant-preset.js';
 
-const VALID_KEYS = ['apiKey', 'defaultChain', 'keysUrl', 'ens', 'relayUrl', 'sessionExpiry'] as const;
+const VALID_KEYS = [
+  'apiKey',
+  'defaultChain',
+  'keysUrl',
+  'ens',
+  'relayUrl',
+  'sessionExpiry',
+  // Settable here and nowhere else. Like the x402 policy fields below, the MCP
+  // tool cannot reach it, so an agent cannot raise the ceiling on what it is
+  // allowed to ask a human to approve.
+  'grantCeiling',
+] as const;
 
 type ValidKey = (typeof VALID_KEYS)[number];
 
@@ -71,6 +83,16 @@ export default class ConfigSet extends BaseCommand {
 
       if (!isValidKey(key)) {
         this.error(`Invalid config key: ${key}`);
+      }
+      // Parsed while the user is still looking at what they typed. A ceiling
+      // that cannot be read refuses every grant, which is safe but reports the
+      // mistake a long way from where it was made. An empty value clears it.
+      if (key === 'grantCeiling' && value.trim() !== '') {
+        try {
+          parseLimit(value);
+        } catch (err) {
+          this.error(`Invalid grantCeiling: ${err instanceof Error ? err.message : String(err)}`);
+        }
       }
       // setConfigValue coerces + validates numeric keys (defaultChain,
       // sessionExpiry) in one place, shared with the MCP tool path.
