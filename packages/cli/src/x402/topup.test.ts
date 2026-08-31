@@ -348,6 +348,55 @@ describe('Permit2 approval for upto', () => {
     expect(approved).toEqual([BASE_SEPOLIA_USDC]);
   });
 
+  /**
+   * The approval is a userOp the payer pays for out of its own USDC, and the
+   * top-up is what puts USDC there. Approving first meant the first upto
+   * payment of a session refused on a payer that had never been funded, which
+   * is its normal state since the top-up is lazy.
+   */
+  test('funds the payer before asking it to pay for its own approval', async () => {
+    const order: string[] = [];
+    const base = fakeExecutor();
+    const executor: TopUpExecutor = {
+      async request(method, params) {
+        order.push(method);
+        return base.executor.request(method, params);
+      },
+      approvePermit2: async () => {
+        order.push('approvePermit2');
+        return '0xapproval1';
+      },
+    };
+
+    const outcome = await ensurePayerFunds(uptoRequirement(), PAYER, executor, {
+      ...instantly,
+      balanceReader: async () => 0n,
+      allowanceReader: async () => 0n,
+    });
+
+    expect(outcome.ok).toBe(true);
+    expect(order[0]).toBe('wallet_sendCalls');
+    expect(order.indexOf('wallet_sendCalls')).toBeLessThan(order.indexOf('approvePermit2'));
+  });
+
+  /**
+   * Holding exactly the price is holding nothing to be charged with, so the
+   * bar for skipping the top-up rises by the reserve whenever an approval is
+   * still owed.
+   */
+  test('tops up a payer that holds the price and nothing to pay the approval with', async () => {
+    const { executor, approved, requests, opts } = approving(0n);
+
+    const outcome = await ensurePayerFunds(uptoRequirement('1000000'), PAYER, executor, {
+      ...opts,
+      balanceReader: async () => 1_000_000n,
+    });
+
+    expect(outcome.ok).toBe(true);
+    expect(requests.some((r) => r.method === 'wallet_sendCalls')).toBe(true);
+    expect(approved).toEqual([BASE_SEPOLIA_USDC]);
+  });
+
   test('does not grant it again once the allowance covers the ceiling', async () => {
     const { executor, approved, opts } = approving(10n ** 30n);
 

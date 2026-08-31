@@ -154,9 +154,18 @@ export async function ensurePayerFunds(
     return { ok: false, reason: `non-numeric payment amount: ${requirement.amount}` };
   }
 
+  // Whether Permit2 still needs an allowance is read here, before the balance,
+  // because the answer changes how much the payer needs. Granting it is a
+  // userOp the payer pays for out of its own USDC, so it has to happen AFTER
+  // the top-up, not before: the top-up is lazy, a payer that has not paid yet
+  // sits at zero, and approving first meant the approval could not be priced
+  // and the payment was refused without ever reaching the funding that would
+  // have covered it.
+  let approvalNeeded = false;
   if (requirement.scheme === 'upto') {
-    const approved = await ensurePermit2Allowance(asset, payerAddress, price, executor, opts);
-    if (!approved.ok) return approved;
+    const status = await permit2ApprovalStatus(asset, payerAddress, price, executor, opts);
+    if (!status.ok) return { ok: false, reason: status.reason };
+    approvalNeeded = status.needed;
   }
 
   const read = opts.balanceReader;
@@ -164,12 +173,22 @@ export async function ensurePayerFunds(
     ? await read(asset, payerAddress)
     : BigInt((await usdcBalance(requirement.network, payerAddress)).raw);
 
-  if (balance >= price) {
+  // A payer holding exactly the price can pay it and nothing else, so when an
+  // approval is still owed the bar is the price plus something to be charged
+  // against. The reserve is 0.1 USDC against roughly 0.01 an operation, so one
+  // covers the approval with room to spare.
+  const needed = approvalNeeded ? price + gasReserve(asset) : price;
+
+  if (balance >= needed) {
+    if (approvalNeeded) {
+      const granted = await grantPermit2Allowance(asset, executor, opts);
+      if (!granted.ok) return { ok: false, reason: granted.reason };
+    }
     return { ok: true, skipped: true };
   }
 
-  const shortfall = price - balance;
-  const target = opts.floatTarget !== undefined && opts.floatTarget > price ? opts.floatTarget : price;
+  const shortfall = needed - balance;
+  const target = opts.floatTarget !== undefined && opts.floatTarget > needed ? opts.floatTarget : needed;
   // The payer is the account this userOp is sent from, so it is the one the
   // ERC-20 paymaster charges, in postOp and right after this transfer lands.
   // Pulling only what the payment costs leaves nothing for the fee, so the fee
@@ -226,14 +245,28 @@ export async function ensurePayerFunds(
     subject: 'top-up',
     onChainFailure: 'top-up transaction failed on-chain (spending cap reached, or permission expired/revoked)',
   });
-  return confirmed.ok
-    ? { ok: true, amount: amount.toString(), batchId }
-    : { ok: false, reason: confirmed.reason, amount: amount.toString(), batchId };
+  if (!confirmed.ok) {
+    return { ok: false, reason: confirmed.reason, amount: amount.toString(), batchId };
+  }
+
+  // Past this line the transfer landed, so the refusal below still carries the
+  // trace: the caller writes its audit row from these fields, and money that
+  // moved has to reach the ledger whatever happens next.
+  if (approvalNeeded) {
+    const granted = await grantPermit2Allowance(asset, executor, opts);
+    if (!granted.ok) {
+      return { ok: false, reason: granted.reason, amount: amount.toString(), batchId };
+    }
+  }
+
+  return { ok: true, amount: amount.toString(), batchId };
 }
 
 /**
- * Make sure Permit2 may move the payer's token, granting the allowance once if
- * it may not.
+ * Whether Permit2 still needs an allowance from this payer, and whether this
+ * session is in a position to grant one. Split from the granting below because
+ * the answer is needed before the balance branch: the approval is a userOp the
+ * payer pays for, so it decides how much the top-up has to pull.
  *
  * `upto` settles through Permit2 rather than by EIP-3009, and Permit2 pulls the
  * token through the canonical ERC-20 allowance. Without it the proxy cannot
@@ -253,13 +286,13 @@ export async function ensurePayerFunds(
  * reaches the manager, whose approval revocation and Permit2 lockdown both act
  * on the granting account and only within their own execution.
  */
-async function ensurePermit2Allowance(
+async function permit2ApprovalStatus(
   asset: UsdcAsset,
   payerAddress: `0x${string}`,
   needed: bigint,
   executor: TopUpExecutor,
   opts: TopUpOptions
-): Promise<{ ok: boolean; reason?: string }> {
+): Promise<{ ok: true; needed: boolean } | { ok: false; reason: string }> {
   const read = opts.allowanceReader ?? readAllowance;
   let allowance: bigint;
   try {
@@ -267,8 +300,11 @@ async function ensurePermit2Allowance(
   } catch (err) {
     return { ok: false, reason: `could not read the payer's Permit2 allowance: ${errorMessage(err)}` };
   }
-  if (allowance >= needed) return { ok: true };
+  if (allowance >= needed) return { ok: true, needed: false };
 
+  // Refused here rather than after the top-up: a session that cannot grant the
+  // allowance cannot pay this challenge at all, and moving funds first would
+  // spend the permission's budget on a payment that was never going to happen.
   if (!executor.approvePermit2) {
     return {
       ok: false,
@@ -278,9 +314,19 @@ async function ensurePermit2Allowance(
     };
   }
 
+  return { ok: true, needed: true };
+}
+
+/** Send the approval and wait for it. Only called once the payer can pay for it. */
+async function grantPermit2Allowance(
+  asset: UsdcAsset,
+  executor: TopUpExecutor,
+  opts: TopUpOptions
+): Promise<{ ok: boolean; reason?: string }> {
   let batchId: string;
   try {
-    batchId = await executor.approvePermit2(asset.address);
+    // Non-null: `permit2ApprovalStatus` refuses when the executor cannot grant.
+    batchId = await executor.approvePermit2!(asset.address);
   } catch (err) {
     return { ok: false, reason: `Permit2 approval refused: ${errorMessage(err)}` };
   }
