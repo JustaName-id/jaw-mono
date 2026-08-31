@@ -1,6 +1,7 @@
-import { USDC_BY_NETWORK } from './asset-registry.js';
+import { USDC_BY_NETWORK, usdcForNetwork } from './asset-registry.js';
 import { parseBigInt, parseNonNegativeBigInt } from './amount.js';
 import { describePeriod, normalizePeriod, type PeriodUnit } from './period.js';
+import { UPTO_VERIFIED_CHAIN_IDS } from './permit2.js';
 import { isX402Scheme, type X402PaymentRequirement } from './types.js';
 import type { GrantedSpend } from '../lib/session-config.js';
 
@@ -278,6 +279,27 @@ export function checkPolicy(
   // to the union, so this is a runtime check and not a redundant one.
   if (!isX402Scheme(requirement.scheme)) {
     return { ok: false, reason: `unsupported scheme: ${String(requirement.scheme)}` };
+  }
+
+  // The settlement proxy is deployed on fewer chains than the asset registry
+  // knows, and a permit naming a spender with no code can never settle. The
+  // check belongs here rather than in the signer: this runs during selection,
+  // so an `upto` option on an unverified chain is skipped instead of shadowing
+  // a payable `exact` option on the same challenge, a dry run reports the
+  // refusal a real run would make, and nothing has been funded yet when it does.
+  if (requirement.scheme === 'upto') {
+    const asset = usdcForNetwork(requirement.network);
+    if (!asset) {
+      return { ok: false, reason: `unsupported x402 network: ${requirement.network}` };
+    }
+    if (!UPTO_VERIFIED_CHAIN_IDS.includes(asset.chainId)) {
+      return {
+        ok: false,
+        reason:
+          `x402 upto is not available on ${requirement.network}: the settlement proxy is only verified on ` +
+          `chain ids ${UPTO_VERIFIED_CHAIN_IDS.join(', ')}`,
+      };
+    }
   }
 
   if (has(policy.allowedNetworks) && !policy.allowedNetworks.includes(requirement.network)) {

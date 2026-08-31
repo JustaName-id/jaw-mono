@@ -93,7 +93,9 @@ export async function buildUptoPayment(
   const asset = usdcForNetwork(requirement.network);
   if (!asset) throw new Error(`Unsupported x402 network: ${requirement.network}`);
   // The registry knows more chains than the proxy was verified on, and a permit
-  // pointing at a spender with no code is one nobody can settle.
+  // pointing at a spender with no code is one nobody can settle. `checkPolicy`
+  // already refuses these during selection, before anything is funded; this is
+  // the signer's own precondition, for a caller that reaches it another way.
   if (!UPTO_VERIFIED_CHAIN_IDS.includes(asset.chainId)) {
     throw new Error(
       `x402 upto is not available on ${requirement.network}: the settlement proxy is only verified on ` +

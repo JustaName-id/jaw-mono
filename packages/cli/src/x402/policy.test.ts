@@ -10,6 +10,7 @@ import {
   resolveSessionX402Policy,
   topUpCeiling,
 } from './policy.js';
+import { USDC_BY_NETWORK } from './asset-registry.js';
 import type { X402PaymentRequirement } from './types.js';
 
 const base: X402PaymentRequirement = {
@@ -46,6 +47,22 @@ describe('checkPolicy', () => {
     const verdict = checkPolicy({ ...base, scheme: 'upto', amount: '5000000' }, { maxAmountPerPayment: '1000000' });
     expect(verdict.ok).toBe(false);
     expect(verdict.reason).toContain('up to 5000000');
+  });
+
+  /**
+   * The settlement proxy is only deployed on two of the four chains the asset
+   * registry carries, and the check used to live in the signer, downstream of
+   * the top-up. Refusing here means the option is skipped during selection: a
+   * dry run tells the truth, and nothing has been spent when it does.
+   */
+  it('refuses an upto option on a chain the settlement proxy was never verified on', () => {
+    const polygon = { ...base, scheme: 'upto' as const, network: 'eip155:137', asset: USDC_BY_NETWORK['eip155:137'].address };
+    const verdict = checkPolicy(polygon, {});
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reason).toContain('is not available on eip155:137');
+    // The same challenge under `exact` still pays: the refusal is about where
+    // the proxy exists, not about the chain.
+    expect(checkPolicy({ ...polygon, scheme: 'exact' }, {}).ok).toBe(true);
   });
 
   it('enforces maxAmountPerPayment', () => {
