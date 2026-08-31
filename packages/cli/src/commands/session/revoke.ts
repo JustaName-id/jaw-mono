@@ -2,7 +2,12 @@ import { BaseCommand } from '../../base-command.js';
 import { loadConfig } from '../../lib/config.js';
 import { getBridge } from '../../lib/bridge-singleton.js';
 import { deleteKeystore, keystoreExists } from '../../lib/keystore.js';
-import { loadSessionConfig, deleteSessionConfig, liveOrphans } from '../../lib/session-config.js';
+import {
+  loadSessionConfig,
+  deleteSessionConfig,
+  liveOrphans,
+  saveOrphanedPermissions,
+} from '../../lib/session-config.js';
 import type { OutputFormat } from '../../lib/types.js';
 
 export default class SessionRevoke extends BaseCommand {
@@ -24,19 +29,30 @@ export default class SessionRevoke extends BaseCommand {
     const sessionConfig = loadSessionConfig();
     const now = Date.now() / 1000;
 
-    // The session's own permission, plus any this key still holds that the
-    // session no longer names. `session setup` replaces a session rather than
+    // The permissions this key still holds that the session no longer names,
+    // plus the session's own. `session setup` replaces a session rather than
     // adding to it and does not always revoke what it replaces, so the key can
     // be carrying more authority than the config's single id describes.
     //
     // Expired ones are skipped for the same reason an expired session skips the
     // browser: they authorise nothing, and opening a window to say so is worse
     // than saying nothing.
+    //
+    // The session's own permission goes last, and the orphans are dropped from
+    // the config one at a time as each is revoked, so that every state this
+    // command can stop in is one the next run picks up from. Revoking is not
+    // idempotent: `revokePermission` reads the permission from the relay first
+    // and deletes it from there afterwards, so a second attempt at an id
+    // already revoked fails before it sends anything. Revoking the session's
+    // own id first would therefore leave a config naming a permission the relay
+    // no longer has, and a retry would die on it before reaching the orphan it
+    // was run for.
+    const orphans = liveOrphans(sessionConfig.orphanedPermissions, now);
     const targets = [
+      ...orphans,
       ...(sessionConfig.expiry > now
         ? [{ id: sessionConfig.permissionId, chainId: sessionConfig.chainId, expiry: sessionConfig.expiry }]
         : []),
-      ...liveOrphans(sessionConfig.orphanedPermissions, now),
     ];
 
     if (targets.length === 0) {
@@ -64,6 +80,7 @@ export default class SessionRevoke extends BaseCommand {
     // session does not use: setup takes --chain, so replacing a session can
     // move it while leaving the old permission where it was.
     const revokedIds: string[] = [];
+    let remaining = orphans;
     try {
       for (const chainId of [...new Set(targets.map((t) => t.chainId))]) {
         const bridge = await getBridge({ keysUrl: config.keysUrl, apiKey, chainId, ens: config.ens });
@@ -71,6 +88,11 @@ export default class SessionRevoke extends BaseCommand {
           for (const target of targets.filter((t) => t.chainId === chainId)) {
             await bridge.request('wallet_revokePermissions', [{ id: target.id }]);
             revokedIds.push(target.id);
+            const left = remaining.filter((orphan) => orphan.id !== target.id);
+            if (left.length !== remaining.length) {
+              remaining = left;
+              saveOrphanedPermissions(sessionConfig, remaining);
+            }
           }
         } finally {
           bridge.close();

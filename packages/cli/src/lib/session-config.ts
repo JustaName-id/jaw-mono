@@ -221,16 +221,33 @@ export function liveOrphans(
  * invariant rather than a test having to.
  */
 export function saveSessionConfig(input: Omit<SessionConfig, 'createdAt' | 'mode'> & { mode: 'eip7702' }): void {
-  const config: SessionConfig = {
-    ...input,
-    createdAt: new Date().toISOString(),
-  };
+  writeSessionConfig({ ...input, createdAt: new Date().toISOString() });
+}
+
+function writeSessionConfig(config: SessionConfig): void {
   ensureDir(PATHS.root);
   fs.writeFileSync(PATHS.sessionConfig, JSON.stringify(config, null, 2) + '\n', {
     encoding: 'utf-8',
     mode: 0o600,
   });
   fs.chmodSync(PATHS.sessionConfig, 0o600);
+}
+
+/**
+ * Rewrite an existing session with a different orphan list, leaving the rest of
+ * it alone.
+ *
+ * Separate from `saveSessionConfig` because that one stamps a fresh
+ * `createdAt`, and `createdAt` is what the session total is counted from
+ * (`sumSpentSince(payer, session.createdAt)`). Editing a session through it
+ * would hand the session cap a clean slate as a side effect of revoking one
+ * permission.
+ */
+export function saveOrphanedPermissions(config: SessionConfig, orphans: OrphanedPermission[]): void {
+  const next: SessionConfig = { ...config };
+  if (orphans.length > 0) next.orphanedPermissions = orphans;
+  else delete next.orphanedPermissions;
+  writeSessionConfig(next);
 }
 
 export function sessionConfigExists(): boolean {

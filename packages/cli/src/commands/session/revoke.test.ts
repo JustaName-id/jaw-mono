@@ -27,6 +27,7 @@ const h = vi.hoisted(() => ({
     orphanedPermissions: [] as Array<{ id: string; chainId: number; expiry: number }>,
   },
   deleted: { keystore: false, config: false },
+  saved: [] as Array<Array<{ id: string }>>,
   requests: [] as Array<{ chainId: number; method: string; params: unknown }>,
   bridges: 0,
   failOn: null as string | null,
@@ -46,6 +47,9 @@ vi.mock('../../lib/session-config.js', async (importOriginal) => ({
   loadSessionConfig: () => h.session,
   deleteSessionConfig: () => {
     h.deleted.config = true;
+  },
+  saveOrphanedPermissions: (_config: unknown, orphans: Array<{ id: string }>) => {
+    h.saved.push(orphans);
   },
 }));
 
@@ -80,6 +84,7 @@ beforeEach(() => {
   h.session.expiry = Math.floor(Date.now() / 1000) + 6 * 86400;
   h.session.orphanedPermissions = [];
   h.deleted = { keystore: false, config: false };
+  h.saved = [];
   h.requests = [];
   h.bridges = 0;
   h.failOn = null;
@@ -109,7 +114,7 @@ describe('jaw session revoke', () => {
   it('also revokes the permissions the key holds that the session does not name', async () => {
     h.session.orphanedPermissions = [{ id: '0xorphan', chainId: 84532, expiry: Math.floor(Date.now() / 1000) + 86400 }];
     await runRevoke();
-    expect(revokedIds()).toEqual(['0xcurrent', '0xorphan']);
+    expect(revokedIds()).toEqual(['0xorphan', '0xcurrent']);
   });
 
   /**
@@ -121,7 +126,7 @@ describe('jaw session revoke', () => {
     h.session.orphanedPermissions = [{ id: '0xorphan', chainId: 8453, expiry: Math.floor(Date.now() / 1000) + 86400 }];
     await runRevoke();
     expect(h.bridges).toBe(2);
-    expect(h.requests.map((r) => r.chainId)).toEqual([84532, 8453]);
+    expect(h.requests.map((r) => r.chainId)).toEqual([8453, 84532]);
   });
 
   // An expired permission authorises nothing, so opening a window to revoke it
@@ -153,11 +158,39 @@ describe('jaw session revoke', () => {
    * them after a partial revoke would strand it exactly the way an unrecorded
    * orphan was stranded before.
    */
-  it('keeps the local files when one revoke did not go through', async () => {
+  it('keeps the local files when a revoke did not go through', async () => {
     h.session.orphanedPermissions = [{ id: '0xorphan', chainId: 84532, expiry: Math.floor(Date.now() / 1000) + 86400 }];
     h.failOn = '0xorphan';
     await expect(runRevoke()).rejects.toThrow(/user rejected/);
-    expect(revokedIds()).toEqual(['0xcurrent']);
+    expect(revokedIds()).toEqual([]);
     expect(h.deleted).toEqual({ keystore: false, config: false });
+  });
+
+  /**
+   * Revoking is not idempotent: core reads the permission from the relay before
+   * sending and deletes it from there afterwards, so a second attempt at an id
+   * already revoked fails before it sends anything. Every state this command
+   * can stop in therefore has to name only ids that are still live, or the
+   * retry dies on a stale one before reaching what it was run for.
+   */
+  it('drops each orphan from the session as it goes, so a later failure stays retryable', async () => {
+    h.session.orphanedPermissions = [
+      { id: '0xorphanA', chainId: 84532, expiry: Math.floor(Date.now() / 1000) + 86400 },
+      { id: '0xorphanB', chainId: 84532, expiry: Math.floor(Date.now() / 1000) + 86400 },
+    ];
+    h.failOn = '0xcurrent';
+
+    await expect(runRevoke()).rejects.toThrow(/user rejected/);
+
+    expect(revokedIds()).toEqual(['0xorphanA', '0xorphanB']);
+    // Written after each one, and the last write names nothing still to do:
+    // the only permission left is the one the config already names.
+    expect(h.saved.map((orphans) => orphans.map((o) => o.id))).toEqual([['0xorphanB'], []]);
+    expect(h.deleted).toEqual({ keystore: false, config: false });
+  });
+
+  it('does not rewrite the session when there was nothing orphaned to drop', async () => {
+    await runRevoke();
+    expect(h.saved).toEqual([]);
   });
 });

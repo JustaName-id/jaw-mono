@@ -26,6 +26,7 @@ const {
   deleteSessionConfig,
   parseGrantedPermission,
   liveOrphans,
+  saveOrphanedPermissions,
 } = await import('./session-config.js');
 const { PATHS } = await import('./paths.js');
 
@@ -239,5 +240,46 @@ describe('liveOrphans', () => {
     const orphans = [{ id: '0xorphan', chainId: 8453, expiry: now + 86400 }];
     saveSessionConfig({ ...SAMPLE_CONFIG, orphanedPermissions: orphans });
     expect(loadSessionConfig().orphanedPermissions).toEqual(orphans);
+  });
+});
+
+/**
+ * `session revoke` rewrites the session after each permission it revokes, so
+ * that a failure part way through leaves a file naming only ids that are still
+ * live. Revoking is not idempotent, so a stale id in there breaks the retry.
+ */
+describe('saveOrphanedPermissions', () => {
+  const orphan = { id: '0xorphan', chainId: 8453, expiry: Math.floor(Date.now() / 1000) + 86400 };
+
+  it('replaces the list without touching the rest of the session', () => {
+    saveSessionConfig({ ...SAMPLE_CONFIG, orphanedPermissions: [orphan] });
+    const before = loadSessionConfig();
+
+    saveOrphanedPermissions(before, []);
+
+    const after = loadSessionConfig();
+    expect(after.orphanedPermissions).toBeUndefined();
+    expect(after).toEqual({ ...before, orphanedPermissions: undefined });
+  });
+
+  /**
+   * `createdAt` is what the session total is counted from, so going through
+   * `saveSessionConfig` would hand the session cap a clean slate as a side
+   * effect of revoking one permission.
+   */
+  it('keeps createdAt, which the session cap is counted from', () => {
+    saveSessionConfig({ ...SAMPLE_CONFIG, orphanedPermissions: [orphan] });
+    const before = loadSessionConfig();
+
+    saveOrphanedPermissions(before, []);
+
+    expect(loadSessionConfig().createdAt).toBe(before.createdAt);
+  });
+
+  it('keeps the file at 0o600', () => {
+    saveSessionConfig(SAMPLE_CONFIG);
+    fs.chmodSync(PATHS.sessionConfig, 0o644);
+    saveOrphanedPermissions(loadSessionConfig(), [orphan]);
+    expect(fs.statSync(PATHS.sessionConfig).mode & 0o777).toBe(0o600);
   });
 });
