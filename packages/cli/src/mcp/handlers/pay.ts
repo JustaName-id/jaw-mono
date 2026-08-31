@@ -161,6 +161,7 @@ export function registerPayTool(server: McpServer): void {
                 txHash: result.payment?.txHash,
                 topUpAmount: result.topUp?.amount,
                 topUpBatchId: result.topUp?.batchId,
+                approvalBatchId: result.permit2Approval?.batchId,
                 reason: result.refusedReason,
               });
             }

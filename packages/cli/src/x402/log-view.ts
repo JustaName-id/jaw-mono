@@ -39,6 +39,9 @@ export function renderEntry(entry: X402LogEntry): string {
   if (entry.topUpAmount) {
     detail.push(`topped up ${formatUsdc(entry.topUpAmount, decimalsOf(entry))}`);
   }
+  // The Permit2 approval moved no principal, only the gas the payer was charged
+  // for it, so it is named rather than totalled.
+  if (entry.approvalBatchId) detail.push('granted Permit2 its allowance');
   if (entry.txHash) detail.push(sanitizeLine(entry.txHash, 80));
   // A failed settlement may still have been broadcast: the nonce is what makes
   // it reconcilable on chain, so surface it exactly where it is ambiguous.

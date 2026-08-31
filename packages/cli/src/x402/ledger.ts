@@ -44,6 +44,13 @@ export interface X402LogEntry {
   topUpAmount?: string;
   /** wallet_sendCalls id of that top-up, for on-chain reconciliation. */
   topUpBatchId?: string;
+  /**
+   * wallet_sendCalls id of the Permit2 approval, when this payment granted one.
+   * Never summed with `topUpAmount`: it moves no principal, only the gas the
+   * payer was charged for it. Recorded so a userOp the user paid for is not
+   * missing from the audit trail.
+   */
+  approvalBatchId?: string;
   /** Reason for a refused/failed attempt. */
   reason?: string;
 }

@@ -148,6 +148,7 @@ export default class X402Pay extends BaseCommand {
             txHash: outcome.payment?.txHash,
             topUpAmount: outcome.topUp?.amount,
             topUpBatchId: outcome.topUp?.batchId,
+            approvalBatchId: outcome.permit2Approval?.batchId,
             reason: outcome.refusedReason,
           });
         }
@@ -192,6 +193,11 @@ export default class X402Pay extends BaseCommand {
         // user most needs to be told their USDC left the owner account.
         const where = result.topUp.batchId ? ` (${result.topUp.batchId})` : ' (no call id returned to confirm it)';
         this.log(`\n  A top-up of ${formatUsdc(result.topUp.amount, topUpDecimals)} was sent first${where}.`);
+      }
+      if (result.permit2Approval) {
+        // Same rule as the top-up: a userOp the user was charged for went out
+        // before the refusal, so it is said out loud rather than inferred.
+        this.log(`\n  A Permit2 approval was sent first (${result.permit2Approval.batchId}).`);
       }
       // A signed authorization went out and settlement did not confirm, which
       // is true of both schemes: the facilitator may have broadcast it anyway,
@@ -246,6 +252,9 @@ export default class X402Pay extends BaseCommand {
     this.log(`  payTo    ${result.payment?.payTo}`);
     if (result.topUp) {
       this.log(`  top-up   ${formatUsdc(result.topUp.amount, topUpDecimals)} pulled from the owner account`);
+    }
+    if (result.permit2Approval) {
+      this.log(`  approval ${result.permit2Approval.batchId} granted Permit2 the allowance upto settles through`);
     }
     if (result.payment?.txHash) {
       this.log(`  tx       ${result.payment.txHash}`);

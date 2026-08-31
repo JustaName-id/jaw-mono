@@ -302,6 +302,28 @@ describe('payAndFetch', () => {
     expect(result.topUp).toEqual({ amount: '750000', batchId: '0xbatch1' });
   });
 
+  /**
+   * The Permit2 approval is a userOp charged to the payer's USDC and it can run
+   * with no top-up beside it, when the balance already covered the price. Gated
+   * on `skipped` it reached neither the result nor the ledger, so a payment the
+   * user paid gas for left no trace at all.
+   */
+  it('surfaces a Permit2 approval that ran even when no principal had to move', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+      .mockResolvedValueOnce(
+        mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receiptHeader }, body: JSON.stringify({ data: 'ok' }) })
+      );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, {
+      ensureFunds: async () => ({ ok: true, skipped: true, approvalBatchId: '0xapproval1' }),
+    });
+
+    expect(result.paid).toBe(true);
+    expect(result.topUp).toBeUndefined();
+    expect(result.permit2Approval).toEqual({ batchId: '0xapproval1' });
+  });
+
   it('surfaces a signing failure after a top-up as a structured refusal carrying the top-up trace', async () => {
     // A throw from payer.pay() AFTER ensureFunds already moved funds must not
     // escape bare: the moved funds need to reach the audit ledger via topUp.

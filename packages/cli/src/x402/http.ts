@@ -47,7 +47,14 @@ export interface PayAndFetchOptions {
   ensureFunds?: (
     requirement: X402PaymentRequirement,
     payerAddress: `0x${string}`
-  ) => Promise<{ ok: boolean; reason?: string; amount?: string; batchId?: string; skipped?: boolean }>;
+  ) => Promise<{
+    ok: boolean;
+    reason?: string;
+    amount?: string;
+    batchId?: string;
+    approvalBatchId?: string;
+    skipped?: boolean;
+  }>;
 }
 
 /** A payment as built/signed — the fields needed to audit or reconcile it. */
@@ -96,6 +103,14 @@ export interface PayAndFetchResult {
    * on-chain permission before this payment. User funds moved: always surfaced.
    */
   topUp?: { amount?: string; batchId?: string };
+  /**
+   * Present when the payer granted Permit2 its allowance as part of this
+   * payment. No principal moves, but it is a userOp charged to the payer's
+   * USDC, so it is surfaced and logged rather than left invisible: without it
+   * an approval that ran with no top-up beside it reached neither the CLI
+   * output nor the ledger.
+   */
+  permit2Approval?: { batchId: string };
   /** Set when a `402` could not (or should not) be paid. */
   refusedReason?: string;
   /**
@@ -502,6 +517,7 @@ export async function payAndFetch(
   //     price, topping it up through the on-chain permission when it can't.
   //     A refusal here is a policy-shaped outcome, not an error.
   let topUp: { amount?: string; batchId?: string } | undefined;
+  let permit2Approval: { batchId: string } | undefined;
   if (opts.ensureFunds) {
     // Wrapped for the same reason `payer.pay` is below: this hook is what moves
     // the funds, so a throw escaping here skips both front ends' audit log for
@@ -519,7 +535,13 @@ export async function payAndFetch(
       // on either field: the no-call-id path has an amount and no id.
       return refusal(funded.reason ?? 'payer funding failed', {
         ...(funded.amount || funded.batchId ? { topUp: { amount: funded.amount, batchId: funded.batchId } } : {}),
+        ...(funded.approvalBatchId ? { permit2Approval: { batchId: funded.approvalBatchId } } : {}),
       });
+    }
+    // Independent of `skipped`: the approval runs whether or not principal had
+    // to move, and it is money out of the payer either way.
+    if (funded.approvalBatchId) {
+      permit2Approval = { batchId: funded.approvalBatchId };
     }
     if (!funded.skipped) {
       topUp = { amount: funded.amount, batchId: funded.batchId };
@@ -536,7 +558,7 @@ export async function payAndFetch(
   try {
     payload = await payer.pay(requirement);
   } catch (err) {
-    return refusal(`payment signing failed: ${errorMessage(err)}`, { topUp });
+    return refusal(`payment signing failed: ${errorMessage(err)}`, { topUp, permit2Approval });
   }
   const details = {
     scheme: requirement.scheme,
@@ -580,6 +602,7 @@ export async function payAndFetch(
       body: '',
       attemptedPayment: details,
       topUp,
+      permit2Approval,
     });
   }
 
@@ -594,6 +617,7 @@ export async function payAndFetch(
       payer: payer.address,
       attemptedPayment: details,
       topUp,
+      permit2Approval,
       refusedReason: `settlement endpoint attempted a redirect (${paid.status}); not following it with the signed proof`,
     };
   }
@@ -615,6 +639,7 @@ export async function payAndFetch(
       // (facilitator may have broadcast) can be reconciled by nonce.
       attemptedPayment: details,
       topUp,
+      permit2Approval,
       refusedReason: receipt?.errorReason ?? reChallenge?.error ?? `settlement failed with status ${paid.status}`,
     };
   }
@@ -624,6 +649,7 @@ export async function payAndFetch(
     body,
     paid: true,
     topUp,
+    permit2Approval,
     payer: payer.address,
     payment: {
       ...details,

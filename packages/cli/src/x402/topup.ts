@@ -95,6 +95,14 @@ export interface TopUpOutcome {
   amount?: string;
   /** wallet_sendCalls batch id, when a top-up ran. */
   batchId?: string;
+  /**
+   * Batch id of the Permit2 approval, when one was granted. Its own field
+   * because it is a real userOp charged to the payer's USDC and it can happen
+   * with no top-up beside it, so folding it into `batchId` would either erase
+   * it or make a top-up look like it ran. It moves no principal, so nothing
+   * that totals topped-up base units may read it.
+   */
+  approvalBatchId?: string;
   /** Human-readable refusal when ok=false. Never throws for policy-shaped failures. */
   reason?: string;
 }
@@ -182,7 +190,10 @@ export async function ensurePayerFunds(
   if (balance >= needed) {
     if (approvalNeeded) {
       const granted = await grantPermit2Allowance(asset, executor, opts);
-      if (!granted.ok) return { ok: false, reason: granted.reason };
+      // `skipped` says no principal moved, which stays true, but the approval
+      // is a userOp the user paid for and it belongs in the trace either way.
+      if (!granted.ok) return { ok: false, reason: granted.reason, approvalBatchId: granted.batchId };
+      return { ok: true, skipped: true, approvalBatchId: granted.batchId };
     }
     return { ok: true, skipped: true };
   }
@@ -252,14 +263,16 @@ export async function ensurePayerFunds(
   // Past this line the transfer landed, so the refusal below still carries the
   // trace: the caller writes its audit row from these fields, and money that
   // moved has to reach the ledger whatever happens next.
+  let approvalBatchId: string | undefined;
   if (approvalNeeded) {
     const granted = await grantPermit2Allowance(asset, executor, opts);
+    approvalBatchId = granted.batchId;
     if (!granted.ok) {
-      return { ok: false, reason: granted.reason, amount: amount.toString(), batchId };
+      return { ok: false, reason: granted.reason, amount: amount.toString(), batchId, approvalBatchId };
     }
   }
 
-  return { ok: true, amount: amount.toString(), batchId };
+  return { ok: true, amount: amount.toString(), batchId, approvalBatchId };
 }
 
 /**
@@ -322,7 +335,7 @@ async function grantPermit2Allowance(
   asset: UsdcAsset,
   executor: TopUpExecutor,
   opts: TopUpOptions
-): Promise<{ ok: boolean; reason?: string }> {
+): Promise<{ ok: boolean; reason?: string; batchId?: string }> {
   let batchId: string;
   try {
     // Non-null: `permit2ApprovalStatus` refuses when the executor cannot grant.
@@ -335,7 +348,9 @@ async function grantPermit2Allowance(
     subject: 'Permit2 approval',
     onChainFailure: `Permit2 approval failed on-chain (batch ${batchId})`,
   });
-  return confirmed.ok ? { ok: true } : { ok: false, reason: confirmed.reason };
+  // The id rides on the refusal too: the approval was broadcast either way, and
+  // a confirmation timeout is exactly when someone needs it to go looking.
+  return confirmed.ok ? { ok: true, batchId } : { ok: false, reason: confirmed.reason, batchId };
 }
 
 /**

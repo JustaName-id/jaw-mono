@@ -397,6 +397,15 @@ describe('Permit2 approval for upto', () => {
     expect(approved).toEqual([BASE_SEPOLIA_USDC]);
   });
 
+  test('reports the approval batch even when the balance covered the price and nothing else ran', async () => {
+    const { executor, requests, opts } = approving(0n);
+
+    const outcome = await ensurePayerFunds(uptoRequirement(), PAYER, executor, opts);
+
+    expect(outcome).toEqual({ ok: true, skipped: true, approvalBatchId: '0xapproval1' });
+    expect(requests.some((r) => r.method === 'wallet_sendCalls')).toBe(false);
+  });
+
   test('does not grant it again once the allowance covers the ceiling', async () => {
     const { executor, approved, opts } = approving(10n ** 30n);
 
