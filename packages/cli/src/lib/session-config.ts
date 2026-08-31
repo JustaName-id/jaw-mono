@@ -52,6 +52,104 @@ export interface GrantedSpend {
 }
 
 /**
+ * The granted permission as `JustaPermissionManager` stores it.
+ *
+ * Every view on the manager takes `Permission calldata` and hashes it inside:
+ * `isApproved`, `isRevoked` and `getCurrentPeriod` all do, and none of them
+ * accept an id. A session holding only `permissionId` therefore holds the one
+ * field the chain will not answer about, which is why nothing local could tell
+ * that a permission had been revoked from another device.
+ *
+ * The grant response already carries all of it, so this costs a wider write
+ * rather than a network call. Optional on read for two reasons: configs written
+ * before this field exist, and a wallet running an older core answers with the
+ * id alone. Consumers fall back to the local file, which is what those sessions
+ * already meant.
+ */
+export interface GrantedPermission {
+  account: string;
+  spender: string;
+  /**
+   * Unix seconds the permission starts at. Also the anchor the contract steps
+   * its period windows from, which is the number `GrantedSpend.periodAnchor`
+   * was approximating with the local clock.
+   */
+  start: number;
+  /** Unix seconds the permission ends at. */
+  end: number;
+  /** Hex, as the grant returned it. Widened to a bigint at encode time. */
+  salt: string;
+  calls: Array<{ target: string; selector: string }>;
+  spends: Array<{ token: string; allowance: string; unit: string; multiplier: number }>;
+}
+
+const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const SELECTOR_RE = /^0x[0-9a-fA-F]{8}$/;
+const HEX_RE = /^0x[0-9a-fA-F]+$/;
+/** Decimal or hex, matching what the SDK hands to `BigInt()`. */
+const ALLOWANCE_RE = /^(0x[0-9a-fA-F]+|[0-9]+)$/;
+/** The units a grant may carry. `year` has no on-chain enum and is rewritten before encoding. */
+const SPEND_UNITS = new Set(['minute', 'hour', 'day', 'week', 'month', 'year', 'forever']);
+
+function isPositiveInt(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+/**
+ * The permission struct out of a `wallet_grantPermissions` response, or
+ * undefined when the response does not carry a usable one.
+ *
+ * Undefined rather than a throw, on every malformed field. By the time this
+ * runs the grant is already on chain, and refusing to write the session over a
+ * field that arrived in an unexpected shape would strand a live permission with
+ * no local record of it. A session that skips this keeps behaving the way every
+ * session behaved before the field existed.
+ *
+ * Strict about what it does accept: a struct that is wrong in any part hashes
+ * to something other than the granted permission, so every on-chain read made
+ * from it would quietly answer about a permission that does not exist.
+ */
+export function parseGrantedPermission(raw: unknown): GrantedPermission | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+
+  const { account, spender, salt } = r;
+  if (typeof account !== 'string' || !ADDRESS_RE.test(account)) return undefined;
+  if (typeof spender !== 'string' || !ADDRESS_RE.test(spender)) return undefined;
+  if (typeof salt !== 'string' || !HEX_RE.test(salt)) return undefined;
+  if (!isPositiveInt(r.start) || !isPositiveInt(r.end)) return undefined;
+
+  if (!Array.isArray(r.calls) || r.calls.length === 0) return undefined;
+  const calls: GrantedPermission['calls'] = [];
+  for (const entry of r.calls) {
+    if (typeof entry !== 'object' || entry === null) return undefined;
+    const { target, selector } = entry as Record<string, unknown>;
+    if (typeof target !== 'string' || !ADDRESS_RE.test(target)) return undefined;
+    // The response builds the selector from the signature, so an entry without
+    // one cannot be reconstructed: the signature it came from is not returned.
+    if (typeof selector !== 'string' || !SELECTOR_RE.test(selector)) return undefined;
+    calls.push({ target, selector });
+  }
+
+  if (!Array.isArray(r.spends)) return undefined;
+  const spends: GrantedPermission['spends'] = [];
+  for (const entry of r.spends) {
+    if (typeof entry !== 'object' || entry === null) return undefined;
+    const { token, allowance, unit, multiplier } = entry as Record<string, unknown>;
+    if (typeof token !== 'string' || !ADDRESS_RE.test(token)) return undefined;
+    if (typeof allowance !== 'string' || !ALLOWANCE_RE.test(allowance)) return undefined;
+    if (typeof unit !== 'string' || !SPEND_UNITS.has(unit)) return undefined;
+    // `multiplier` is a uint16 on chain and defaults to 1 in the grant, but the
+    // encoded struct has to carry the number the permission was hashed with,
+    // so an absent one is a struct we cannot rebuild rather than a 1.
+    if (!isPositiveInt(multiplier) || multiplier > 65535) return undefined;
+    spends.push({ token, allowance, unit, multiplier });
+  }
+
+  return { account, spender, start: r.start, end: r.end, salt, calls, spends };
+}
+
+/**
  * Whether this session predates the CLI settling on one account derivation, so
  * its permission belongs to an address separate from the session key and no op
  * it sends can be charged for its own gas.
@@ -73,6 +171,8 @@ export interface SessionConfig {
   createdAt: string;
   mode?: SessionMode;
   grantedSpend?: GrantedSpend;
+  /** The struct the on-chain reads need. Absent on older sessions; see the type. */
+  permission?: GrantedPermission;
 }
 
 /**

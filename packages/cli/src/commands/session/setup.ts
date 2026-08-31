@@ -10,7 +10,7 @@ import {
   loadSessionKey,
   tryLoadKeystoreAddress,
 } from '../../lib/keystore.js';
-import { saveSessionConfig, tryLoadSessionConfig } from '../../lib/session-config.js';
+import { parseGrantedPermission, saveSessionConfig, tryLoadSessionConfig } from '../../lib/session-config.js';
 import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
 import { parsePermissionsConfig } from '../../lib/validation.js';
 import { extractGrantedSpend } from '../../x402/policy.js';
@@ -242,14 +242,18 @@ export default class SessionSetup extends BaseCommand {
         ens: config.ens,
       });
 
-      let grantResponse: { permissionId: string; account: string };
+      // Kept whole rather than narrowed on the way in. The response carries the
+      // permission as the contract stores it, and every view on the permission
+      // manager takes that struct: narrowing to the id here was what left the
+      // CLI unable to ask the chain anything about its own permission.
+      let granted: unknown;
       try {
         if (flags.x402) {
           const blocked = await whyOwnerCannotFundSession({ chainId, request: (m, p) => bridge.request(m, p) });
           if (blocked) this.error(blocked);
         }
 
-        grantResponse = (await bridge.request('wallet_grantPermissions', [
+        granted = await bridge.request('wallet_grantPermissions', [
           {
             spender: sessionAddress,
             expiry: expiryTimestamp,
@@ -261,10 +265,15 @@ export default class SessionSetup extends BaseCommand {
             // this same transaction; it decides the amount.
             capabilities: { prefundSpender: true },
           },
-        ])) as { permissionId: string; account: string };
+        ]);
       } finally {
         bridge.close();
       }
+
+      const grantResponse = granted as { permissionId: string; account: string };
+      // Undefined from a wallet whose response does not carry the struct, which
+      // leaves the session behaving exactly as sessions did before this field.
+      const permission = parseGrantedPermission(granted);
 
       // 7. Save keystore
       saveKeystore(privateKeyHex, sessionAddress);
@@ -277,7 +286,16 @@ export default class SessionSetup extends BaseCommand {
         chainId,
         expiry: expiryTimestamp,
         mode,
-        grantedSpend: extractGrantedSpend(permissions.spends, chainId),
+        grantedSpend: extractGrantedSpend(
+          permissions.spends,
+          chainId,
+          // The permission's own start, which is what the contract steps its
+          // period windows from. Without it the anchor is the local clock at
+          // setup, deliberately early so the local window closes before the
+          // chain's; with it the two windows are the same window.
+          permission ? new Date(permission.start * 1000) : undefined
+        ),
+        ...(permission ? { permission } : {}),
       });
 
       // 8.5 The grant asked the wallet to seed the spender. Check that it did.
