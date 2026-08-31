@@ -37,10 +37,14 @@ export const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3' as c
  * contract that will actually run and not only against its source.
  *
  * Two traps live near this address. The x402 README still lists Base Mainnet as
- * having no `upto` deployment, which is stale. And Base Sepolia carries a second,
- * legacy proxy at `0x402039b3d6E6BEC5A02c2C9fd937ac17A6940002` with different
- * bytecode, predating the deterministic build; a challenge pointing there must
- * be refused like any other unpinned spender.
+ * having no `upto` deployment, which is stale. And Base Sepolia carries a
+ * second, legacy proxy at `0x402039b3d6E6BEC5A02c2C9fd937ac17A6940002` with
+ * different bytecode, predating the deterministic build. Nothing refuses a
+ * challenge that names it: the spender is not read off the wire at all, this
+ * constant is written into every permit, and a challenge advertising the legacy
+ * proxy is signed for this one instead. Substituting silently is the safe
+ * direction, since the permit stays worth its ceiling only to the address
+ * pinned here, but it is a substitution and not a refusal.
  */
 export const X402_UPTO_PROXY_ADDRESS = '0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002' as const;
 
