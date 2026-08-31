@@ -56,7 +56,12 @@ describe('checkPolicy', () => {
    * dry run tells the truth, and nothing has been spent when it does.
    */
   it('refuses an upto option on a chain the settlement proxy was never verified on', () => {
-    const polygon = { ...base, scheme: 'upto' as const, network: 'eip155:137', asset: USDC_BY_NETWORK['eip155:137'].address };
+    const polygon = {
+      ...base,
+      scheme: 'upto' as const,
+      network: 'eip155:137',
+      asset: USDC_BY_NETWORK['eip155:137'].address,
+    };
     const verdict = checkPolicy(polygon, {});
     expect(verdict.ok).toBe(false);
     expect(verdict.reason).toContain('is not available on eip155:137');
