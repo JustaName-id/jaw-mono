@@ -282,7 +282,6 @@ function withinCap(services: DiscoveredService[], cap?: number): DiscoveredServi
  * Returns a compact, mapped view; the raw seller-authored strings inside it are
  * untrusted and must be fenced before reaching the model.
  */
-
 export async function discoverServices(params: DiscoverParams): Promise<DiscoverResult> {
   const network = params.network ?? DEFAULT_NETWORK;
 
