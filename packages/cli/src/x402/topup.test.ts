@@ -118,8 +118,8 @@ describe('ensurePayerFunds', () => {
     expect(out.amount).toBe('10000000'); // clamped to the session cap, not the float
   });
 
-  test('Given a period nearly exhausted, When the shortfall exceeds what the caps have left, Then the shortfall is still covered (payment already cleared policy)', async () => {
-    const { executor } = fakeExecutor();
+  test('Given a period nearly exhausted, When the shortfall exceeds what the caps have left, Then it refuses before anything moves', async () => {
+    const { executor, requests } = fakeExecutor();
 
     const out = await ensurePayerFunds(requirement('5000000'), PAYER, executor, {
       balanceReader: async () => 0n,
@@ -127,9 +127,44 @@ describe('ensurePayerFunds', () => {
       ...instantly,
     });
 
-    // The clamp must never starve the actual payment.
+    // Pulling the 1 USDC that fits buys a payer that still cannot pay the 5,
+    // and the period cap has been spent on it. The cap mirrors the on-chain
+    // allowance, so the transfer for the full shortfall would revert anyway.
+    expect(out.ok).toBe(false);
+    expect(out.reason).toContain('1000000 base units left');
+    expect(requests).toHaveLength(0);
+  });
+
+  test('Given a cap that covers the shortfall but not the fee on top of it, When topping up, Then it refuses rather than funding a payment that cannot be signed', async () => {
+    const { executor, requests } = fakeExecutor();
+
+    // 2 USDC price against 2 USDC of cap: the transfer lands, the paymaster
+    // charges the payer for it, and the payment is signed for more than the
+    // payer now holds.
+    const out = await ensurePayerFunds(requirement('2000000'), PAYER, executor, {
+      balanceReader: async () => 0n,
+      maxTopUp: 2_000_000n,
+      ...instantly,
+    });
+
+    expect(out.ok).toBe(false);
+    expect(out.reason).toContain('2010000 topped up');
+    expect(requests).toHaveLength(0);
+  });
+
+  test('Given a cap that clears the shortfall by one operation, When topping up, Then the refill runs clamped to the cap', async () => {
+    const { executor } = fakeExecutor();
+
+    const out = await ensurePayerFunds(requirement('2000000'), PAYER, executor, {
+      balanceReader: async () => 0n,
+      maxTopUp: 2_010_000n, // the price plus exactly one operation's fee
+      ...instantly,
+    });
+
+    // The reserve is what the clamp cuts: the payment and its fee are covered,
+    // the float behind them is not, and that is the right thing to give up.
     expect(out.ok).toBe(true);
-    expect(out.amount).toBe('5000000');
+    expect(out.amount).toBe('2010000');
   });
 
   test('Given the on-chain cap rejects the transfer, When topping up, Then it refuses with the on-chain reason and no payment proceeds', async () => {

@@ -2,7 +2,7 @@ import { encodeFunctionData, erc20Abi } from 'viem';
 import { usdcForNetwork } from './asset-registry.js';
 import { usdcBalance, type BalanceReader } from './balance.js';
 import { parseBigInt } from './amount.js';
-import { gasReserve } from './gas-reserve.js';
+import { firstOperationCost, gasReserve } from './gas-reserve.js';
 import { errorMessage } from '../lib/errors.js';
 import type { X402PaymentRequirement } from './types.js';
 
@@ -51,9 +51,9 @@ export interface TopUpOptions {
    * Upper bound on a single top-up (base units) — what is left of the tightest
    * spend cap. The payer must never be pre-funded with more than the session
    * could still spend: that would be idle funds at risk with no benefit,
-   * weakening the blast-radius guarantee. Only the float is clamped to it; the
-   * shortfall goes through even when the remaining cap is below it, so a
-   * near-exhausted period never turns an affordable price into a refusal.
+   * weakening the blast-radius guarantee. What the clamp cuts is the float. A
+   * cap with less left than the payment needs is a refusal instead, since the
+   * transfer that would fit is one the payment cannot be made out of.
    */
   maxTopUp?: bigint;
   /** Poll interval for the call status, ms. */
@@ -143,6 +143,22 @@ export async function ensurePayerFunds(
   }
 
   const shortfall = price - balance;
+  const feePerOp = firstOperationCost(asset);
+  // The payer pays the fee for the very transfer that refills it, so a refill
+  // clamped to exactly the shortfall lands short by that fee: the payment is
+  // then signed for more than the payer holds and fails, with the cap already
+  // spent on it. Below one operation over the shortfall there is no amount
+  // worth pulling, so refuse here, while nothing has moved.
+  if (opts.maxTopUp !== undefined && opts.maxTopUp < shortfall + feePerOp) {
+    return {
+      ok: false,
+      reason:
+        `the tightest spend cap has ${opts.maxTopUp} base units left and this payment needs ` +
+        `${shortfall + feePerOp} topped up (${shortfall} short, plus the fee the payer is charged for the ` +
+        `refill itself); wait for the period to reset, or raise the cap.`,
+    };
+  }
+
   const target = opts.floatTarget !== undefined && opts.floatTarget > price ? opts.floatTarget : price;
   // The payer is the account this userOp is sent from, so it is the one the
   // ERC-20 paymaster charges, in postOp and right after this transfer lands.
@@ -151,11 +167,11 @@ export async function ensurePayerFunds(
   // rides along and stays behind, so the next refill has something to be
   // charged against.
   let amount = (target - balance > shortfall ? target - balance : shortfall) + gasReserve(asset);
-  // Never pre-fund the payer past what the caps still allow, and never let that
-  // clamp cut into the shortfall: pulling a float the permission would reject
-  // turns an affordable payment into a refusal, so only the float excess goes.
+  // Never pre-fund the payer past what the caps still allow. The guard above
+  // has already established that what they allow covers the shortfall and a
+  // fee, so what this cuts is float and never the payment.
   if (opts.maxTopUp !== undefined && amount > opts.maxTopUp) {
-    amount = opts.maxTopUp > shortfall ? opts.maxTopUp : shortfall;
+    amount = opts.maxTopUp;
   }
 
   const data = encodeFunctionData({
