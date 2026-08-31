@@ -196,7 +196,7 @@ export async function ensurePayerFunds(
 
   if (balance >= needed) {
     if (grantApproval) {
-      const granted = await grantPermit2Allowance(asset, grantApproval, executor, opts);
+      const granted = await grantPermit2Allowance(asset, payerAddress, price, grantApproval, executor, opts);
       // `skipped` says no principal moved, which stays true, but the approval
       // is a userOp the user paid for and it belongs in the trace either way.
       if (!granted.ok) return { ok: false, reason: granted.reason, approvalBatchId: granted.batchId };
@@ -272,7 +272,7 @@ export async function ensurePayerFunds(
   // moved has to reach the ledger whatever happens next.
   let approvalBatchId: string | undefined;
   if (grantApproval) {
-    const granted = await grantPermit2Allowance(asset, grantApproval, executor, opts);
+    const granted = await grantPermit2Allowance(asset, payerAddress, price, grantApproval, executor, opts);
     approvalBatchId = granted.batchId;
     if (!granted.ok) {
       return { ok: false, reason: granted.reason, amount: amount.toString(), batchId, approvalBatchId };
@@ -342,6 +342,8 @@ async function permit2ApprovalStatus(
 /** Send the approval and wait for it. Only called once the payer can pay for it. */
 async function grantPermit2Allowance(
   asset: UsdcAsset,
+  payerAddress: `0x${string}`,
+  needed: bigint,
   grant: GrantApproval,
   executor: TopUpExecutor,
   opts: TopUpOptions
@@ -359,7 +361,56 @@ async function grantPermit2Allowance(
   });
   // The id rides on the refusal too: the approval was broadcast either way, and
   // a confirmation timeout is exactly when someone needs it to go looking.
-  return confirmed.ok ? { ok: true, batchId } : { ok: false, reason: confirmed.reason, batchId };
+  if (!confirmed.ok) return { ok: false, reason: confirmed.reason, batchId };
+
+  // Confirmed by the bundler is not the same as visible to the node the payer
+  // reads from, and the payer re-reads this allowance immediately afterwards,
+  // right before signing. That read used to have a whole top-up between it and
+  // the approval; now the approval is the last thing that happens, so the gap
+  // is as small as it gets. A node a block behind would refuse a payment whose
+  // approval had already landed, after the user paid for both it and the
+  // top-up. Same client the payer will use, so seeing it here is what makes
+  // that read safe.
+  if (!(await allowanceVisible(asset, payerAddress, needed, opts))) {
+    return {
+      ok: false,
+      batchId,
+      reason:
+        `the Permit2 approval confirmed (batch ${batchId}) but the allowance is not visible yet on this ` +
+        'chain; retry the payment in a moment, the approval does not need to be sent again.',
+    };
+  }
+
+  return { ok: true, batchId };
+}
+
+/**
+ * How many times to look for a freshly granted allowance before giving up. The
+ * approval is already confirmed by then, so this is waiting out replica lag and
+ * not a settlement: a few polls or it is something else that is wrong.
+ */
+const ALLOWANCE_VISIBILITY_ATTEMPTS = 3;
+
+async function allowanceVisible(
+  asset: UsdcAsset,
+  payerAddress: `0x${string}`,
+  needed: bigint,
+  opts: TopUpOptions
+): Promise<boolean> {
+  const read = opts.allowanceReader ?? readAllowance;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const pollMs = opts.pollMs ?? 2_000;
+
+  for (let attempt = 0; attempt < ALLOWANCE_VISIBILITY_ATTEMPTS; attempt++) {
+    if (attempt > 0) await sleep(pollMs);
+    try {
+      if ((await read(asset, payerAddress, PERMIT2_ADDRESS)) >= needed) return true;
+    } catch {
+      // A read that failed is a read that did not see it. The refusal this
+      // ends in names the batch, so nothing is lost by trying again first.
+    }
+  }
+  return false;
 }
 
 /**

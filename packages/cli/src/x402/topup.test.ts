@@ -317,13 +317,21 @@ describe('Permit2 approval for upto', () => {
   const uptoRequirement = (amount = '1000000') =>
     ({ ...requirement(amount), scheme: 'upto' }) as X402PaymentRequirement;
 
+  /**
+   * The allowance starts where the test says and becomes unlimited once the
+   * approval is sent, which is what the chain does. A reader frozen at zero
+   * would be modelling an approval that never took effect, and the funder is
+   * entitled to see the one it just granted.
+   */
   const approving = (allowance: bigint, overrides?: Parameters<typeof fakeExecutor>[0]) => {
     const base = fakeExecutor(overrides);
     const approved: string[] = [];
+    let current = allowance;
     const executor: TopUpExecutor = {
       request: base.executor.request.bind(base.executor),
       approvePermit2: async (token: `0x${string}`) => {
         approved.push(token);
+        current = 2n ** 256n - 1n;
         return '0xapproval1';
       },
     };
@@ -334,7 +342,7 @@ describe('Permit2 approval for upto', () => {
       opts: {
         ...instantly,
         balanceReader: async () => 10_000_000n,
-        allowanceReader: async () => allowance,
+        allowanceReader: async () => current,
       },
     };
   };
@@ -357,6 +365,7 @@ describe('Permit2 approval for upto', () => {
   test('funds the payer before asking it to pay for its own approval', async () => {
     const order: string[] = [];
     const base = fakeExecutor();
+    let allowance = 0n;
     const executor: TopUpExecutor = {
       async request(method, params) {
         order.push(method);
@@ -364,6 +373,7 @@ describe('Permit2 approval for upto', () => {
       },
       approvePermit2: async () => {
         order.push('approvePermit2');
+        allowance = 2n ** 256n - 1n;
         return '0xapproval1';
       },
     };
@@ -371,7 +381,7 @@ describe('Permit2 approval for upto', () => {
     const outcome = await ensurePayerFunds(uptoRequirement(), PAYER, executor, {
       ...instantly,
       balanceReader: async () => 0n,
-      allowanceReader: async () => 0n,
+      allowanceReader: async () => allowance,
     });
 
     expect(outcome.ok).toBe(true);
@@ -430,6 +440,33 @@ describe('Permit2 approval for upto', () => {
 
     expect(outcome.ok).toBe(false);
     expect(outcome.reason).toContain('Permit2 approval failed on-chain');
+  });
+
+  /**
+   * The payer re-reads this allowance immediately afterwards, right before it
+   * signs, and from the same client. A node that has not caught up would refuse
+   * a payment whose approval had already landed, after the user paid for the
+   * approval and the top-up both, so the funder waits to see it rather than
+   * handing that race to the signer.
+   */
+  test('waits for the granted allowance to be visible before calling the payer funded', async () => {
+    const { executor: base, opts } = approving(0n);
+    const executor: TopUpExecutor = {
+      request: base.request.bind(base),
+      approvePermit2: base.approvePermit2,
+    };
+
+    const outcome = await ensurePayerFunds(uptoRequirement(), PAYER, executor, {
+      ...opts,
+      // A replica that never catches up, which is the shape of one that is
+      // merely slow at the moment the payer would have read it.
+      allowanceReader: async () => 0n,
+    });
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.reason).toContain('not visible yet');
+    // The approval is not resent on the retry, so the id has to survive.
+    expect(outcome.approvalBatchId).toBe('0xapproval1');
   });
 
   test('refuses rather than signing when the allowance cannot be read', async () => {
