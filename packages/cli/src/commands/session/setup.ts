@@ -15,7 +15,7 @@ import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
 import { parsePermissionsConfig } from '../../lib/validation.js';
 import { extractGrantedSpend } from '../../x402/policy.js';
 import { buildX402Permissions, describeX402Grant, DEFAULT_X402_LIMIT } from '../../x402/grant-preset.js';
-import { whyOwnerCannotFundSession } from '../../x402/funded-owner.js';
+import { whyOwnerCannotFundSession, whySpenderCannotPay } from '../../x402/funded-owner.js';
 
 export default class SessionSetup extends BaseCommand {
   static override description =
@@ -279,6 +279,23 @@ export default class SessionSetup extends BaseCommand {
         mode,
         grantedSpend: extractGrantedSpend(permissions.spends, chainId),
       });
+
+      // 8.5 The grant asked the wallet to seed the spender. Check that it did.
+      //
+      //      An unsupported capability is ignored rather than refused, so a
+      //      wallet that does not implement `prefundSpender` leaves the session
+      //      unable to pay for anything, and says nothing about it. The failure
+      //      then surfaces at the first operation, in an error about sizing a
+      //      paymaster approval, long after the user has left this screen.
+      //      Only under --x402: the wallet seeds in whatever token the
+      //      permission names, and that preset is the one grant that always
+      //      names USDC. A calls-only permission is correctly seeded with
+      //      nothing, and warning there would send someone to move real funds
+      //      for no reason.
+      if (flags.x402) {
+        const unfunded = await whySpenderCannotPay({ chainId, spender: sessionAddress });
+        if (unfunded) this.logToStderr(`\nWarning: ${unfunded}`);
+      }
 
       // 9. Output
       const summary = {
