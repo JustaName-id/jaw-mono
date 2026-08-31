@@ -53,6 +53,8 @@ export interface PayAndFetchOptions {
     amount?: string;
     batchId?: string;
     approvalBatchId?: string;
+    /** The payer's Permit2 allowance as the hook last saw it, so the signer need not re-read it. */
+    permit2Allowance?: bigint;
     skipped?: boolean;
   }>;
 }
@@ -529,6 +531,7 @@ export async function payAndFetch(
   //     A refusal here is a policy-shaped outcome, not an error.
   let topUp: { amount?: string; batchId?: string } | undefined;
   let permit2Approval: { batchId: string } | undefined;
+  let permit2Allowance: bigint | undefined;
   if (opts.ensureFunds) {
     // Wrapped for the same reason `payer.pay` is below: this hook is what moves
     // the funds, so a throw escaping here skips both front ends' audit log for
@@ -554,6 +557,7 @@ export async function payAndFetch(
     if (funded.approvalBatchId) {
       permit2Approval = { batchId: funded.approvalBatchId };
     }
+    permit2Allowance = funded.permit2Allowance;
     if (!funded.skipped) {
       topUp = { amount: funded.amount, batchId: funded.batchId };
     }
@@ -567,7 +571,7 @@ export async function payAndFetch(
   //    caller records the moved funds in the audit ledger.
   let payload;
   try {
-    payload = await payer.pay(requirement);
+    payload = await payer.pay(requirement, { permit2Allowance });
   } catch (err) {
     return refusal(`payment signing failed: ${errorMessage(err)}`, { topUp, permit2Approval });
   }

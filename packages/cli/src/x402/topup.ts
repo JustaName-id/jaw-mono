@@ -103,6 +103,12 @@ export interface TopUpOutcome {
   /** wallet_sendCalls batch id, when a top-up ran. */
   batchId?: string;
   /**
+   * The payer's Permit2 allowance as this run last saw it. Handed back so the
+   * signer does not ask the same contract the same question a second time
+   * within the same payment. Absent when nothing read it.
+   */
+  permit2Allowance?: bigint;
+  /**
    * Batch id of the Permit2 approval, when one was granted. Its own field
    * because it is a real userOp charged to the payer's USDC and it can happen
    * with no top-up beside it, so folding it into `batchId` would either erase
@@ -177,10 +183,15 @@ export async function ensurePayerFunds(
   // and the payment was refused without ever reaching the funding that would
   // have covered it.
   let grantApproval: GrantApproval | null = null;
+  let permit2Allowance: bigint | undefined;
   if (requirement.scheme === 'upto') {
     const status = await permit2ApprovalStatus(asset, payerAddress, price, executor, opts);
     if (!status.ok) return { ok: false, reason: status.reason };
     grantApproval = status.grant;
+    // Only useful when it already covers the payment. When it does not, the
+    // figure below is the one the signer must be told about, and until the
+    // approval lands there is nothing worth handing forward.
+    permit2Allowance = grantApproval ? undefined : status.allowance;
   }
 
   const read = opts.balanceReader;
@@ -200,9 +211,9 @@ export async function ensurePayerFunds(
       // `skipped` says no principal moved, which stays true, but the approval
       // is a userOp the user paid for and it belongs in the trace either way.
       if (!granted.ok) return { ok: false, reason: granted.reason, approvalBatchId: granted.batchId };
-      return { ok: true, skipped: true, approvalBatchId: granted.batchId };
+      return { ok: true, skipped: true, approvalBatchId: granted.batchId, permit2Allowance: granted.allowance };
     }
-    return { ok: true, skipped: true };
+    return { ok: true, skipped: true, permit2Allowance };
   }
 
   const shortfall = needed - balance;
@@ -277,9 +288,10 @@ export async function ensurePayerFunds(
     if (!granted.ok) {
       return { ok: false, reason: granted.reason, amount: amount.toString(), batchId, approvalBatchId };
     }
+    permit2Allowance = granted.allowance;
   }
 
-  return { ok: true, amount: amount.toString(), batchId, approvalBatchId };
+  return { ok: true, amount: amount.toString(), batchId, approvalBatchId, permit2Allowance };
 }
 
 /**
@@ -312,7 +324,7 @@ async function permit2ApprovalStatus(
   needed: bigint,
   executor: TopUpExecutor,
   opts: TopUpOptions
-): Promise<{ ok: true; grant: GrantApproval | null } | { ok: false; reason: string }> {
+): Promise<{ ok: true; grant: GrantApproval | null; allowance: bigint } | { ok: false; reason: string }> {
   const read = opts.allowanceReader ?? readAllowance;
   let allowance: bigint;
   try {
@@ -320,7 +332,7 @@ async function permit2ApprovalStatus(
   } catch (err) {
     return { ok: false, reason: `could not read the payer's Permit2 allowance: ${errorMessage(err)}` };
   }
-  if (allowance >= needed) return { ok: true, grant: null };
+  if (allowance >= needed) return { ok: true, grant: null, allowance };
 
   // Refused here rather than after the top-up: a session that cannot grant the
   // allowance cannot pay this challenge at all, and moving funds first would
@@ -336,7 +348,7 @@ async function permit2ApprovalStatus(
 
   // Handed back rather than re-read later, so the type carries what the check
   // established: past here, granting is something this session can do.
-  return { ok: true, grant: executor.approvePermit2 };
+  return { ok: true, grant: executor.approvePermit2, allowance };
 }
 
 /** Send the approval and wait for it. Only called once the payer can pay for it. */
@@ -347,7 +359,7 @@ async function grantPermit2Allowance(
   grant: GrantApproval,
   executor: TopUpExecutor,
   opts: TopUpOptions
-): Promise<{ ok: boolean; reason?: string; batchId?: string }> {
+): Promise<{ ok: boolean; reason?: string; batchId?: string; allowance?: bigint }> {
   let batchId: string;
   try {
     batchId = await grant(asset.address);
@@ -371,7 +383,8 @@ async function grantPermit2Allowance(
   // approval had already landed, after the user paid for both it and the
   // top-up. Same client the payer will use, so seeing it here is what makes
   // that read safe.
-  if (!(await allowanceVisible(asset, payerAddress, needed, opts))) {
+  const visible = await allowanceVisible(asset, payerAddress, needed, opts);
+  if (visible === null) {
     return {
       ok: false,
       batchId,
@@ -381,7 +394,7 @@ async function grantPermit2Allowance(
     };
   }
 
-  return { ok: true, batchId };
+  return { ok: true, batchId, allowance: visible };
 }
 
 /**
@@ -396,7 +409,7 @@ async function allowanceVisible(
   payerAddress: `0x${string}`,
   needed: bigint,
   opts: TopUpOptions
-): Promise<boolean> {
+): Promise<bigint | null> {
   const read = opts.allowanceReader ?? readAllowance;
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const pollMs = opts.pollMs ?? 2_000;
@@ -404,13 +417,14 @@ async function allowanceVisible(
   for (let attempt = 0; attempt < ALLOWANCE_VISIBILITY_ATTEMPTS; attempt++) {
     if (attempt > 0) await sleep(pollMs);
     try {
-      if ((await read(asset, payerAddress, PERMIT2_ADDRESS)) >= needed) return true;
+      const seen = await read(asset, payerAddress, PERMIT2_ADDRESS);
+      if (seen >= needed) return seen;
     } catch {
       // A read that failed is a read that did not see it. The refusal this
       // ends in names the batch, so nothing is lost by trying again first.
     }
   }
-  return false;
+  return null;
 }
 
 /**

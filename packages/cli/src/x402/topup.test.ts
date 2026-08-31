@@ -412,7 +412,13 @@ describe('Permit2 approval for upto', () => {
 
     const outcome = await ensurePayerFunds(uptoRequirement(), PAYER, executor, opts);
 
-    expect(outcome).toEqual({ ok: true, skipped: true, approvalBatchId: '0xapproval1' });
+    expect(outcome).toEqual({
+      ok: true,
+      skipped: true,
+      approvalBatchId: '0xapproval1',
+      // Handed forward so the signer does not read the same allowance again.
+      permit2Allowance: 2n ** 256n - 1n,
+    });
     expect(requests.some((r) => r.method === 'wallet_sendCalls')).toBe(false);
   });
 

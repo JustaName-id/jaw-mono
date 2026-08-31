@@ -24,7 +24,18 @@ export interface Payer {
   /** The paying address — `from` in the authorization. */
   readonly address: `0x${string}`;
   /** Build (and, in pull mode, sign) the payment for a requirement. */
-  pay(requirement: X402PaymentRequirement, opts?: BuildExactOptions): Promise<X402PaymentPayload>;
+  pay(requirement: X402PaymentRequirement, opts?: PayOptions): Promise<X402PaymentPayload>;
+}
+
+export interface PayOptions extends BuildExactOptions {
+  /**
+   * The payer's Permit2 allowance, when the caller already read it. The funder
+   * reads exactly this to decide whether to grant one, on the same contract and
+   * through the same client, moments earlier, so a second read here would ask
+   * the same question twice per payment and learn nothing. Absent, or short of
+   * what this payment needs, the read below happens as before.
+   */
+  permit2Allowance?: bigint;
 }
 
 /**
@@ -97,10 +108,10 @@ export class Eip3009EoaPayer implements Payer {
     return new Eip3009EoaPayer(account.address, signTypedData, signHash);
   }
 
-  async pay(requirement: X402PaymentRequirement, opts?: BuildExactOptions): Promise<X402PaymentPayload> {
+  async pay(requirement: X402PaymentRequirement, opts?: PayOptions): Promise<X402PaymentPayload> {
     const sign = (await this.isDelegated(requirement.network)) ? this.wrappedSigner() : this.signTypedData;
     if (requirement.scheme === 'upto') {
-      await this.assertPermit2Approved(requirement);
+      await this.assertPermit2Approved(requirement, opts?.permit2Allowance);
       return buildUptoPayment(requirement, this.address, sign, opts);
     }
     return buildExactPayment(requirement, this.address, sign, opts);
@@ -118,11 +129,18 @@ export class Eip3009EoaPayer implements Payer {
    * the budget.
    *
    * The approval is granted once per chain and is not automatic yet.
+   *
+   * `known` is the figure the funder already read. It is taken only when it
+   * covers this payment, so the check can be satisfied early but never talked
+   * down: anything short falls through to the chain. The read stays for every
+   * caller that arrives without one, since a payer signing outside the funding
+   * hook has nothing else between it and an unsettleable signature.
    */
-  private async assertPermit2Approved(requirement: X402PaymentRequirement): Promise<void> {
+  private async assertPermit2Approved(requirement: X402PaymentRequirement, known?: bigint): Promise<void> {
     const asset = usdcForNetwork(requirement.network);
     if (!asset) return; // the builder refuses an unknown network with a better message
     const needed = BigInt(requirement.amount);
+    if (known !== undefined && known >= needed) return;
     const allowance = await this.permit2Allowance(asset);
     if (allowance < needed) {
       throw new Error(

@@ -181,6 +181,40 @@ describe('Eip3009EoaPayer paying upto', () => {
     await expect(payer.pay(uptoRequirement)).rejects.toThrow(/approved Permit2/);
   });
 
+  /**
+   * The funder reads this allowance to decide whether to grant one, on the same
+   * contract through the same client, moments earlier. Asking again inside the
+   * same payment is the same question twice.
+   */
+  it('takes the allowance the funder already read instead of asking the chain again', async () => {
+    getCodeMock.mockResolvedValue('0x');
+    readContractMock.mockRejectedValue(new Error('the chain must not be asked'));
+    const payer = Eip3009EoaPayer.fromSessionKey();
+
+    const payload = await payer.pay(uptoRequirement, {
+      permit2Allowance: 2n ** 256n - 1n,
+      now: 1_000_000,
+      nonce: ('0x' + '11'.repeat(32)) as `0x${string}`,
+    });
+
+    expect(payload.payload).toHaveProperty('permit2Authorization');
+  });
+
+  /** A figure short of the ceiling is not an answer, so the chain still decides. */
+  it('still reads the chain when the figure it was handed does not cover the ceiling', async () => {
+    getCodeMock.mockResolvedValue('0x');
+    readContractMock.mockResolvedValue(2n ** 256n - 1n);
+    const payer = Eip3009EoaPayer.fromSessionKey();
+
+    await payer.pay(uptoRequirement, {
+      permit2Allowance: 4_999_999n,
+      now: 1_000_000,
+      nonce: ('0x' + '11'.repeat(32)) as `0x${string}`,
+    });
+
+    expect(readContractMock).toHaveBeenCalled();
+  });
+
   it('signs a Permit2 authorization once the allowance covers it', async () => {
     getCodeMock.mockResolvedValue('0x');
     readContractMock.mockResolvedValue(2n ** 256n - 1n);
