@@ -12,6 +12,7 @@ import { parseBigInt } from '../../x402/amount.js';
 import { USDC_BY_NETWORK } from '../../x402/asset-registry.js';
 import { gasReserve } from '../../x402/gas-reserve.js';
 import { formatUsdc, formatRemaining, diagnose } from '../../x402/status-report.js';
+import { readLiveness, type PermissionLiveness } from '../../x402/permission-onchain.js';
 import type { OutputFormat } from '../../lib/types.js';
 
 /**
@@ -58,19 +59,22 @@ export default class X402Status extends BaseCommand {
     const asset = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === session.chainId);
     const payer = sessionPayerAddress();
 
-    // Balances are the only network reads here. A failure must not take the
-    // command down: the local half of the answer (caps, spend, expiry) is still
-    // worth printing, and an unreachable RPC is itself a useful thing to see.
-    const balances = await Promise.all(
-      [session.ownerAddress as `0x${string}`, payer].map(async (address) => {
-        if (!asset) return null;
-        try {
-          return (await usdcBalance(asset.wireNetwork, address)).formatted;
-        } catch {
-          return null;
-        }
-      })
-    );
+    // Network reads, all of them failing soft. The local half of the answer
+    // (caps, spend, expiry) is still worth printing, and an unreachable RPC is
+    // itself a useful thing to see.
+    const [balances, liveness] = await Promise.all([
+      Promise.all(
+        [session.ownerAddress as `0x${string}`, payer].map(async (address) => {
+          if (!asset) return null;
+          try {
+            return (await usdcBalance(asset.wireNetwork, address)).formatted;
+          } catch {
+            return null;
+          }
+        })
+      ),
+      readLiveness(session),
+    ]);
     const [ownerBalance, payerBalance] = balances;
 
     const spent = sumSpentSince(payer, session.createdAt);
@@ -90,6 +94,7 @@ export default class X402Status extends BaseCommand {
     // "the cap is not applying" and still reported ready:true to a script.
     const problems = diagnose({
       expired,
+      liveness,
       ownerAddress: session.ownerAddress,
       ownerBalance,
       payerBalance,
@@ -115,6 +120,7 @@ export default class X402Status extends BaseCommand {
           ready: problems.length === 0,
           problems,
           chainId: session.chainId,
+          permission: { id: session.permissionId, onChain: liveness },
           owner: { address: session.ownerAddress, usdc: ownerBalance },
           payer: { address: payer, usdc: payerBalance },
           policy: {
@@ -147,6 +153,11 @@ export default class X402Status extends BaseCommand {
     this.log(`  payer   ${payer}   ${fmt(payerBalance)}`);
     this.log('');
     this.log(`  chain   ${session.chainId}${asset ? '' : '   (no USDC configured for this chain)'}`);
+    // Only printed when the chain answered. A line saying "unknown" on every
+    // run of an older session is noise about a question nobody asked.
+    if (liveness !== 'unknown') {
+      this.log(`  perm    ${session.permissionId}   ${LIVENESS_LABEL[liveness]}`);
+    }
     this.log(`  caps    ${formatUsdc(policy.maxAmountPerPayment, decimals)} per payment`);
     // The granted cap first: it is the one the chain enforces, and the one a
     // refusal will quote back.
@@ -191,3 +202,10 @@ export default class X402Status extends BaseCommand {
 function fmt(balance: string | null): string {
   return balance === null ? '     ?    ' : `${balance} USDC`;
 }
+
+const LIVENESS_LABEL: Record<Exclude<PermissionLiveness, 'unknown'>, string> = {
+  active: 'live on chain',
+  revoked: 'REVOKED on chain',
+  unapproved: 'not approved on chain',
+  mismatch: 'does not match the stored permission',
+};

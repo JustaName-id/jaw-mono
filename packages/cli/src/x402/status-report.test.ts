@@ -59,6 +59,41 @@ describe('diagnose', () => {
     expect(diagnose({ ...healthy, expired: true })[0]).toMatch(/session expired/i);
   });
 
+  /**
+   * The only fact here that has to come from the chain. Expiry is the same
+   * number the session config carries, so a revoke made from keys.jaw.id or
+   * from another machine was invisible: the file still said the session was
+   * good for days.
+   */
+  it('flags a permission revoked on chain, with the local expiry still ahead', () => {
+    const problems = diagnose({ ...healthy, liveness: 'revoked' });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/revoked on chain/i);
+  });
+
+  // Also what a lagging node says seconds after a grant, so the message offers
+  // that before telling anyone to re-run setup.
+  it('flags a permission the chain has no approval for', () => {
+    expect(diagnose({ ...healthy, liveness: 'unapproved' })[0]).toMatch(/no record of this permission/);
+  });
+
+  it('flags a stored permission that does not hash to the granted one', () => {
+    expect(diagnose({ ...healthy, liveness: 'mismatch' })[0]).toMatch(/does not match the one that was granted/);
+  });
+
+  /**
+   * Not knowing is not evidence. An unreachable node, a chain with no client
+   * and a session written before the struct was stored all arrive as
+   * `unknown`, and none of them may turn a working setup into a warning.
+   */
+  it.each(['unknown', 'active'] as const)('says nothing for %s', (liveness) => {
+    expect(diagnose({ ...healthy, liveness })).toEqual([]);
+  });
+
+  it('says nothing when the field is absent, as it is for every older session', () => {
+    expect(diagnose(healthy)).toEqual([]);
+  });
+
   // Auto mode refuses these, so a report that stayed quiet would call a setup
   // ready when no payment can go through.
   it('flags a session an older CLI created', () => {

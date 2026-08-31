@@ -248,3 +248,17 @@ describe('readCurrentPeriod', () => {
     expect(read).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * A session can live on a chain the x402 client has no entry for, and
+ * `session status` runs for those too. Building the client is what throws
+ * there, before any call is made, so it has to read as not knowing.
+ */
+describe('a chain with no client', () => {
+  it('cannot tell rather than taking the command down', async () => {
+    await expect(readPermissionState({ ...target, chainId: 1 })).resolves.toEqual({ status: 'unavailable' });
+    await expect(readCurrentPeriod({ ...target, chainId: 1, token: USDC })).resolves.toEqual({
+      status: 'unavailable',
+    });
+  });
+});

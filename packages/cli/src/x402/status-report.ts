@@ -1,5 +1,6 @@
 import { parseBigInt } from './amount.js';
 import { sanitizeLine } from '../lib/terminal.js';
+import type { PermissionLiveness } from './permission-onchain.js';
 
 /**
  * Presentation and diagnosis for `jaw x402 status`, kept apart from the command
@@ -28,6 +29,11 @@ export function formatRemaining(seconds: number): string {
 
 export interface StatusFacts {
   expired: boolean;
+  /**
+   * Defaults to `unknown`, which reports exactly what every session reported
+   * before this could be read: the local file, and nothing more.
+   */
+  liveness?: PermissionLiveness;
   /**
    * True for a session an older CLI created, whose permission was granted to an
    * address separate from the session key. Auto mode refuses those, so a report
@@ -76,6 +82,31 @@ export function diagnose(facts: StatusFacts): string[] {
 
   if (facts.expired) {
     problems.push('The session expired. Run `jaw session setup --x402`.');
+  }
+
+  // Only the chain knows this one. Expiry is the same number the local file
+  // carries, so it needs no read; a revoke made from keys.jaw.id or from
+  // another machine leaves that file saying the session is fine.
+  if (facts.liveness === 'revoked') {
+    problems.push(
+      'The permission was revoked on chain, so nothing can be pulled through it any more. ' +
+        'Run `jaw session setup --x402` to grant a new one.'
+    );
+  }
+
+  if (facts.liveness === 'unapproved') {
+    problems.push(
+      'The chain has no record of this permission being approved. If the session was just created, ' +
+        'the grant may not have been mined yet; otherwise run `jaw session setup --x402`.'
+    );
+  }
+
+  if (facts.liveness === 'mismatch') {
+    problems.push(
+      'The permission stored for this session does not match the one that was granted, so its ' +
+        'on-chain state cannot be read. Payments still work, and the caps shown below are the local ' +
+        'ones. Run `jaw session setup --x402` to resync.'
+    );
   }
 
   if (facts.outdated) {

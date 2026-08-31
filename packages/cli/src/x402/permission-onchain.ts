@@ -162,11 +162,24 @@ async function managerAddress(override?: `0x${string}`): Promise<`0x${string}`> 
   return PERMISSIONS_MANAGER_ADDRESS as `0x${string}`;
 }
 
+/**
+ * The read function for this chain, or null when there is none.
+ *
+ * `publicClientFor` throws for a chain it has no viem entry for, and a session
+ * can live on one: `session status` runs for any chain the account supports,
+ * while the client here covers the four the USDC registry names. Null rather
+ * than a throw, so a chain without a client reads as not knowing instead of
+ * taking the command down.
+ */
 function reader(chainId: number, deps: ReadDeps) {
   if (deps.readContract) return deps.readContract;
-  const client = publicClientFor(chainId);
-  return (args: Parameters<NonNullable<ReadDeps['readContract']>>[0]) =>
-    client.readContract(args as never) as Promise<unknown>;
+  try {
+    const client = publicClientFor(chainId);
+    return (args: Parameters<NonNullable<ReadDeps['readContract']>>[0]) =>
+      client.readContract(args as never) as Promise<unknown>;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -183,10 +196,11 @@ export async function readPermissionState(target: PermissionReadTarget, deps: Re
   const permission = toContractPermission(target.permission);
   if (!permission) return { status: 'unavailable' };
 
-  const address = await managerAddress(deps.manager);
   const read = reader(target.chainId, deps);
+  if (!read) return { status: 'unavailable' };
 
   try {
+    const address = await managerAddress(deps.manager);
     const [hash, approved, revoked] = await Promise.all([
       read({ address, abi: PERMISSION_MANAGER_ABI, functionName: 'getHash', args: [permission] }),
       read({ address, abi: PERMISSION_MANAGER_ABI, functionName: 'isApproved', args: [permission] }),
@@ -237,10 +251,11 @@ export async function readCurrentPeriod(
   const spendLimit = permission.spends.find((s) => s.token.toLowerCase() === target.token.toLowerCase());
   if (!spendLimit) return { status: 'unavailable' };
 
-  const address = await managerAddress(deps.manager);
   const read = reader(target.chainId, deps);
+  if (!read) return { status: 'unavailable' };
 
   try {
+    const address = await managerAddress(deps.manager);
     const period = (await read({
       address,
       abi: PERMISSION_MANAGER_ABI,
@@ -259,4 +274,23 @@ function isTimeBoundRevert(err: unknown): boolean {
   if (!(err instanceof BaseError)) return false;
   const revert = err.walk((e) => e instanceof ContractFunctionRevertedError);
   return revert instanceof ContractFunctionRevertedError && TIME_BOUND_ERRORS.has(revert.data?.errorName ?? '');
+}
+
+/**
+ * What the chain says about a session's permission, flattened to one word.
+ *
+ * `unknown` covers every way of not knowing, which callers treat alike: a node
+ * that did not answer, a chain with no client, a session written before the
+ * struct was stored, and a struct that cannot be rebuilt. None of them are
+ * evidence about a permission, so none of them may read as dead.
+ */
+export type PermissionLiveness = 'active' | 'revoked' | 'unapproved' | 'mismatch' | 'unknown';
+
+/** `readPermissionState` for the three status surfaces, which all want the one word. */
+export async function readLiveness(session: PermissionReadTarget, deps: ReadDeps = {}): Promise<PermissionLiveness> {
+  const state = await readPermissionState(session, deps);
+  if (state.status === 'unavailable') return 'unknown';
+  if (state.status === 'mismatch') return 'mismatch';
+  if (state.revoked) return 'revoked';
+  return state.approved ? 'active' : 'unapproved';
 }
