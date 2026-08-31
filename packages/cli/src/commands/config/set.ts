@@ -57,7 +57,14 @@ export default class ConfigSet extends BaseCommand {
         if (!isX402PolicyKey(sub)) {
           this.error(`Invalid x402 config key: ${sub}`);
         }
-        setX402PolicyValue(sub, value);
+        // Same guard as the branch below: the setter rejects a non-integer
+        // amount by throwing, and unhandled that reaches the user as a stack
+        // trace instead of the one-line error oclif prints.
+        try {
+          setX402PolicyValue(sub, value);
+        } catch (err) {
+          this.error(err instanceof Error ? err.message : String(err));
+        }
         results.push({ key, value });
         continue;
       }
