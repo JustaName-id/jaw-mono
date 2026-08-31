@@ -132,17 +132,6 @@ const b64json = <T>(header: string | null): T | null => {
 };
 
 /**
- * The settle receipt's tx hash, or nothing when the server sent something that
- * isn't one. Every other field off the wire is shape-checked (`accepts` by
- * `requirementSchema`, addresses by `hexAddress`, `network` by the CAIP-2
- * regex); this one is decoded from a bare base64 header and then reaches a
- * terminal line (`x402 pay` prints it unsanitized, so `\x1b[2K\r` would repaint
- * what the CLI just wrote) and the MCP meta block, which claims to hold only
- * validated shapes that cannot carry an instruction. Checking it here is what
- * makes that claim true, and closes every sink at once. A receipt that fails
- * the check still reconciles by nonce, which the ledger also records.
- */
-/**
  * The nonce that identifies this attempt on chain, whichever scheme produced it:
  * EIP-3009 carries its own, Permit2 carries the one its bitmap consumes. Both
  * are what an ambiguous settlement is reconciled by, so the ledger records
@@ -204,6 +193,17 @@ export function settledAmountOf(receipt: X402SettleResponse | null, scheme: stri
   return ceiling !== null && reported > ceiling ? authorized : reported.toString();
 }
 
+/**
+ * The settle receipt's tx hash, or nothing when the server sent something that
+ * isn't one. Every other field off the wire is shape-checked (`accepts` by
+ * `requirementSchema`, addresses by `hexAddress`, `network` by the CAIP-2
+ * regex); this one is decoded from a bare base64 header and then reaches a
+ * terminal line (`x402 pay` prints it unsanitized, so `\x1b[2K\r` would repaint
+ * what the CLI just wrote) and the MCP meta block, which claims to hold only
+ * validated shapes that cannot carry an instruction. Checking it here is what
+ * makes that claim true, and closes every sink at once. A receipt that fails
+ * the check still reconciles by nonce, which the ledger also records.
+ */
 function settledTxHash(receipt: X402SettleResponse | null): `0x${string}` | undefined {
   const tx = receipt?.transaction;
   return tx && /^0x[0-9a-fA-F]{64}$/.test(tx) ? tx : undefined;
