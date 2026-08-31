@@ -173,10 +173,10 @@ function paymentDeadlineOf(payload: X402PaymentPayload): string {
  * ceiling: the one direction a server must not be able to move this number is
  * downward without having settled.
  *
- * Exported for its own tests. The `upto` path that reaches it is still gated
- * off, and this rule decides how much of a user's budget a server can spend
- * without paying for it, so it is not waiting for the gate to open to be
- * covered.
+ * Exported for its own tests, and covered by them directly because this rule
+ * decides how much of a user's budget a server can spend without paying for
+ * it. It is the live path: `upto` passes both the policy and the selection, and
+ * a full payment runs through here.
  */
 export function settledAmountOf(receipt: X402SettleResponse | null, scheme: string, authorized: string): string {
   if (scheme !== 'upto') return authorized;
