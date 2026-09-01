@@ -117,6 +117,7 @@ describe('buildUptoPayment', () => {
     const clean = { ...requirement, extra: { ...requirement.extra, facilitatorAddress: FACILITATOR_MIXED } };
     const shouty = {
       ...clean,
+      asset: misCased(requirement.asset) as `0x${string}`,
       payTo: misCased(requirement.payTo) as `0x${string}`,
       extra: { ...requirement.extra, facilitatorAddress: misCased(FACILITATOR_MIXED) },
     };
@@ -125,6 +126,9 @@ describe('buildUptoPayment', () => {
     const auth = authOf(payload);
 
     expect(auth.witness.to).toBe(shouty.payTo);
+    // The permitted token is echoed too: the registry decides what gets signed,
+    // not what the facilitator has to string-match against its own challenge.
+    expect(auth.permitted.token).toBe(shouty.asset);
     expect(auth.witness.facilitator).toBe(misCased(FACILITATOR_MIXED));
     const cleanSig = ((await build(clean)).payload as X402UptoPayload).signature;
     expect((payload.payload as X402UptoPayload).signature).toBe(cleanSig);

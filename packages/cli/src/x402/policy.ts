@@ -1,7 +1,7 @@
 import { USDC_BY_NETWORK, usdcForNetwork } from './asset-registry.js';
 import { parseBigInt, parseNonNegativeBigInt } from './amount.js';
 import { describePeriod, normalizePeriod, type PeriodUnit } from './period.js';
-import { isHexAddress } from './address.js';
+import { isHexAddress, isZeroAddress } from './address.js';
 import { UPTO_VERIFIED_CHAIN_IDS } from './permit2.js';
 import { isX402Scheme, type X402PaymentRequirement } from './types.js';
 import type { GrantedSpend } from '../lib/session-config.js';
@@ -312,7 +312,7 @@ export function checkPolicy(
     // selection like the unverified chain above, and an `exact` option on the
     // same challenge still pays.
     const facilitator = requirement.extra?.['facilitatorAddress'];
-    if (!isHexAddress(facilitator)) {
+    if (!isHexAddress(facilitator) || isZeroAddress(facilitator)) {
       return {
         ok: false,
         reason: `x402 upto requires extra.facilitatorAddress on ${requirement.network}, got ${JSON.stringify(facilitator)}`,
@@ -326,6 +326,13 @@ export function checkPolicy(
 
   if (has(policy.allowedAssets) && !policy.allowedAssets.some((a) => eqAddr(a, requirement.asset))) {
     return { ok: false, reason: `asset not allowed: ${requirement.asset}` };
+  }
+
+  // Ahead of the allowlist, because it holds whether or not one is configured:
+  // a payment to address(0) is destroyed, and it is refused here rather than in
+  // a signer so nothing has been funded when it is.
+  if (isZeroAddress(requirement.payTo)) {
+    return { ok: false, reason: `payTo is the zero address on ${requirement.network}` };
   }
 
   if (has(policy.allowedPayTo) && !policy.allowedPayTo.some((a) => eqAddr(a, requirement.payTo))) {

@@ -28,3 +28,14 @@ export const isHexAddress = (value: unknown): value is `0x${string}` =>
  * by the server: the bytes are the bytes, whatever case they arrived in.
  */
 export const checksummed = (value: `0x${string}`): `0x${string}` => getAddress(value);
+
+/**
+ * address(0) passes the shape check and is never a counterparty anyone can be
+ * paid through. As a facilitator the proxy reverts with `UnauthorizedFacilitator`
+ * for every caller, since nobody calls from the zero address, so the permit can
+ * never settle; as a `payTo` the transfer is money destroyed. Both cost the
+ * payer a top-up first and then count their full figure against the caps, on
+ * the rule that a failed attempt may still have been broadcast. Refusing during
+ * selection costs nothing.
+ */
+export const isZeroAddress = (value: string): boolean => /^0x0{40}$/.test(value);

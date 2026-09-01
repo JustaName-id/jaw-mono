@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { checksummed, isHexAddress } from './address.js';
+import { checksummed, isHexAddress, isZeroAddress } from './address.js';
 import { usdcForNetwork } from './asset-registry.js';
 import {
   PERMIT_WITNESS_TRANSFER_FROM_TYPES,
@@ -116,7 +116,7 @@ export async function buildUptoPayment(
   // anything has been funded; like the chain check above, this is the signer's
   // own precondition for a caller that reaches it another way.
   const advertisedFacilitator = requirement.extra?.['facilitatorAddress'];
-  if (!isHexAddress(advertisedFacilitator)) {
+  if (!isHexAddress(advertisedFacilitator) || isZeroAddress(advertisedFacilitator)) {
     throw new Error(
       `x402 upto requires extra.facilitatorAddress on ${requirement.network}, got ${JSON.stringify(advertisedFacilitator)}`
     );
@@ -149,8 +149,14 @@ export async function buildUptoPayment(
 
   // Numbers go back out as strings, the way they arrived. `nonce` stays hex
   // because that is the width it is: 32 bytes of bitmap coordinate, not a count.
+  //
+  // `requirement.asset` and not the registry's own spelling of it, for the same
+  // reason the witness echoes the challenge below: the two are already known to
+  // be the same address, and a facilitator matching this against the `asset` it
+  // advertised, which `accepted` also echoes back, should see its own casing.
+  // The signed message keeps the registry value, which is what makes them equal.
   const permit2Authorization: X402Permit2Authorization = {
-    permitted: { token: message.permitted.token, amount: message.permitted.amount.toString() },
+    permitted: { token: requirement.asset, amount: message.permitted.amount.toString() },
     from,
     spender: message.spender,
     nonce,

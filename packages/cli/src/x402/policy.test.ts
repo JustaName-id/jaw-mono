@@ -97,6 +97,27 @@ describe('checkPolicy', () => {
     expect(checkPolicy(base, {}).ok).toBe(true);
   });
 
+  /**
+   * address(0) has the shape and none of the meaning. The proxy reverts for
+   * every caller when the witness names it, so the permit can never settle, and
+   * a payment to it is destroyed. Both would be funded first and then counted
+   * in full against the caps.
+   */
+  it('refuses the zero address as a facilitator or a recipient', () => {
+    const zero = `0x${'0'.repeat(40)}`;
+
+    const asFacilitator = checkPolicy({ ...base, scheme: 'upto', extra: { facilitatorAddress: zero } }, {});
+    expect(asFacilitator.ok).toBe(false);
+    expect(asFacilitator.reason).toContain('facilitatorAddress');
+
+    // Both schemes, and with no allowlist configured.
+    for (const scheme of ['exact', 'upto'] as const) {
+      const verdict = checkPolicy({ ...base, scheme, ...uptoExtra, payTo: zero as `0x${string}` }, {});
+      expect(verdict.ok).toBe(false);
+      expect(verdict.reason).toContain('zero address');
+    }
+  });
+
   it('enforces maxAmountPerPayment', () => {
     expect(checkPolicy(base, { maxAmountPerPayment: '999' }).ok).toBe(false);
     expect(checkPolicy(base, { maxAmountPerPayment: '1000' }).ok).toBe(true);
