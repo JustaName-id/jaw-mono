@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { getAddress } from 'viem';
+import { checksummed } from './address.js';
 import { usdcForNetwork } from './asset-registry.js';
 import type { X402EIP3009Authorization, X402PaymentPayload, X402PaymentRequirement } from './types.js';
 
@@ -77,15 +77,14 @@ export async function buildExactPayment(
   // viem checksums at signing time. The comparison above is case-insensitive on
   // purpose, so an asset differing from the registry only in casing gets past it
   // and throws inside `sign()` instead, after the payer has already been funded:
-  // a top-up spent on a payment that never goes out.
+  // a top-up spent on a payment that never goes out. Re-cased for the typed-data
+  // message only; the wire keeps the challenge's own casing (see address.ts).
   //
   // `asset.address` rather than a re-cased `requirement.asset`, for the reason
   // the check above exists: the registry is the source of truth, and the two are
-  // now known to be the same address. `payTo` has no registry to fall back on,
-  // so it is checksummed in place. An `address` encodes lowercased either way,
-  // so neither changes what the signature covers.
+  // now known to be the same address. `payTo` has no registry to fall back on.
   const verifyingContract = asset.address;
-  const payTo = getAddress(requirement.payTo);
+  const signedPayTo = checksummed(requirement.payTo);
 
   // Prefer the server-advertised EIP-712 domain name/version (extra), else the
   // registry's known values for this USDC deployment.
@@ -108,7 +107,7 @@ export async function buildExactPayment(
 
   const authorization: X402EIP3009Authorization = {
     from,
-    to: payTo,
+    to: requirement.payTo,
     value: requirement.amount,
     validAfter,
     validBefore,
@@ -121,7 +120,7 @@ export async function buildExactPayment(
     primaryType: 'TransferWithAuthorization',
     message: {
       from,
-      to: payTo,
+      to: signedPayTo,
       value: BigInt(requirement.amount),
       validAfter: BigInt(validAfter),
       validBefore: BigInt(validBefore),
