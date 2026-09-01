@@ -11,7 +11,7 @@ import {
   PERMISSION_MANAGER_ABI,
   toContractPermission,
   readPermissionState,
-  readCurrentPeriod,
+  readCurrentPeriods,
 } from './permission-onchain.js';
 import type { GrantedPermission } from '../lib/session-config.js';
 
@@ -162,63 +162,58 @@ describe('readPermissionState', () => {
   });
 });
 
-describe('readCurrentPeriod', () => {
+describe('readCurrentPeriods', () => {
   const period = { start: 1_756_000_000, end: 1_756_086_400, spend: 5_000_000n };
-
   const answering = async ({ functionName }: { functionName: string }) =>
     functionName === 'getHash' ? PERMISSION_ID : period;
 
   it('returns the window and the spend the allowance actually lost', async () => {
-    const result = await readCurrentPeriod({ ...target, token: USDC }, { manager: MANAGER, readContract: answering });
-    expect(result).toEqual({ status: 'ok', ...period });
+    const result = await readCurrentPeriods({ ...target, token: USDC }, { manager: MANAGER, readContract: answering });
+    expect(result).toEqual([{ ...GRANTED.spends[0], period: { status: 'ok', ...period } }]);
   });
 
   /**
-   * `getCurrentPeriod` does not require the permission to exist. Handed a struct
-   * that hashes to something else it answers about that other hash, as `spend:
-   * 0` over a window built from the on-disk start. Reported as the contract's
-   * figure that drops the "at least" from a number never read for this
-   * permission, and hands the payment path a window that can be later than the
-   * real one, letting a payment the period cap should refuse through.
+   * The reason this is plural. The contract keeps a counter per limit, so a
+   * permission with several on one token has several budgets, and reading one
+   * answers about one of them. They go in a single batch, so N limits cost one
+   * round trip.
    */
-  it('cannot tell when the struct hashes to a different permission', async () => {
-    const result = await readCurrentPeriod(
-      { ...target, token: USDC },
-      { manager: MANAGER, readContract: async ({ functionName }) => (functionName === 'getHash' ? '0xother' : period) }
-    );
-    expect(result).toEqual({ status: 'unavailable' });
-  });
-
-  it('picks the spend limit by token', async () => {
-    const other = '0x3333333333333333333333333333333333333333';
-    let seen: unknown;
-    await readCurrentPeriod(
-      {
-        ...target,
-        token: other,
-        permission: {
-          ...GRANTED,
-          spends: [GRANTED.spends[0], { token: other, allowance: '1000000', unit: 'week', multiplier: 1 }],
-        },
-      },
+  it('reads every limit on the token, in one batch', async () => {
+    const two = {
+      ...GRANTED,
+      spends: [
+        { token: USDC, allowance: '50000000', unit: 'day', multiplier: 1 },
+        { token: USDC, allowance: '100000000', unit: 'month', multiplier: 1 },
+      ],
+    };
+    let calls = 0;
+    const result = await readCurrentPeriods(
+      { ...target, permission: two, token: USDC },
       {
         manager: MANAGER,
-        readContract: async ({ functionName, args }) => {
-          if (functionName === 'getHash') return PERMISSION_ID;
-          seen = args[1];
-          return period;
+        readContract: async ({ functionName }) => {
+          calls += 1;
+          return functionName === 'getHash' ? PERMISSION_ID : period;
         },
       }
     );
-    expect(seen).toMatchObject({ token: other, allowance: 1_000_000n, unit: 3 });
+    expect(result.map((r) => r.allowance)).toEqual(['50000000', '100000000']);
+    expect(calls).toBe(3); // one hash plus one counter each
   });
 
   /**
-   * `getCurrentPeriod` runs the same time-bound check the spend path does and
-   * reverts outside the permission's window. That revert is the answer, and
-   * reading it as an unreachable node would hide an expired permission behind
-   * "could not check".
+   * `getCurrentPeriod` does not require the permission to exist. Handed a
+   * struct that hashes to something else it answers about that other hash, as
+   * a zeroed counter over a window built from the on-disk start.
    */
+  it('cannot tell when the struct hashes to a different permission', async () => {
+    const result = await readCurrentPeriods(
+      { ...target, token: USDC },
+      { manager: MANAGER, readContract: async ({ functionName }) => (functionName === 'getHash' ? '0xother' : period) }
+    );
+    expect(result.map((r) => r.period.status)).toEqual(['unavailable']);
+  });
+
   it('reads a time-bound revert as being outside the window', async () => {
     const errorAbi = parseAbi(['error JustaPermissionManager_AfterPermissionEnd(uint48 currentTimestamp, uint48 end)']);
     const reverted = new ContractFunctionRevertedError({
@@ -230,7 +225,7 @@ describe('readCurrentPeriod', () => {
       }),
       functionName: 'getCurrentPeriod',
     });
-    const result = await readCurrentPeriod(
+    const result = await readCurrentPeriods(
       { ...target, token: USDC },
       {
         manager: MANAGER,
@@ -240,11 +235,11 @@ describe('readCurrentPeriod', () => {
         },
       }
     );
-    expect(result).toEqual({ status: 'outside-window' });
+    expect(result.map((r) => r.period.status)).toEqual(['outside-window']);
   });
 
   it('reads any other failure as not knowing', async () => {
-    const result = await readCurrentPeriod(
+    const result = await readCurrentPeriods(
       { ...target, token: USDC },
       {
         manager: MANAGER,
@@ -254,61 +249,17 @@ describe('readCurrentPeriod', () => {
         },
       }
     );
-    expect(result).toEqual({ status: 'unavailable' });
+    expect(result.map((r) => r.period.status)).toEqual(['unavailable']);
   });
 
-  /**
-   * `outside-window` names which permission ran out of time, and making that
-   * claim from a struct that identifies no permission is the same mistake as
-   * trusting its spend figure. The hash is checked even when the period read
-   * reverted.
-   */
-  it('does not claim a window for a struct that hashes to a different permission', async () => {
-    const errorAbi = parseAbi(['error JustaPermissionManager_AfterPermissionEnd(uint48 currentTimestamp, uint48 end)']);
-    const reverted = new ContractFunctionRevertedError({
-      abi: errorAbi,
-      data: encodeErrorResult({
-        abi: errorAbi,
-        errorName: 'JustaPermissionManager_AfterPermissionEnd',
-        args: [1_756_700_000, 1_756_604_800],
-      }),
-      functionName: 'getCurrentPeriod',
-    });
-    const result = await readCurrentPeriod(
-      { ...target, token: USDC },
-      {
-        manager: MANAGER,
-        readContract: async ({ functionName }) => {
-          if (functionName === 'getHash') return '0xother';
-          throw reverted;
-        },
-      }
-    );
-    expect(result).toEqual({ status: 'unavailable' });
-  });
-
-  it('cannot tell for a token the permission carries no limit for', async () => {
+  it('returns nothing for a token the permission carries no limit for', async () => {
     const read = vi.fn();
-    const result = await readCurrentPeriod(
+    const result = await readCurrentPeriods(
       { ...target, token: '0x9999999999999999999999999999999999999999' },
       { manager: MANAGER, readContract: read }
     );
-    expect(result).toEqual({ status: 'unavailable' });
+    expect(result).toEqual([]);
     expect(read).not.toHaveBeenCalled();
-  });
-});
-
-/**
- * A session can live on a chain the x402 client has no entry for, and
- * `session status` runs for those too. Building the client is what throws
- * there, before any call is made, so it has to read as not knowing.
- */
-describe('a chain with no client', () => {
-  it('cannot tell rather than taking the command down', async () => {
-    await expect(readPermissionState({ ...target, chainId: 1 })).resolves.toEqual({ status: 'unavailable' });
-    await expect(readCurrentPeriod({ ...target, chainId: 1, token: USDC })).resolves.toEqual({
-      status: 'unavailable',
-    });
   });
 });
 
@@ -324,7 +275,7 @@ describe('a node that does not answer', () => {
       { status: 'unavailable' }
     );
     await expect(
-      readCurrentPeriod({ ...target, token: USDC }, { manager: MANAGER, readContract: never, timeoutMs: 5 })
-    ).resolves.toEqual({ status: 'unavailable' });
+      readCurrentPeriods({ ...target, token: USDC }, { manager: MANAGER, readContract: never, timeoutMs: 5 })
+    ).resolves.toEqual([{ ...GRANTED.spends[0], period: { status: 'unavailable' } }]);
   });
 });

@@ -37,7 +37,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   readPermissionState,
-  readCurrentPeriod,
+  readCurrentPeriods,
   toContractPermission,
 } from '../packages/cli/src/x402/permission-onchain.js';
 import { parseGrantedPermission, type GrantedPermission } from '../packages/cli/src/lib/session-config.js';
@@ -94,11 +94,10 @@ if (!asset) {
 console.log(`\npermission ${session.permissionId}\nchain      ${session.chainId}\n`);
 
 /**
- * Sessions written before the struct was stored keep only the id. The relay
- * holds what was granted, so it is recoverable, and this is the path the CLI
- * does not yet take: it reports "cannot tell" for those sessions instead. Doing
- * it here is what lets this run against a session that already exists rather
- * than one made for the test.
+ * Sessions written before the struct was stored keep only the id, and the relay
+ * holds what was granted. The CLI recovers it on the first command that needs
+ * it; doing the same here keeps this runnable against a session that predates
+ * that, and against one whose recovery has not happened yet.
  */
 let permission = session.permission;
 if (!permission) {
@@ -133,17 +132,24 @@ if (state.status === 'ok') {
 }
 
 // 2. Two implementations of the same calendar.
-const period = await readCurrentPeriod({
+const limits = await readCurrentPeriods({
   chainId: session.chainId,
   permissionId: session.permissionId,
   permission,
   token: asset.address,
 });
-check(period.status === 'ok', 'getCurrentPeriod answers for the granted spend', period.status);
+check(limits.length > 0, 'the permission carries a limit on the registry USDC');
 
-if (period.status === 'ok') {
-  const spend = permission.spends.find((s) => s.token.toLowerCase() === asset.address.toLowerCase());
-  const normalized = spend ? normalizePeriod(spend.unit, spend.multiplier) : undefined;
+// Every limit, because the contract charges every one of them and each keeps
+// its own counter. Reading one answered about one budget.
+for (const limit of limits) {
+  // Decimal, since the relay carries the allowance as hex.
+  const period = limit.multiplier === 1 ? limit.unit : `${limit.multiplier} ${limit.unit}s`;
+  const label = `${BigInt(limit.allowance)} per ${period}`;
+  check(limit.period.status === 'ok', `getCurrentPeriod answers for ${label}`, limit.period.status);
+  if (limit.period.status !== 'ok') continue;
+
+  const normalized = normalizePeriod(limit.unit, limit.multiplier);
   if (normalized) {
     const local = currentPeriodWindow({
       anchor: permission.start,
@@ -153,12 +159,12 @@ if (period.status === 'ok') {
       permissionEnd: permission.end,
     });
     check(
-      local.start === period.start && local.end === period.end,
-      'the local window matches the one the contract is in',
-      `local ${local.start}..${local.end}   chain ${period.start}..${period.end}`
+      local.start === limit.period.start && local.end === limit.period.end,
+      `the local window for ${label} matches the one the contract is in`,
+      `local ${local.start}..${local.end}   chain ${limit.period.start}..${limit.period.end}`
     );
   }
-  console.log(`\n  the allowance has lost ${period.spend} base units this period`);
+  console.log(`\n  ${label}: ${limit.period.spend} base units lost this period`);
 }
 
 console.log(failures === 0 ? '\nall checks passed\n' : `\n${failures} check(s) failed\n`);

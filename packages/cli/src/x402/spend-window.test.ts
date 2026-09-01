@@ -27,21 +27,23 @@ vi.mock('./ledger.js', () => ({
 }));
 
 vi.mock('./permission-onchain.js', () => ({
-  readCurrentPeriod: async () => {
+  readCurrentPeriods: async () => {
     h.reads += 1;
-    return h.onChain;
+    return h.onChain === null
+      ? []
+      : [{ token: USDC, unit: 'day', multiplier: 1, allowance: '5000000', period: h.onChain }];
   },
 }));
 
-const { currentPeriodSpend, currentPeriodSpendOnChain } = await import('./spend-window.js');
+const { currentLimitUsage, currentLimitUsageOnChain } = await import('./spend-window.js');
+const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
 
 const ANCHOR = new Date('2026-08-01T00:00:00.000Z');
 const NOW = new Date('2026-08-01T06:00:00.000Z');
 const CHAIN_WINDOW = { start: 1_754_006_400, end: 1_754_092_800 };
 
 const POLICY: X402Policy = {
-  maxPerPeriod: '5000000',
-  period: { unit: 'day', multiplier: 1, anchor: ANCHOR.toISOString() },
+  perPeriod: [{ allowance: '5000000', unit: 'day', multiplier: 1, anchor: ANCHOR.toISOString() }],
 };
 
 const SESSION = {
@@ -63,18 +65,18 @@ beforeEach(() => {
   h.reads = 0;
 });
 
-describe('currentPeriodSpend', () => {
+describe('currentLimitUsage', () => {
   it('marks the ledger as the source, because from there the figure is a floor', () => {
     h.toppedUp = 1_000_000n;
-    expect(currentPeriodSpend(POLICY, PAYER, SESSION, NOW)).toMatchObject({ toppedUp: 1_000_000n, source: 'ledger' });
+    expect(currentLimitUsage(POLICY, PAYER, SESSION, NOW)[0]).toMatchObject({ toppedUp: 1_000_000n, source: 'ledger' });
   });
 
-  it('is null when no grant seeded a period, so only the session cap applies', () => {
-    expect(currentPeriodSpend({}, PAYER, SESSION, NOW)).toBeNull();
+  it('is empty when no grant seeded a limit, so only the session cap applies', () => {
+    expect(currentLimitUsage({}, PAYER, SESSION, NOW)).toEqual([]);
   });
 });
 
-describe('currentPeriodSpendOnChain', () => {
+describe('currentLimitUsageOnChain', () => {
   /**
    * The case the review named: a pull the ledger never saw. Reporting the
    * ledger's 1 against a 5 already gone would size the next refill against
@@ -84,8 +86,8 @@ describe('currentPeriodSpendOnChain', () => {
     h.toppedUp = 1_000_000n;
     h.onChain = { status: 'ok', ...CHAIN_WINDOW, spend: 5_000_000n };
 
-    const period = await currentPeriodSpendOnChain(POLICY, PAYER, SESSION, NOW);
-    expect(period).toMatchObject({ toppedUp: 5_000_000n, source: 'chain', window: CHAIN_WINDOW });
+    const [period] = await currentLimitUsageOnChain(POLICY, PAYER, SESSION, NOW);
+    expect(period).toMatchObject({ toppedUp: 5_000_000n, source: 'chain', endsAt: new Date(CHAIN_WINDOW.end * 1000) });
   });
 
   /**
@@ -97,29 +99,29 @@ describe('currentPeriodSpendOnChain', () => {
     h.toppedUp = 5_000_000n;
     h.onChain = { status: 'ok', ...CHAIN_WINDOW, spend: 0n };
 
-    const period = await currentPeriodSpendOnChain(POLICY, PAYER, SESSION, NOW);
+    const [period] = await currentLimitUsageOnChain(POLICY, PAYER, SESSION, NOW);
     // Reported as the ledger's, because that is what it is: our own estimate of
     // a pull that has not been mined. Calling it the chain's would let the
     // report print an estimate as a metered total. The window is still the
     // contract's either way.
-    expect(period).toMatchObject({ toppedUp: 5_000_000n, source: 'ledger', window: CHAIN_WINDOW });
+    expect(period).toMatchObject({ toppedUp: 5_000_000n, source: 'ledger', endsAt: new Date(CHAIN_WINDOW.end * 1000) });
   });
 
   it('reports the chain as the source when the two agree', async () => {
     h.toppedUp = 5_000_000n;
     h.onChain = { status: 'ok', ...CHAIN_WINDOW, spend: 5_000_000n };
-    expect(await currentPeriodSpendOnChain(POLICY, PAYER, SESSION, NOW)).toMatchObject({ source: 'chain' });
+    expect((await currentLimitUsageOnChain(POLICY, PAYER, SESSION, NOW))[0]).toMatchObject({ source: 'chain' });
   });
 
   it('counts the ledger over the window the contract is actually in', async () => {
     h.onChain = { status: 'ok', ...CHAIN_WINDOW, spend: 0n };
-    const period = await currentPeriodSpendOnChain(POLICY, PAYER, SESSION, NOW);
-    expect(period?.window).toEqual(CHAIN_WINDOW);
+    const [period] = await currentLimitUsageOnChain(POLICY, PAYER, SESSION, NOW);
+    expect(period?.endsAt).toEqual(new Date(CHAIN_WINDOW.end * 1000));
   });
 
   it('falls back to the ledger when the node does not answer', async () => {
     h.toppedUp = 2_000_000n;
-    const period = await currentPeriodSpendOnChain(POLICY, PAYER, SESSION, NOW);
+    const [period] = await currentLimitUsageOnChain(POLICY, PAYER, SESSION, NOW);
     expect(period).toMatchObject({ toppedUp: 2_000_000n, source: 'ledger' });
   });
 
@@ -128,19 +130,19 @@ describe('currentPeriodSpendOnChain', () => {
   it('falls back to the ledger for a permission outside its own window', async () => {
     h.toppedUp = 2_000_000n;
     h.onChain = { status: 'outside-window' };
-    const period = await currentPeriodSpendOnChain(POLICY, PAYER, SESSION, NOW);
+    const [period] = await currentLimitUsageOnChain(POLICY, PAYER, SESSION, NOW);
     expect(period).toMatchObject({ toppedUp: 2_000_000n, source: 'ledger' });
   });
 
   it('does not read the chain on a chain with no registry asset to meter', async () => {
     const elsewhere = { ...SESSION, chainId: 1 };
-    const period = await currentPeriodSpendOnChain(POLICY, PAYER, elsewhere, NOW);
+    const [period] = await currentLimitUsageOnChain(POLICY, PAYER, elsewhere, NOW);
     expect(period?.source).toBe('ledger');
     expect(h.reads).toBe(0);
   });
 
   it('does not read the chain when no period applies at all', async () => {
-    expect(await currentPeriodSpendOnChain({}, PAYER, SESSION, NOW)).toBeNull();
+    expect(await currentLimitUsageOnChain({}, PAYER, SESSION, NOW)).toEqual([]);
     expect(h.reads).toBe(0);
   });
 });

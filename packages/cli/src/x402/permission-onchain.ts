@@ -1,6 +1,5 @@
 import { parseAbi, zeroAddress, ContractFunctionRevertedError, BaseError } from 'viem';
 import { publicClientFor } from './balance.js';
-import { bindingSpendLimit } from './period.js';
 import type { GrantedPermission } from '../lib/session-config.js';
 
 /**
@@ -259,75 +258,96 @@ export type OnChainPeriod =
   | { status: 'outside-window' }
   | { status: 'unavailable' };
 
+/** One limit's counter, tagged with the limit it belongs to. */
+export interface OnChainLimit {
+  token: string;
+  unit: string;
+  multiplier: number;
+  allowance: string;
+  period: OnChainPeriod;
+}
+
 /**
- * The current period for one spend limit of the permission.
+ * The current period for every spend limit the permission puts on `token`.
  *
- * `token` picks the limit, matching the token the local policy was seeded from.
- * The counter lives at `_lastUpdatedPeriod[permissionHash][spendLimitHash]`, so
- * a permission carrying more than one limit for the same token has more than
- * one counter, and reading the wrong one reads a different budget. Of those,
- * the one used is whichever `bindingSpendLimit` picks, which is the same one
- * `policyFromPermission` seeds the cap from: the counter and the cap have to
- * describe the same budget or the report compares two different things.
+ * All of them, because the contract charges all of them: the counter lives at
+ * `_lastUpdatedPeriod[permissionHash][spendLimitHash]`, so a permission with
+ * several limits on one token has several counters and reading one answers
+ * about one budget. Read in a single batch, so N limits cost one round trip
+ * rather than N.
+ *
+ * The hash is checked alongside them. `getCurrentPeriod` does not require the
+ * permission to exist: handed a struct that hashes to something else it answers
+ * about that other hash, as a zeroed counter over a window built from the
+ * on-disk start.
  */
-export async function readCurrentPeriod(
+export async function readCurrentPeriods(
   target: PermissionReadTarget & { token: string },
   deps: ReadDeps = {}
-): Promise<OnChainPeriod> {
-  if (!target.permission) return { status: 'unavailable' };
+): Promise<OnChainLimit[]> {
+  if (!target.permission) return [];
   const permission = toContractPermission(target.permission);
-  if (!permission) return { status: 'unavailable' };
+  if (!permission) return [];
 
-  // The same limit the policy was seeded from: the one that binds. Reading a
-  // different one reads a counter for a budget that is not the one refusing.
-  // Located by index, since `toContractPermission` maps the spends one to one.
   const granted = target.permission.spends;
-  const binding = bindingSpendLimit(granted.filter((s) => s.token.toLowerCase() === target.token.toLowerCase()));
-  const spendLimit = binding ? permission.spends[granted.indexOf(binding)] : undefined;
-  if (!spendLimit) return { status: 'unavailable' };
+  const indexes = granted
+    .map((spend, index) => ({ spend, index }))
+    .filter(({ spend }) => spend.token.toLowerCase() === target.token.toLowerCase());
+  if (indexes.length === 0) return [];
+
+  const unreadable = indexes.map(({ spend }) => ({ ...spend, period: { status: 'unavailable' as const } }));
 
   const read = reader(target.chainId, deps);
-  if (!read) return { status: 'unavailable' };
+  if (!read) return unreadable;
 
   try {
     const address = await managerAddress(deps.manager);
-    // Hashed alongside the read, not trusted from disk. `getCurrentPeriod` does
-    // not require the permission to exist: handed a struct that hashes to
-    // something else it answers about that other hash, which is a counter for a
-    // permission nobody granted, and it comes back as `spend: 0` over a window
-    // built from the on-disk start. Reported as the contract's metered figure
-    // that would drop the "at least" from a number never read for this
-    // permission, and hand the payment path a window that can be later than the
-    // real one, which lets a payment the period cap should refuse through.
-    const [hashed, read2] = (await within(
+    const settled = await within(
       Promise.allSettled([
         read({ address, abi: PERMISSION_MANAGER_ABI, functionName: 'getHash', args: [permission] }),
-        read({
-          address,
-          abi: PERMISSION_MANAGER_ABI,
-          functionName: 'getCurrentPeriod',
-          args: [permission, spendLimit],
-        }),
+        ...indexes.map(({ index }) =>
+          read({
+            address,
+            abi: PERMISSION_MANAGER_ABI,
+            functionName: 'getCurrentPeriod',
+            args: [permission, permission.spends[index]],
+          })
+        ),
       ]),
       deps.timeoutMs
-    )) as [PromiseSettledResult<unknown>, PromiseSettledResult<unknown>];
+    );
 
-    // Settled rather than raced, so the hash is checked even when the period
-    // read reverted. `outside-window` is a positive claim about which permission
-    // ran out of time, and making it from a struct that identifies no permission
-    // is the same mistake as trusting its spend figure.
+    const [hashed, ...counters] = settled;
     const hash = hashed.status === 'fulfilled' ? hashed.value : null;
     if (typeof hash !== 'string' || hash.toLowerCase() !== target.permissionId.toLowerCase()) {
-      return { status: 'unavailable' };
+      return unreadable;
     }
-    if (read2.status === 'rejected') {
-      return isTimeBoundRevert(read2.reason) ? { status: 'outside-window' } : { status: 'unavailable' };
-    }
-    const period = read2.value as { start: number; end: number; spend: bigint } | undefined;
-    if (!period) return { status: 'unavailable' };
-    return { status: 'ok', start: Number(period.start), end: Number(period.end), spend: BigInt(period.spend) };
-  } catch (err) {
-    return isTimeBoundRevert(err) ? { status: 'outside-window' } : { status: 'unavailable' };
+
+    return indexes.map(({ spend }, i) => {
+      const result = counters[i];
+      if (result.status === 'rejected') {
+        return {
+          ...spend,
+          period: isTimeBoundRevert(result.reason)
+            ? ({ status: 'outside-window' } as const)
+            : ({ status: 'unavailable' } as const),
+        };
+      }
+      const period = result.value as { start: number; end: number; spend: bigint } | undefined;
+      return {
+        ...spend,
+        period: period
+          ? ({
+              status: 'ok',
+              start: Number(period.start),
+              end: Number(period.end),
+              spend: BigInt(period.spend),
+            } as const)
+          : ({ status: 'unavailable' } as const),
+      };
+    });
+  } catch {
+    return unreadable;
   }
 }
 

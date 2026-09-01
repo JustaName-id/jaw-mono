@@ -1,15 +1,47 @@
 import { USDC_BY_NETWORK } from './asset-registry.js';
 import { parseBigInt, parseNonNegativeBigInt } from './amount.js';
-import { bindingSpendLimit, describePeriod, normalizePeriod, type PeriodUnit } from './period.js';
+import { describePeriod, normalizePeriod, type PeriodUnit } from './period.js';
 import type { X402PaymentRequirement } from './types.js';
 import type { GrantedPermission } from '../lib/session-config.js';
 
-/** The period a granted allowance resets over, carried into the policy. */
-export interface GrantedPeriod {
+/**
+ * One spend limit the grant puts on the payment token.
+ *
+ * A list of these rather than a single allowance and window, because
+ * `_checkAndIncrementSpend` charges every limit whose token matches and does
+ * not stop at the first. Which one refuses depends on the amount and on the
+ * moment, so a single pair cannot answer it, and picking one on the caller's
+ * behalf is what reported a month's budget as a day's.
+ */
+export interface GrantedPeriodLimit {
+  /** Base units, decimal string. */
+  allowance: string;
   unit: PeriodUnit;
   multiplier: number;
-  /** ISO timestamp the periods are anchored at. */
+  /** ISO timestamp the windows are anchored at: the permission's own start. */
   anchor: string;
+}
+
+/**
+ * A limit and what has been drawn against it inside the window containing now.
+ *
+ * Both meters, because the two caps count different things and always have:
+ * the allowance is drawn down by what is pulled through the permission, while
+ * a payment is what the payer sends out of the float it already holds.
+ */
+export interface LimitUsage extends GrantedPeriodLimit {
+  /** Payments made from the payer inside this window. */
+  spent: bigint;
+  /** Pulled through the permission inside this window, which is what the allowance loses. */
+  toppedUp: bigint;
+  /** When this limit's current window ends. */
+  endsAt: Date;
+  /**
+   * Where `toppedUp` came from. From the ledger it is a floor, since the ledger
+   * only sees what went through `payAndFetch`; from the chain it is what the
+   * contract will meter against.
+   */
+  source: 'ledger' | 'chain';
 }
 
 /**
@@ -35,9 +67,7 @@ export interface X402Policy {
    * that mirrors the chain; `maxTotalPerSession` is the user's own ceiling on
    * top. Set together with `period`.
    */
-  maxPerPeriod?: string;
-  /** The window `maxPerPeriod` resets over. Absent when no grant seeded it. */
-  period?: GrantedPeriod;
+  perPeriod?: GrantedPeriodLimit[];
   /** Allowed asset contract addresses (case-insensitive). Empty/undefined = any. */
   allowedAssets?: string[];
   /** Allowed CAIP-2 networks. Empty/undefined = any. */
@@ -89,23 +119,27 @@ export function policyFromPermission(permission: GrantedPermission | undefined, 
   if (!usdc) return {};
 
   const forToken = permission.spends.filter((spend) => spend.token.toLowerCase() === usdc.address.toLowerCase());
-  const binding = bindingSpendLimit(forToken);
-  if (!binding) return {};
+  if (forToken.length === 0) return {};
 
-  let allowance: string;
-  try {
-    const parsed = BigInt(binding.allowance);
-    // A negative allowance would seed a cap that refuses everything or worse.
-    if (parsed < 0n) return {};
-    allowance = parsed.toString();
-  } catch {
-    return {};
+  const anchor = new Date(permission.start * 1000).toISOString();
+  const perPeriod: GrantedPeriodLimit[] = [];
+  for (const spend of forToken) {
+    let allowance: string;
+    try {
+      const parsed = BigInt(spend.allowance);
+      // A negative allowance would seed a cap that refuses everything or worse.
+      if (parsed < 0n) continue;
+      allowance = parsed.toString();
+    } catch {
+      continue;
+    }
+    // Normalised the way the SDK normalises before encoding, so a `year` grant
+    // lands on the same month-based window the permission actually enforces.
+    const period = normalizePeriod(spend.unit, spend.multiplier);
+    if (!period) continue;
+    perPeriod.push({ allowance, unit: period.unit, multiplier: period.multiplier, anchor });
   }
-
-  // Normalised the way the SDK normalises before encoding, so a `year` grant
-  // lands on the same month-based window the permission actually enforces.
-  const period = normalizePeriod(binding.unit, binding.multiplier);
-  if (!period) return {};
+  if (perPeriod.length === 0) return {};
 
   return {
     // The registry's canonical address, not the permission's literal string:
@@ -113,14 +147,7 @@ export function policyFromPermission(permission: GrantedPermission | undefined, 
     // way.
     allowedAssets: [usdc.address],
     allowedNetworks: [usdc.wireNetwork],
-    maxPerPeriod: allowance,
-    period: {
-      unit: period.unit,
-      multiplier: period.multiplier,
-      // The permission's own start, which is what the contract steps its
-      // windows from. This used to be the local clock at setup.
-      anchor: new Date(permission.start * 1000).toISOString(),
-    },
+    perPeriod,
   };
 }
 
@@ -132,7 +159,7 @@ export function resolveX402Policy(configPolicy?: X402Policy, grantPolicy?: X402P
   // top of it would strand a longer grant well short of its own limit: a
   // 5-per-day grant over 7 days permits 35, and the default would stop it at 10.
   // A session cap the user set explicitly still applies on top.
-  if (grantPolicy?.maxPerPeriod !== undefined && configPolicy?.maxTotalPerSession === undefined) {
+  if (grantPolicy?.perPeriod !== undefined && configPolicy?.maxTotalPerSession === undefined) {
     delete merged.maxTotalPerSession;
   }
   return merged;
@@ -175,7 +202,7 @@ export function resolveSessionX402Policy(
  */
 export function topUpCeiling(
   policy: X402Policy,
-  used: { toppedUpThisPeriod?: bigint; spentThisSession?: bigint } = {}
+  used: { periodUsage?: LimitUsage[]; spentThisSession?: bigint } = {}
 ): bigint | undefined {
   const left = (cap: string | undefined, alreadyUsed = 0n): bigint | undefined => {
     const parsed = parseNonNegativeBigInt(cap);
@@ -183,7 +210,10 @@ export function topUpCeiling(
     return parsed > alreadyUsed ? parsed - alreadyUsed : 0n;
   };
   const caps = [
-    left(policy.maxPerPeriod, used.toppedUpThisPeriod),
+    // Every limit, not the one that looks tightest. The contract charges all of
+    // them, so a refill sized against any single one can still be refused by
+    // another, and the smallest remaining is the only figure safe against that.
+    ...(used.periodUsage ?? []).map((limit) => left(limit.allowance, limit.toppedUp)),
     left(policy.maxTotalPerSession, used.spentThisSession),
   ].filter((cap): cap is bigint => cap !== undefined);
   return caps.length > 0 ? caps.reduce((a, b) => (a < b ? a : b)) : undefined;
@@ -204,13 +234,11 @@ export interface PolicyContext {
   /** Base units already spent this session (for `maxTotalPerSession`). */
   spentThisSession?: bigint;
   /**
-   * Base units already spent inside the current grant period (for
-   * `maxPerPeriod`). Must be counted over the same window the policy's `period`
-   * describes, which resets as the grant does.
+   * Every limit on the payment token with what has been drawn against it inside
+   * the window containing now. Each must be counted over its own window, which
+   * resets as that limit does.
    */
-  spentThisPeriod?: bigint;
-  /** When the current period ends, for a refusal message that says when it frees up. */
-  periodEndsAt?: Date;
+  periodUsage?: LimitUsage[];
 }
 
 export interface PolicyResult {
@@ -275,22 +303,27 @@ export function checkPolicy(
   // Checked before the session cap: this is the one that mirrors the on-chain
   // permission, so when both would refuse, the reason the chain would give is
   // the more useful one to report.
-  if (policy.maxPerPeriod !== undefined) {
-    const cap = parseBigInt(policy.maxPerPeriod);
-    if (cap === null) {
-      return { ok: false, reason: `invalid maxPerPeriod from grant: ${policy.maxPerPeriod}` };
-    }
-    const spent = ctx.spentThisPeriod ?? 0n;
-    if (spent + amount > cap) {
-      const window = policy.period ? describePeriod(policy.period.unit, policy.period.multiplier) : 'period';
-      const resets = ctx.periodEndsAt ? `, resets ${ctx.periodEndsAt.toISOString()}` : '';
-      return {
-        ok: false,
-        reason:
-          `payment ${requirement.amount} would exceed the granted ${policy.maxPerPeriod} per ${window} ` +
-          `(already spent ${spent} this ${window}${resets})`,
-      };
-    }
+  // Refused when any limit would refuse it, which is what the contract does:
+  // it charges every limit whose token matches and reverts on the first that
+  // will not take the amount.
+  const exceeded = (ctx.periodUsage ?? []).filter((limit) => {
+    const cap = parseBigInt(limit.allowance);
+    return cap !== null && limit.spent + amount > cap;
+  });
+  if (exceeded.length > 0) {
+    // The one that frees up last, not the smallest. A refusal is read to decide
+    // what to do next, and naming the day limit when the month will refuse
+    // again tomorrow sends someone back for nothing.
+    const latest = exceeded.reduce((a, b) => (a.endsAt > b.endsAt ? a : b));
+    const others = exceeded.length - 1;
+    const window = describePeriod(latest.unit, latest.multiplier);
+    return {
+      ok: false,
+      reason:
+        `payment ${requirement.amount} would exceed the granted ${latest.allowance} per ${window}, ` +
+        `which resets ${latest.endsAt.toISOString()}` +
+        (others > 0 ? ` (${others} other limit${others === 1 ? '' : 's'} also applies)` : ''),
+    };
   }
 
   if (policy.maxTotalPerSession !== undefined) {

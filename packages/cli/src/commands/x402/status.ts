@@ -6,8 +6,8 @@ import { sessionPayerAddress } from '../../x402/payer.js';
 import { usdcBalance } from '../../x402/balance.js';
 import { sumSpentSince } from '../../x402/ledger.js';
 import { resolveSessionX402Policy } from '../../x402/policy.js';
-import { currentPeriodSpendOnChain } from '../../x402/spend-window.js';
-import { describePeriod, describeSpendPeriod } from '../../x402/period.js';
+import { currentLimitUsageOnChain } from '../../x402/spend-window.js';
+import { describePeriod } from '../../x402/period.js';
 import { parseBigInt } from '../../x402/amount.js';
 import { USDC_BY_NETWORK } from '../../x402/asset-registry.js';
 import { gasReserve } from '../../x402/gas-reserve.js';
@@ -102,18 +102,13 @@ export default class X402Status extends BaseCommand {
     // now. Without this the report was silent about the only cap a grant-seeded
     // session enforces. Asked of the chain first, which knows about pulls this
     // CLI's ledger never saw.
-    const periodSpend = await currentPeriodSpendOnChain(policy, payer, current);
-    const periodCap = parseBigInt(policy.maxPerPeriod);
-    const periodLabel = policy.period ? describePeriod(policy.period.unit, policy.period.multiplier) : null;
-
-    // Every other limit the permission puts on the same token. The cap above is
-    // one of several the contract charges, and reporting it alone is what makes
-    // the number look like the whole answer.
-    const otherLimits = (session.permission?.spends ?? []).filter(
-      (spend) =>
-        asset !== undefined &&
-        spend.token.toLowerCase() === asset.address.toLowerCase() &&
-        !(spend.allowance === policy.maxPerPeriod && spend.unit === policy.period?.unit)
+    // Every limit on the payment token, each with its own window and its own
+    // usage. Reducing them to one was reporting a month's budget as a day's.
+    const limits = await currentLimitUsageOnChain(policy, payer, current);
+    // The one a single payment is refused against, for the readiness verdict.
+    const tightest = limits.reduce<(typeof limits)[number] | null>(
+      (a, b) => (a === null || BigInt(b.allowance) < BigInt(a.allowance) ? b : a),
+      null
     );
 
     // One verdict for both renderers. `ready` used to be its own expression and
@@ -128,13 +123,13 @@ export default class X402Status extends BaseCommand {
       hasAsset: asset !== undefined,
       spent,
       sessionCap,
-      periodCap,
+      periodCap: tightest ? parseBigInt(tightest.allowance) : null,
       // Top-ups, not payments: the period cap mirrors the on-chain allowance
       // and the top-up is what draws it down, exactly as `topUpCeiling`
       // measures it. Payments lag by whatever float the payer still holds,
       // which kept this check quiet while the grant was already drained.
-      periodSpent: periodSpend?.toppedUp ?? null,
-      periodLabel,
+      periodSpent: tightest ? tightest.toppedUp : null,
+      periodLabel: tightest ? describePeriod(tightest.unit, tightest.multiplier) : null,
       outdated: isLegacySession(session),
       // Same units as the formatted balances. Exact in a double: the reserve
       // is a tenth of a token, six decimals at most.
@@ -153,34 +148,21 @@ export default class X402Status extends BaseCommand {
           payer: { address: payer, usdc: payerBalance },
           policy: {
             maxAmountPerPayment: policy.maxAmountPerPayment,
-            // Named so nobody reads `maxPerPeriod` as the whole story: the
-            // contract charges these too, and the tightest binds.
-            ...(otherLimits.length > 0
-              ? {
-                  otherLimitsOnSameToken: otherLimits.map((s) => ({
-                    allowance: s.allowance,
-                    unit: s.unit,
-                    multiplier: s.multiplier,
-                  })),
-                }
-              : {}),
             maxTotalPerSession: policy.maxTotalPerSession,
-            maxPerPeriod: policy.maxPerPeriod,
-            period: policy.period,
+            // Every one of them: the contract charges all, and naming one as
+            // the budget is what this set out to stop.
+            perPeriod: limits.map((limit) => ({
+              allowance: limit.allowance,
+              unit: limit.unit,
+              multiplier: limit.multiplier,
+              used: limit.toppedUp.toString(),
+              usedFrom: limit.source,
+              resetsAt: limit.endsAt.toISOString(),
+            })),
             topUpFloat: policy.topUpFloat,
           },
           spentThisSession: spent.toString(),
-          ...(periodSpend
-            ? {
-                // Same meter as the diagnose input above: what the on-chain
-                // allowance actually lost, so a script sees the grant drain.
-                spentThisPeriod: periodSpend.toppedUp.toString(),
-                // Where that figure came from. From the ledger it is a floor,
-                // from the chain it is what the contract will meter against.
-                spentThisPeriodSource: periodSpend.source,
-                periodEndsAt: new Date(periodSpend.window.end * 1000).toISOString(),
-              }
-            : {}),
+
           expiry: session.expiry,
           expired,
         },
@@ -207,50 +189,26 @@ export default class X402Status extends BaseCommand {
       );
     }
     this.log(`  caps    ${formatUsdc(policy.maxAmountPerPayment, decimals)} per payment`);
-    // The granted cap first: it is the one a refusal will quote back.
-    //
-    // It is not necessarily the one the chain enforces, and the line below says
-    // so when it is not alone. `_checkAndIncrementSpend` charges every limit
-    // whose token matches, so all of them apply and the tightest binds at any
-    // moment. `maxPerPeriod` is one number, and the limit it stands for is the
-    // one with the smallest allowance, which answers "what refuses this
-    // payment" and not "what runs out first": 50 a day next to 100 a month
-    // picks the 50 and overstates the month fifteenfold. Rather than choose
-    // better on the reader's behalf, show them the others.
-    //
-    // The period figure counts top-ups where the session figure counts
-    // payments, because the two caps meter different things: `maxPerPeriod`
-    // mirrors the on-chain allowance, and the top-up is what draws that down.
-    // Counting payments here understated the grant by whatever float the payer
-    // still held: one 0.1 USDC payment behind a 5 USDC top-up printed 0.1
-    // against a cap the chain had already docked 5 from.
-    //
-    // "at least" is dropped only for a period figure the contract answered.
-    // Everything summed from the local ledger is a floor: the ledger sees what
-    // went through `payAndFetch`, and the same permission can be spent by a
-    // `wallet_sendCalls` sent through `jaw_rpc`, which writes no row.
-    if (policy.maxPerPeriod !== undefined && periodLabel) {
-      const usedThisPeriod = periodSpend?.toppedUp ?? 0n;
-      const resets = periodSpend ? ` (resets ${new Date(periodSpend.window.end * 1000).toISOString()})` : '';
-      const floor = periodSpend?.source === 'chain' ? '' : 'at least ';
+    // Every limit, each with its own window and reset. One of them used to
+    // stand for all, which is how a 100-a-month cap was reported as 50 a day.
+    for (const limit of limits) {
+      const floor = limit.source === 'chain' ? '' : 'at least ';
       this.log(
-        `          ${floor}${formatUsdc(usedThisPeriod.toString(), decimals)} of ${formatUsdc(policy.maxPerPeriod, decimals)} used this ${periodLabel}${resets}`
+        `          ${floor}${formatUsdc(limit.toppedUp.toString(), decimals)} of ` +
+          `${formatUsdc(limit.allowance, decimals)} used this ${describePeriod(limit.unit, limit.multiplier)} ` +
+          `(resets ${limit.endsAt.toISOString()})`
       );
     }
-    for (const other of otherLimits) {
-      this.log(
-        `          and ${formatUsdc(other.allowance, decimals)} per ${describeSpendPeriod(other.unit, other.multiplier)} ` +
-          'on the same token, which also applies'
-      );
+    if (limits.length > 1) {
+      this.log('          all of them apply, so the tightest is what binds');
     }
     this.log(
       `          at least ${formatUsdc(spent.toString(), decimals)} of ${formatUsdc(policy.maxTotalPerSession, decimals)} spent this session`
     );
-    this.log(
-      periodSpend?.source === 'chain'
-        ? "          the session figure is counted from this CLI's ledger, which a direct jaw_rpc send bypasses"
-        : "          counted from this CLI's ledger, which a direct jaw_rpc send bypasses"
-    );
+    // The session total has no on-chain counterpart, so it is always a floor:
+    // the ledger sees what went through payAndFetch, and a `wallet_sendCalls`
+    // sent through jaw_rpc spends the same permission without writing a row.
+    this.log("          the session figure is counted from this CLI's ledger, which a direct jaw_rpc send bypasses");
     if (policy.topUpFloat) {
       this.log(`  float   tops the payer up to ${formatUsdc(policy.topUpFloat, decimals)} when it runs short`);
     }

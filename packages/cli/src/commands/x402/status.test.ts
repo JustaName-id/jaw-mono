@@ -139,9 +139,11 @@ async function runStatus(argv: string[]): Promise<string[]> {
 describe('jaw x402 status', () => {
   it('reports the period figure from top-ups and the session figure from payments', async () => {
     const result = JSON.parse((await runStatus(['--output', 'json'])).join('\n'));
-    expect(result.spentThisPeriod).toBe('5000000');
+    // The period figure counts top-ups, the session figure counts payments:
+    // one 0.1 USDC payment behind a 5 USDC pull is 5 against the allowance.
+    expect(result.policy.perPeriod[0].used).toBe('5000000');
+    expect(result.policy.perPeriod[0].allowance).toBe('5000000');
     expect(result.spentThisSession).toBe('100000');
-    expect(result.policy.maxPerPeriod).toBe('5000000');
   });
 
   it('flags the drained grant and flips ready, even though payments barely started', async () => {
@@ -173,16 +175,17 @@ describe('jaw x402 status', () => {
 
     const lines = (await runStatus([])).join('\n');
     expect(lines).toMatch(/of 5 USDC used this day/);
-    expect(lines).toMatch(/and 100 USDC per month on the same token, which also applies/);
+    expect(lines).toMatch(/of 100 USDC used this month/);
+    expect(lines).toMatch(/all of them apply, so the tightest is what binds/);
 
     const report = JSON.parse((await runStatus(['--output', 'json'])).join('\n'));
-    expect(report.policy.otherLimitsOnSameToken).toEqual([{ allowance: '100000000', unit: 'month', multiplier: 1 }]);
+    expect(report.policy.perPeriod.map((l: { allowance: string }) => l.allowance)).toEqual(['5000000', '100000000']);
   });
 
   it('says nothing extra when the token has a single limit', async () => {
     const lines = (await runStatus([])).join('\n');
-    expect(lines).not.toMatch(/also applies/);
+    expect(lines).not.toMatch(/all of them apply/);
     const report = JSON.parse((await runStatus(['--output', 'json'])).join('\n'));
-    expect(report.policy).not.toHaveProperty('otherLimitsOnSameToken');
+    expect(report.policy.perPeriod).toHaveLength(1);
   });
 });
