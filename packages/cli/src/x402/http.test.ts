@@ -879,7 +879,14 @@ describe('settledAmountOf', () => {
  * own consumption, and a signature is worth its ceiling to anyone holding it.
  */
 describe('choosing between schemes', () => {
-  const upto = (amount: string) => ({ ...REQUIREMENT, scheme: 'upto', amount });
+  // Carries the facilitator every payable upto challenge has; checkPolicy
+  // skips the option without one, exactly so the signer never sees it.
+  const upto = (amount: string) => ({
+    ...REQUIREMENT,
+    scheme: 'upto',
+    amount,
+    extra: { facilitatorAddress: '0x1111111111111111111111111111111111111111' },
+  });
   const exact = (amount: string) => ({ ...REQUIREMENT, scheme: 'exact', amount });
   const challengeOf = (...accepts: unknown[]) => b64({ x402Version: 2, resource: { url: URL_UNDER_TEST }, accepts });
 

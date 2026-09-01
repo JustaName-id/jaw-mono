@@ -1,6 +1,7 @@
 import { USDC_BY_NETWORK, usdcForNetwork } from './asset-registry.js';
 import { parseBigInt, parseNonNegativeBigInt } from './amount.js';
 import { describePeriod, normalizePeriod, type PeriodUnit } from './period.js';
+import { isHexAddress } from './address.js';
 import { UPTO_VERIFIED_CHAIN_IDS } from './permit2.js';
 import { isX402Scheme, type X402PaymentRequirement } from './types.js';
 import type { GrantedSpend } from '../lib/session-config.js';
@@ -302,6 +303,19 @@ export function checkPolicy(
         reason:
           `x402 upto is not available on ${requirement.network}: the settlement proxy is only verified on ` +
           `chain ids ${UPTO_VERIFIED_CHAIN_IDS.join(', ')}`,
+      };
+    }
+    // The witness names the only address the proxy accepts as the settling
+    // caller, so a challenge without one can never be paid. The signer refuses
+    // it too, but by then the payer has been topped up for a payment that was
+    // never going to happen; refused here, the option is skipped during
+    // selection like the unverified chain above, and an `exact` option on the
+    // same challenge still pays.
+    const facilitator = requirement.extra?.['facilitatorAddress'];
+    if (!isHexAddress(facilitator)) {
+      return {
+        ok: false,
+        reason: `x402 upto requires extra.facilitatorAddress on ${requirement.network}, got ${JSON.stringify(facilitator)}`,
       };
     }
   }

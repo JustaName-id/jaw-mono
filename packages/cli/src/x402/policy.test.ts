@@ -22,6 +22,10 @@ const base: X402PaymentRequirement = {
   maxTimeoutSeconds: 60,
 };
 
+// What a payable upto option carries on top of `base`: the witness must name
+// the settling caller, and checkPolicy skips the option without one.
+const uptoExtra = { extra: { facilitatorAddress: '0x1111111111111111111111111111111111111111' } };
+
 describe('checkPolicy', () => {
   it('allows a payment under an empty policy', () => {
     expect(checkPolicy(base, {})).toEqual({ ok: true });
@@ -29,7 +33,7 @@ describe('checkPolicy', () => {
 
   it('allows the two schemes this client can produce a payment for', () => {
     expect(checkPolicy(base, {}).ok).toBe(true);
-    expect(checkPolicy({ ...base, scheme: 'upto' }, {}).ok).toBe(true);
+    expect(checkPolicy({ ...base, scheme: 'upto', ...uptoExtra }, {}).ok).toBe(true);
   });
 
   it('rejects a scheme it cannot sign', () => {
@@ -44,7 +48,10 @@ describe('checkPolicy', () => {
    * that charges a fraction of it.
    */
   it('names the ceiling as a ceiling when it refuses one', () => {
-    const verdict = checkPolicy({ ...base, scheme: 'upto', amount: '5000000' }, { maxAmountPerPayment: '1000000' });
+    const verdict = checkPolicy(
+      { ...base, scheme: 'upto', amount: '5000000', ...uptoExtra },
+      { maxAmountPerPayment: '1000000' }
+    );
     expect(verdict.ok).toBe(false);
     expect(verdict.reason).toContain('up to 5000000');
   });
@@ -68,6 +75,26 @@ describe('checkPolicy', () => {
     // The same challenge under `exact` still pays: the refusal is about where
     // the proxy exists, not about the chain.
     expect(checkPolicy({ ...polygon, scheme: 'exact' }, {}).ok).toBe(true);
+  });
+
+  /**
+   * Same shape as the chain check above, and for the same money: the signer
+   * refuses a challenge without a facilitator too, but only after the funder
+   * has topped the payer up for it. Refused during selection, nothing has been
+   * spent and a dry run tells the truth.
+   */
+  it('refuses an upto option that names no facilitator to settle it', () => {
+    const verdict = checkPolicy({ ...base, scheme: 'upto' }, {});
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reason).toContain('facilitatorAddress');
+
+    const malformed = checkPolicy({ ...base, scheme: 'upto', extra: { facilitatorAddress: 'not-an-address' } }, {});
+    expect(malformed.ok).toBe(false);
+    expect(malformed.reason).toContain('facilitatorAddress');
+
+    // The same challenge under exact still pays: EIP-3009 has no facilitator
+    // witness to bind.
+    expect(checkPolicy(base, {}).ok).toBe(true);
   });
 
   it('enforces maxAmountPerPayment', () => {
