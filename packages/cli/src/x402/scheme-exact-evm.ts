@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { checksummed, isZeroAddress, wireAddress } from './address.js';
+import { isPayableAddress, isZeroAddress } from './address.js';
 import { usdcForNetwork } from './asset-registry.js';
 import type { X402EIP3009Authorization, X402PaymentPayload, X402PaymentRequirement } from './types.js';
 
@@ -73,24 +73,21 @@ export async function buildExactPayment(
     );
   }
 
-  // Both of these are server-supplied and reach viem as `address` fields, which
-  // viem checksums at signing time. The comparison above is case-insensitive on
-  // purpose, so an asset differing from the registry only in casing gets past it
-  // and throws inside `sign()` instead, after the payer has already been funded:
-  // a top-up spent on a payment that never goes out. Re-cased for the typed-data
-  // message only; the wire keeps the challenge's own casing (see address.ts).
-  //
-  // `asset.address` rather than a re-cased `requirement.asset`, for the reason
-  // the check above exists: the registry is the source of truth, and the two are
-  // now known to be the same address. `payTo` has no registry to fall back on.
-  // `checkPolicy` refuses this during selection, before anything is funded;
-  // the signer keeps its own precondition, as it does for the asset above.
+  // `checkPolicy` refuses both of these during selection, before anything is
+  // funded; the signer keeps its own preconditions, as it does for the asset
+  // above. The mismatch check is case-insensitive on purpose, so it is these
+  // that keep an unreadable address from reaching viem, which would throw at
+  // signing time with the payer already topped up. See address.ts.
+  if (!isPayableAddress(requirement.payTo)) {
+    throw new Error(`x402 payTo is not a readable address on ${requirement.network}: ${requirement.payTo}`);
+  }
   if (isZeroAddress(requirement.payTo)) {
     throw new Error(`x402 payTo is the zero address on ${requirement.network}`);
   }
 
+  // The registry's own spelling, for the reason the mismatch check exists: it
+  // is the source of truth, and the two are now known to be the same address.
   const verifyingContract = asset.address;
-  const signedPayTo = checksummed(requirement.payTo);
 
   // Prefer the server-advertised EIP-712 domain name/version (extra), else the
   // registry's known values for this USDC deployment.
@@ -113,7 +110,7 @@ export async function buildExactPayment(
 
   const authorization: X402EIP3009Authorization = {
     from,
-    to: wireAddress(requirement.payTo),
+    to: requirement.payTo,
     value: requirement.amount,
     validAfter,
     validBefore,
@@ -126,7 +123,7 @@ export async function buildExactPayment(
     primaryType: 'TransferWithAuthorization',
     message: {
       from,
-      to: signedPayTo,
+      to: requirement.payTo,
       value: BigInt(requirement.amount),
       validAfter: BigInt(validAfter),
       validBefore: BigInt(validBefore),

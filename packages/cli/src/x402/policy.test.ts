@@ -98,6 +98,27 @@ describe('checkPolicy', () => {
   });
 
   /**
+   * A mixed-case address that fails EIP-55 is one viem and every other client
+   * downstream refuses, and `accepted` echoes the requirement byte for byte, so
+   * re-casing the payload would leave the document disagreeing with itself.
+   * Refused here, during selection, where it costs nothing.
+   */
+  it('refuses an address no counterparty could read', () => {
+    const shouty = (a: string) => a.toUpperCase().replace('0X', '0x');
+
+    for (const field of ['asset', 'payTo'] as const) {
+      const verdict = checkPolicy({ ...base, [field]: shouty(base[field]) as `0x${string}` }, {});
+      expect(verdict.ok).toBe(false);
+      expect(verdict.reason).toContain(`${field} is not a readable address`);
+    }
+
+    // Both spellings a real server uses are payable.
+    for (const spell of [(a: string) => a, (a: string) => a.toLowerCase()]) {
+      expect(checkPolicy({ ...base, payTo: spell(base.payTo) as `0x${string}` }, {}).ok).toBe(true);
+    }
+  });
+
+  /**
    * address(0) has the shape and none of the meaning. The proxy reverts for
    * every caller when the witness names it, so the permit can never settle, and
    * a payment to it is destroyed. Both would be funded first and then counted

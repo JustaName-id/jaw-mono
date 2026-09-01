@@ -96,35 +96,28 @@ describe('buildExactPayment', () => {
 
   /**
    * The mismatch check above compares case-insensitively, so an asset that is
-   * the registry's USDC in the wrong casing gets past it. viem checksums
-   * `address` fields when it hashes, so it used to throw here instead, after the
-   * funder had already topped the payer up. Re-cased for the typed-data message
-   * only: the wire echoes the challenge's own casing back, and the signature is
-   * byte-identical to the well-cased challenge's, since an `address` encodes
-   * lowercased either way.
+   * the registry's USDC in the wrong casing gets past it, and a mixed-case
+   * string failing EIP-55 is one viem refuses at signing time, with the payer
+   * already topped up. Re-casing is not open to us: `accepted` echoes the
+   * requirement byte for byte, so a normalised payload would disagree with it.
+   * Refused during selection instead; this is the signer's own precondition.
    */
-  it('signs a challenge whose addresses arrive mis-cased', async () => {
-    // The replace keeps the 0x prefix lowercase, so the string is still an address.
+  it('refuses a challenge whose addresses cannot be read', async () => {
     const misCased = (a: string) => a.toUpperCase().replace('0X', '0x');
-    const shouty = {
-      ...requirement,
-      asset: misCased(requirement.asset) as `0x${string}`,
-      payTo: misCased(requirement.payTo) as `0x${string}`,
-    };
+    const shouty = { ...requirement, payTo: misCased(requirement.payTo) as `0x${string}` };
+    await expect(buildExactPayment(shouty, account.address, signer)).rejects.toThrow(/payTo is not a readable address/);
+  });
 
-    const payload = await buildExactPayment(shouty, account.address, signer, { now: 1_000_000, nonce: NONCE });
-
-    // Lowercased rather than echoed verbatim: a mis-cased string is one viem
-    // refuses, so echoing it would hand the facilitator an unparseable field.
-    expect(payload.payload.authorization.to).toBe(shouty.payTo.toLowerCase());
-    // The two spellings a real server uses round-trip untouched.
+  /**
+   * The two spellings a real server uses round-trip untouched, which is what
+   * lets a facilitator match the payload against its own challenge.
+   */
+  it('echoes a parseable recipient byte for byte', async () => {
     for (const spell of [(a: string) => a, (a: string) => a.toLowerCase()]) {
       const req = { ...requirement, payTo: spell(requirement.payTo) as `0x${string}` };
       const echoed = await buildExactPayment(req, account.address, signer, { now: 1_000_000, nonce: NONCE });
       expect(echoed.payload.authorization.to).toBe(req.payTo);
     }
-    const clean = await buildExactPayment(requirement, account.address, signer, { now: 1_000_000, nonce: NONCE });
-    expect(payload.payload.signature).toBe(clean.payload.signature);
   });
 });
 

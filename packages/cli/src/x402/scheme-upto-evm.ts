@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { checksummed, isHexAddress, isZeroAddress, wireAddress } from './address.js';
+import { isPayableAddress, isZeroAddress } from './address.js';
 import { usdcForNetwork } from './asset-registry.js';
 import {
   PERMIT_WITNESS_TRANSFER_FROM_TYPES,
@@ -112,9 +112,12 @@ export async function buildUptoPayment(
   // The witness names the only address the proxy will accept as the settling
   // caller. Without it there is nothing to bind, and a payment nobody can settle
   // is worse than a refusal: it consumes the ceiling in the ledger for nothing.
-  // Same shape as the checks above: `checkPolicy` refuses a zero recipient
-  // during selection, and this is the signer's own precondition for a caller
-  // that reaches it another way.
+  // `checkPolicy` refuses both of these during selection, before anything is
+  // funded; like the chain check above, these are the signer's own
+  // preconditions for a caller that reaches it another way.
+  if (!isPayableAddress(requirement.payTo)) {
+    throw new Error(`x402 payTo is not a readable address on ${requirement.network}: ${requirement.payTo}`);
+  }
   if (isZeroAddress(requirement.payTo)) {
     throw new Error(`x402 payTo is the zero address on ${requirement.network}`);
   }
@@ -123,7 +126,7 @@ export async function buildUptoPayment(
   // anything has been funded; like the chain check above, this is the signer's
   // own precondition for a caller that reaches it another way.
   const advertisedFacilitator = requirement.extra?.['facilitatorAddress'];
-  if (!isHexAddress(advertisedFacilitator) || isZeroAddress(advertisedFacilitator)) {
+  if (!isPayableAddress(advertisedFacilitator) || isZeroAddress(advertisedFacilitator)) {
     throw new Error(
       `x402 upto needs a settling facilitator in extra.facilitatorAddress on ${requirement.network}, ` +
         `got ${JSON.stringify(advertisedFacilitator)}`
@@ -144,8 +147,7 @@ export async function buildUptoPayment(
     spender: X402_UPTO_PROXY_ADDRESS,
     nonce: BigInt(nonce),
     deadline,
-    // `checksummed` here and raw on the wire below: see address.ts.
-    witness: { to: checksummed(requirement.payTo), facilitator: checksummed(advertisedFacilitator), validAfter },
+    witness: { to: requirement.payTo, facilitator: advertisedFacilitator, validAfter },
   };
 
   const signature = await sign({
@@ -158,22 +160,18 @@ export async function buildUptoPayment(
   // Numbers go back out as strings, the way they arrived. `nonce` stays hex
   // because that is the width it is: 32 bytes of bitmap coordinate, not a count.
   //
-  // `requirement.asset` and not the registry's own spelling of it, for the same
-  // reason the witness echoes the challenge below: the two are already known to
-  // be the same address, and a facilitator matching this against the `asset` it
-  // advertised, which `accepted` also echoes back, should see its own casing.
-  // The signed message keeps the registry value, which is what makes them equal.
+  // Every address goes back out exactly as the challenge advertised it, which
+  // is also how `accepted` echoes it, so the two halves of the document agree
+  // and a facilitator matching either against its own strings sees its own
+  // casing. Nothing here needs re-casing: `checkPolicy` and the preconditions
+  // above already refused anything a counterparty could not read.
   const permit2Authorization: X402Permit2Authorization = {
-    permitted: { token: wireAddress(requirement.asset), amount: message.permitted.amount.toString() },
+    permitted: { token: requirement.asset, amount: message.permitted.amount.toString() },
     from,
     spender: message.spender,
     nonce,
     deadline: deadline.toString(),
-    witness: {
-      to: wireAddress(requirement.payTo),
-      facilitator: wireAddress(advertisedFacilitator),
-      validAfter: validAfter.toString(),
-    },
+    witness: { to: requirement.payTo, facilitator: advertisedFacilitator, validAfter: validAfter.toString() },
   };
 
   return { x402Version: 2, accepted: requirement, payload: { signature, permit2Authorization } };

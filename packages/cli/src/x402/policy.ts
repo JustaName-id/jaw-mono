@@ -1,7 +1,7 @@
 import { USDC_BY_NETWORK, usdcForNetwork } from './asset-registry.js';
 import { parseBigInt, parseNonNegativeBigInt } from './amount.js';
 import { describePeriod, normalizePeriod, type PeriodUnit } from './period.js';
-import { isHexAddress, isZeroAddress } from './address.js';
+import { isPayableAddress, isZeroAddress } from './address.js';
 import { UPTO_VERIFIED_CHAIN_IDS } from './permit2.js';
 import { isX402Scheme, type X402PaymentRequirement } from './types.js';
 import type { GrantedSpend } from '../lib/session-config.js';
@@ -312,7 +312,7 @@ export function checkPolicy(
     // selection like the unverified chain above, and an `exact` option on the
     // same challenge still pays.
     const facilitator = requirement.extra?.['facilitatorAddress'];
-    if (!isHexAddress(facilitator) || isZeroAddress(facilitator)) {
+    if (!isPayableAddress(facilitator) || isZeroAddress(facilitator)) {
       return {
         ok: false,
         reason:
@@ -330,10 +330,19 @@ export function checkPolicy(
     return { ok: false, reason: `asset not allowed: ${requirement.asset}` };
   }
 
-  // Ahead of the allowlist, because it holds whether or not one is configured.
-  // USDC reverts on a zero recipient rather than burning, so this is not lost
-  // funds; it is a settlement that cannot succeed, which reserves its whole
-  // figure against the caps once the payer has been funded for it.
+  // Ahead of the allowlist, because these hold whether or not one is configured,
+  // and here rather than in a signer so nothing has been funded when they do.
+  // A settlement that cannot succeed still reserves its whole figure against
+  // the caps, on the rule that a failed attempt may have been broadcast, so a
+  // challenge nobody can act on is worth refusing for free. See address.ts.
+  for (const [field, value] of [
+    ['asset', requirement.asset],
+    ['payTo', requirement.payTo],
+  ] as const) {
+    if (!isPayableAddress(value)) {
+      return { ok: false, reason: `${field} is not a readable address on ${requirement.network}: ${value}` };
+    }
+  }
   if (isZeroAddress(requirement.payTo)) {
     return { ok: false, reason: `payTo is the zero address on ${requirement.network}` };
   }

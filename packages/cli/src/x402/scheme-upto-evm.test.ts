@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { privateKeyToAccount } from 'viem/accounts';
-import { isAddress, recoverTypedDataAddress } from 'viem';
+import { recoverTypedDataAddress } from 'viem';
 import { buildUptoPayment } from './scheme-upto-evm.js';
 import { X402_UPTO_PROXY_ADDRESS, PERMIT_WITNESS_TRANSFER_FROM_TYPES, permit2Domain } from './permit2.js';
 import type { X402PaymentRequirement, X402UptoPayload } from './types.js';
@@ -103,42 +103,18 @@ describe('buildUptoPayment', () => {
   });
 
   /**
-   * viem checksums `address` fields when it hashes the typed data, so a server
-   * that cased an address badly used to throw inside the signer. That happens
-   * after the funder has already topped the payer up, so the casing of a string
-   * on the wire cost a real transfer and refused the payment anyway. Casing is
-   * not a reason to refuse: the typed-data message is re-cased, the payment
-   * goes out, and the wire echoes the challenge's own casing back, so a
-   * facilitator comparing strings sees what it advertised. And the re-casing
-   * changes nothing that was signed: an `address` encodes lowercased either
-   * way, so the signature is byte-identical to the well-cased challenge's.
+   * A mixed-case string that fails EIP-55 is indistinguishable from a typo, so
+   * viem refuses it and so does every other client downstream. We cannot re-case
+   * our way out, because `accepted` echoes the requirement byte for byte and the
+   * two halves of the document would disagree. Refused during selection instead,
+   * where it costs nothing; this is the signer's own precondition.
    */
-  it('signs a challenge whose addresses arrive mis-cased', async () => {
-    const clean = { ...requirement, extra: { ...requirement.extra, facilitatorAddress: FACILITATOR_MIXED } };
-    const shouty = {
-      ...clean,
-      asset: misCased(requirement.asset) as `0x${string}`,
-      payTo: misCased(requirement.payTo) as `0x${string}`,
-      extra: { ...requirement.extra, facilitatorAddress: misCased(FACILITATOR_MIXED) },
-    };
-
-    const payload = await build(shouty);
-    const auth = authOf(payload);
-
-    // Lowercased on the wire, not echoed verbatim: a mis-cased string is one
-    // viem refuses, so echoing it would hand the facilitator a field it cannot
-    // re-hash or encode, which is this fix's own bug one hop downstream. Same
-    // bytes, and still equal to what the server advertised.
-    for (const [got, advertised] of [
-      [auth.witness.to, shouty.payTo],
-      [auth.permitted.token, shouty.asset],
-      [auth.witness.facilitator, misCased(FACILITATOR_MIXED)],
-    ]) {
-      expect(got).toBe(advertised.toLowerCase());
-      expect(isAddress(got)).toBe(true);
-    }
-    const cleanSig = ((await build(clean)).payload as X402UptoPayload).signature;
-    expect((payload.payload as X402UptoPayload).signature).toBe(cleanSig);
+  it('refuses a challenge whose addresses cannot be read', async () => {
+    await expect(build({ ...requirement, payTo: misCased(requirement.payTo) as `0x${string}` })).rejects.toThrow(
+      /payTo is not a readable address/
+    );
+    const badFacilitator = { ...requirement, extra: { facilitatorAddress: misCased(FACILITATOR_MIXED) } };
+    await expect(build(badFacilitator)).rejects.toThrow(/needs a settling facilitator/);
   });
 
   /**
