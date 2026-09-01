@@ -553,4 +553,43 @@ describe('Permit2 approval for upto', () => {
     expect(outcome.ok).toBe(false);
     expect(outcome.reason).toContain('cannot grant it');
   });
+
+  /**
+   * A class, not an object literal, because that is the difference that matters
+   * and every other executor here is a literal. The real one is SessionBridge,
+   * where `approvePermit2` is a prototype method that reads `this` on its first
+   * line, so passing the reference on instead of calling it through the executor
+   * throws once it is finally invoked. That is the last step of the funder, so
+   * the top-up has already pulled the user's USDC through the permission by
+   * then: the funds move and the payment refuses anyway, on every retry.
+   */
+  test('grants through an executor whose approval is a prototype method', async () => {
+    const base = fakeExecutor();
+    let current = 0n;
+
+    class BridgeShaped implements TopUpExecutor {
+      readonly approved: string[] = [];
+      constructor(private readonly send: TopUpExecutor['request']) {}
+      request(method: string, params?: unknown) {
+        return this.send(method, params);
+      }
+      async approvePermit2(token: `0x${string}`): Promise<string> {
+        // Reading `this` is the whole point: unbound, this line is the throw.
+        this.approved.push(token);
+        current = 2n ** 256n - 1n;
+        return '0xapproval1';
+      }
+    }
+    const executor = new BridgeShaped(base.executor.request.bind(base.executor));
+
+    const outcome = await ensurePayerFunds(uptoRequirement(), PAYER, executor, {
+      ...instantly,
+      balanceReader: async () => 10_000_000n,
+      allowanceReader: async () => current,
+    });
+
+    expect(outcome.ok).toBe(true);
+    expect(executor.approved).toEqual([BASE_SEPOLIA_USDC]);
+    expect(outcome.approvalBatchId).toBe('0xapproval1');
+  });
 });

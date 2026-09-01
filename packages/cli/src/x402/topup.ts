@@ -352,10 +352,19 @@ async function permit2ApprovalStatus(
   }
   if (allowance >= needed) return { ok: true, grant: null, allowance };
 
+  // Bound to the executor rather than read off it bare. The production executor
+  // is a SessionBridge, where `approvePermit2` is a prototype method whose first
+  // statement reads `this`, so a detached reference throws once it is finally
+  // called. It would throw in the worst place there is: the approval is the last
+  // step of the funder, after the top-up has already pulled the user's USDC
+  // through the permission, so the funds move and the payment refuses anyway,
+  // and every retry repeats the top-up.
+  const grant = executor.approvePermit2?.bind(executor);
+
   // Refused here rather than after the top-up: a session that cannot grant the
   // allowance cannot pay this challenge at all, and moving funds first would
   // spend the permission's budget on a payment that was never going to happen.
-  if (!executor.approvePermit2) {
+  if (!grant) {
     return {
       ok: false,
       reason:
@@ -366,7 +375,7 @@ async function permit2ApprovalStatus(
 
   // Handed back rather than re-read later, so the type carries what the check
   // established: past here, granting is something this session can do.
-  return { ok: true, grant: executor.approvePermit2, allowance };
+  return { ok: true, grant, allowance };
 }
 
 /** Send the approval and wait for it. Only called once the payer can pay for it. */
