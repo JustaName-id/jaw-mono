@@ -22,6 +22,29 @@ Needs a live session in `~/.jaw` on a chain in the USDC registry and an apiKey
 in `~/.jaw/config.json`. A session from before the CLI stored the struct works:
 the script recovers it from the relay, the same way the CLI now does.
 
+## session-flow (real chain, real approval)
+
+Runs `session setup`, `session add`, `x402 status` and `session revoke` against
+Base Sepolia and checks the on-chain effect of each one. Semi-automated: it
+drives the CLI and the assertions, prints the approval URL, and waits for you to
+approve with your own passkey.
+
+Driving the approval would need a passkey the test owns, which means an account
+it created, which the API key cannot register (it manages no ENS domains) and
+which would hold no USDC to fund a grant with. A person with a funded account is
+the cheaper answer.
+
+```bash
+bunx nx build @jaw.id/cli
+bun e2e/session-flow.e2e.ts
+JAW_E2E_STEPS=setup,status bun e2e/session-flow.e2e.ts   # a subset
+```
+
+Every command runs with `HOME` pointed at a throwaway directory, so it reads and
+writes a scratch `~/.jaw` and your own session is untouched. It does spend: each
+grant carries a small USDC prefund to the session, and the grant and revoke cost
+gas, paid by the account you approve with.
+
 ## iframe-transport (real browser)
 
 A minimal real-browser check for the embedded iframe transport — covers what
