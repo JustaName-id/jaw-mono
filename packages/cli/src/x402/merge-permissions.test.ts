@@ -1,0 +1,113 @@
+import { describe, it, expect } from 'vitest';
+import { mergePermissions, describeMerge } from './merge-permissions.js';
+import { buildX402Permissions } from './grant-preset.js';
+import type { GrantedPermission } from '../lib/session-config.js';
+
+const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+const NFT = '0x4444444444444444444444444444444444444444';
+const TRANSFER = '0xa9059cbb';
+const MINT = '0x1249c58b';
+
+/**
+ * The scope an agent is already working under. Only knowable because the
+ * granted permission is stored the way the contract holds it: a permission id
+ * says nothing about what it allows.
+ */
+const EXISTING: GrantedPermission = {
+  account: '0x1111111111111111111111111111111111111111',
+  spender: '0x2222222222222222222222222222222222222222',
+  start: 1_756_000_000,
+  end: 1_756_604_800,
+  salt: '0xabc',
+  calls: [{ target: NFT, selector: MINT }],
+  spends: [],
+};
+
+describe('mergePermissions', () => {
+  /**
+   * The case the whole command exists for: an agent with a scoped session
+   * discovers it needs to pay. Re-running setup would revoke the grant it is
+   * working under and it would lose the mint mid-task.
+   */
+  it('adds payments without dropping what the session already allows', () => {
+    const merged = mergePermissions(EXISTING, buildX402Permissions(84532, '10/day'));
+
+    expect(merged.calls).toEqual([
+      { target: NFT, selector: MINT },
+      { target: USDC, functionSignature: 'transfer(address,uint256)' },
+    ]);
+    expect(merged.spends).toEqual([{ token: USDC, allowance: '10000000', unit: 'day', multiplier: 1 }]);
+  });
+
+  it('keeps a call the session already has rather than listing it twice', () => {
+    const merged = mergePermissions(EXISTING, { calls: [{ target: NFT, selector: MINT }] });
+    expect(merged.calls).toEqual([{ target: NFT, selector: MINT }]);
+  });
+
+  it('matches a call case-insensitively, the way an address compares', () => {
+    const merged = mergePermissions(EXISTING, { calls: [{ target: NFT.toUpperCase(), selector: MINT }] });
+    expect(merged.calls).toHaveLength(1);
+  });
+
+  /**
+   * `add x402 --limit 10/day` over a session already allowing 5/day reads as
+   * asking for 10, not 15. Keeping both entries would grant 15 more quietly,
+   * since the contract meters each SpendLimit on its own counter.
+   */
+  it('replaces the allowance for a token it already meters over the same window', () => {
+    const existing: GrantedPermission = {
+      ...EXISTING,
+      calls: [{ target: USDC, selector: TRANSFER }],
+      spends: [{ token: USDC, allowance: '5000000', unit: 'day', multiplier: 1 }],
+    };
+    const merged = mergePermissions(existing, buildX402Permissions(84532, '10/day'));
+    expect(merged.spends).toEqual([{ token: USDC, allowance: '10000000', unit: 'day', multiplier: 1 }]);
+  });
+
+  // A different window is a different budget on chain, so it is a new entry
+  // rather than a replacement.
+  it('keeps a limit on the same token over a different window as its own', () => {
+    const existing: GrantedPermission = {
+      ...EXISTING,
+      spends: [{ token: USDC, allowance: '5000000', unit: 'week', multiplier: 1 }],
+    };
+    const merged = mergePermissions(existing, buildX402Permissions(84532, '10/day'));
+    expect(merged.spends).toHaveLength(2);
+  });
+
+  it('normalises the hex allowance the grant response carries', () => {
+    const existing: GrantedPermission = {
+      ...EXISTING,
+      spends: [{ token: USDC, allowance: '0x4c4b40', unit: 'day', multiplier: 1 }],
+    };
+    expect(mergePermissions(existing, {}).spends).toEqual([
+      { token: USDC, allowance: '5000000', unit: 'day', multiplier: 1 },
+    ]);
+  });
+});
+
+describe('describeMerge', () => {
+  it('names what is being added, so the summary is not a diff of the whole scope', () => {
+    const merged = mergePermissions(EXISTING, buildX402Permissions(84532, '10/day'));
+    const lines = describeMerge(EXISTING, merged).join('\n');
+    expect(lines).toMatch(/\+ call\s+0x036CbD/);
+    expect(lines).toMatch(/\+ spend\s+10000000/);
+    expect(lines).not.toMatch(new RegExp(MINT));
+  });
+
+  it('shows a raised allowance as a change rather than an addition', () => {
+    const existing: GrantedPermission = {
+      ...EXISTING,
+      calls: [{ target: USDC, selector: TRANSFER }],
+      spends: [{ token: USDC, allowance: '5000000', unit: 'day', multiplier: 1 }],
+    };
+    const lines = describeMerge(existing, mergePermissions(existing, buildX402Permissions(84532, '10/day'))).join('\n');
+    expect(lines).toMatch(/~ spend .*5000000 to 10000000/);
+  });
+
+  // What `session add` checks to decide there is nothing to do.
+  it('is empty when the session already allows all of it', () => {
+    const merged = mergePermissions(EXISTING, { calls: [{ target: NFT, selector: MINT }] });
+    expect(describeMerge(EXISTING, merged)).toEqual([]);
+  });
+});

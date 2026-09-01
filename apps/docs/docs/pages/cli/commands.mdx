@@ -180,6 +180,26 @@ jaw session status -o json
 
 ---
 
+## jaw session add
+
+Add permissions to the current session, keeping the ones it already has.
+
+```bash
+jaw session add --x402
+jaw session add --x402 --limit 10/day
+jaw session add --permissions '{"calls":[...]}'
+```
+
+`jaw session setup` replaces a session. An agent working under a scoped session that then discovers it needs to pay could only re-run setup, which revokes the grant it is working under, so it loses its other capabilities in the middle of the task. This grants the union instead.
+
+The session still holds one permission afterwards: the union is granted as a new permission and the old one is revoked, which is why the browser asks twice. Two live grants would be two independent budgets on chain, so two of 5 a day are 10 a day with nothing representing the total. The session key is kept, so the agent's address, its balance and its delegation all survive.
+
+A spend on a token the session already meters over the same period is replaced rather than added to: `--x402 --limit 10/day` on a session already allowing 5 a day asks for 10, not 15. A different period is a different budget on chain, so it is kept as its own.
+
+It needs a session that carries the permission it was granted. Sessions created before the CLI stored that cannot be merged against, since a permission id says nothing about what it allows; re-run `jaw session setup` once and adding works from then on.
+
+---
+
 ## jaw session revoke
 
 Revoke the on-chain permission and delete local session files. Opens browser for passkey approval (skipped if session is expired).
