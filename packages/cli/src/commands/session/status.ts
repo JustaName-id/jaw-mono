@@ -33,7 +33,10 @@ export default class SessionStatus extends BaseCommand {
     // one, and a session written before the struct existed should not start
     // demanding a key to report what it always reported.
     const permission = await recoverPermission(config, loadConfig().apiKey);
-    const liveness = await readLiveness({ ...config, permission });
+    // Carried into everything below, including the json, so the run that
+    // recovers the struct reports it rather than the next one.
+    const current = permission ? { ...config, permission } : config;
+    const liveness = await readLiveness(current);
     // Permissions from earlier sessions that are still live on chain. Said in
     // terms of the permission rather than of this key: setup generates a fresh
     // key whenever it is not reusing one, and `--yes` always does, so the key
@@ -45,7 +48,7 @@ export default class SessionStatus extends BaseCommand {
     if (format === 'json') {
       this.outputResult(
         {
-          ...config,
+          ...current,
           expired: isExpired,
           permissionOnChain: liveness,
           ...(stillLive.length > 0 ? { stillLiveOnChain: stillLive } : {}),

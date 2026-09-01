@@ -1,5 +1,6 @@
 import { parseAbi, zeroAddress, ContractFunctionRevertedError, BaseError } from 'viem';
 import { publicClientFor } from './balance.js';
+import { bindingSpendLimit } from './period.js';
 import type { GrantedPermission } from '../lib/session-config.js';
 
 /**
@@ -276,7 +277,12 @@ export async function readCurrentPeriod(
   const permission = toContractPermission(target.permission);
   if (!permission) return { status: 'unavailable' };
 
-  const spendLimit = permission.spends.find((s) => s.token.toLowerCase() === target.token.toLowerCase());
+  // The same limit the policy was seeded from: the one that binds. Reading a
+  // different one reads a counter for a budget that is not the one refusing.
+  // Located by index, since `toContractPermission` maps the spends one to one.
+  const granted = target.permission.spends;
+  const binding = bindingSpendLimit(granted.filter((s) => s.token.toLowerCase() === target.token.toLowerCase()));
+  const spendLimit = binding ? permission.spends[granted.indexOf(binding)] : undefined;
   if (!spendLimit) return { status: 'unavailable' };
 
   const read = reader(target.chainId, deps);

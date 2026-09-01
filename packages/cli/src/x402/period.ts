@@ -161,3 +161,46 @@ export function periodLengthSeconds(unit: string, multiplier: number, bound: 'mi
   if (!Object.hasOwn(lengths, unit)) return null;
   return lengths[unit] * Math.max(1, Math.floor(multiplier));
 }
+
+/**
+ * Of several spend limits on one token, the one to gate a single pull against.
+ *
+ * A permission can carry more than one, and `_checkAndIncrementSpend` charges
+ * every limit whose token matches rather than stopping at the first, so all of
+ * them apply. Everything downstream reduces that to a single (allowance,
+ * window) pair: the policy's `maxPerPeriod`, the counter the status report
+ * reads. Taking the first match instead put a 100-a-month cap in front of a
+ * 1-a-day one and reported a hundred times the headroom that exists.
+ *
+ * The smallest allowance, because that is the number a single pull is refused
+ * against, and no ranking across windows is honest: a 1-a-day and a
+ * 100-a-month limit constrain different questions, and whichever is picked the
+ * pair cannot say "both". Ties go to the window that refills slowest, which is
+ * the conservative half of a choice that has to be made somehow.
+ */
+export function bindingSpendLimit<T extends { allowance: string; unit?: string; multiplier?: number }>(
+  spends: readonly T[]
+): T | undefined {
+  let binding: T | undefined;
+  let bindingAllowance = 0n;
+  let bindingSeconds = 0;
+  for (const spend of spends) {
+    let allowance: bigint;
+    try {
+      allowance = BigInt(spend.allowance);
+    } catch {
+      continue;
+    }
+    const seconds = spend.unit ? (periodLengthSeconds(spend.unit, spend.multiplier ?? 1, 'min') ?? 0) : 0;
+    if (
+      binding === undefined ||
+      allowance < bindingAllowance ||
+      (allowance === bindingAllowance && seconds > bindingSeconds)
+    ) {
+      binding = spend;
+      bindingAllowance = allowance;
+      bindingSeconds = seconds;
+    }
+  }
+  return binding ?? spends[0];
+}

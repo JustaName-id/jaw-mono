@@ -1,6 +1,6 @@
 import { USDC_BY_NETWORK } from './asset-registry.js';
 import { parseBigInt, parseNonNegativeBigInt } from './amount.js';
-import { describePeriod, normalizePeriod, type PeriodUnit } from './period.js';
+import { bindingSpendLimit, describePeriod, normalizePeriod, type PeriodUnit } from './period.js';
 import type { X402PaymentRequirement } from './types.js';
 import type { GrantedSpend } from '../lib/session-config.js';
 
@@ -84,7 +84,11 @@ export function extractGrantedSpend(
 ): GrantedSpend | undefined {
   const usdc = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === chainId);
   if (!usdc) return undefined;
-  const spend = spends?.find((s) => s.token.toLowerCase() === usdc.address.toLowerCase());
+  // The limit that binds, not the first one in the document. A permission can
+  // carry several for one token and the contract charges every one of them, so
+  // seeding from whichever happens to come first reported a cap the chain does
+  // not enforce.
+  const spend = bindingSpendLimit((spends ?? []).filter((s) => s.token.toLowerCase() === usdc.address.toLowerCase()));
   if (!spend) return undefined;
   let allowance: string;
   try {

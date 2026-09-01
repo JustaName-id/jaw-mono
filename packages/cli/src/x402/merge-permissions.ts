@@ -1,5 +1,4 @@
 import { toFunctionSelector } from 'viem';
-import { periodLengthSeconds } from './period.js';
 import type { GrantedPermission } from '../lib/session-config.js';
 import type { PermissionsConfig } from '../lib/types.js';
 
@@ -67,13 +66,6 @@ function spendKey(spend: { token: string; unit: string; multiplier?: number }): 
 
 function tokenKey(spend: { token: string }): string {
   return spend.token.toLowerCase();
-}
-
-/** Base units per second, or null when the period has no finite length to divide by. */
-function rate(spend: { allowance: string; unit: string; multiplier?: number }): number | null {
-  const seconds = periodLengthSeconds(spend.unit, spend.multiplier ?? 1, 'min');
-  if (seconds === null || seconds === Number.POSITIVE_INFINITY) return null;
-  return Number(BigInt(spend.allowance)) / seconds;
 }
 
 export function mergePermissions(existing: GrantedPermission, addition: PermissionsConfig): PermissionsConfig {
@@ -144,23 +136,19 @@ export function describeMerge(existing: GrantedPermission, merged: PermissionsCo
     }
   }
 
-  // The limit that will actually bind, when it is not the one being asked for.
-  // Every limit on a token is charged, so a new 10-a-day beside an untouched
-  // 1-a-week leaves the session unable to move more than 1 a week, and a
-  // summary listing only the addition would read as a raise that is not going
-  // to happen.
+  // Every other limit on the same token, named rather than ranked. All of them
+  // are charged, so the tightest binds, and which one that is depends on the
+  // question being asked: a 1-a-day and a 100-a-month limit constrain different
+  // things and neither is simply tighter. What a summary can say honestly is
+  // that they are still there, because listing only the addition reads as a
+  // raise that the others may not allow.
   for (const spend of changed) {
-    const asked = rate(spend);
-    if (asked === null) continue;
-    for (const other of merged.spends ?? []) {
-      if (other === spend || tokenKey(other) !== tokenKey(spend)) continue;
-      const kept = rate(other);
-      if (kept !== null && kept < asked) {
-        lines.push(
-          `  ! note    ${other.allowance} per ${label(other)} on the same token still applies and is ` +
-            'tighter, so that is the one that will bind'
-        );
-      }
+    const others = (merged.spends ?? []).filter((o) => o !== spend && tokenKey(o) === tokenKey(spend));
+    for (const other of others) {
+      lines.push(
+        `  ! note    ${other.allowance} per ${label(other)} on the same token still applies; ` +
+          'every limit on a token is charged, so the tightest of them binds'
+      );
     }
   }
 

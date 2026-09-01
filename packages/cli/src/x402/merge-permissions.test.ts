@@ -162,22 +162,36 @@ describe('describeMerge', () => {
    * that listed only the addition would read as a raise that is not going to
    * happen.
    */
-  it('says which limit will actually bind when the one kept is tighter', () => {
+  it('names the other limits on the token that still apply', () => {
     const existing: GrantedPermission = {
       ...EXISTING,
       spends: [{ token: USDC, allowance: '1000000', unit: 'week', multiplier: 1 }],
     };
     const lines = describeMerge(existing, mergePermissions(existing, buildX402Permissions(84532, '10/day'))).join('\n');
     expect(lines).toMatch(/\+ spend\s+10000000/);
-    expect(lines).toMatch(/! note\s+1000000 per week on the same token still applies and is tighter/);
+    expect(lines).toMatch(/! note\s+1000000 per week on the same token still applies/);
   });
 
-  it('stays quiet when the limit being added is the one that binds', () => {
+  /**
+   * A lifetime total is the case a rate comparison kept silent about: it is not
+   * a rate, so ranking it against a daily limit meant ordering something that
+   * has no order. It still applies, and that is what the note says.
+   */
+  it('names a lifetime total the same way', () => {
     const existing: GrantedPermission = {
       ...EXISTING,
-      spends: [{ token: USDC, allowance: '100000000', unit: 'month', multiplier: 1 }],
+      spends: [{ token: USDC, allowance: '50000000', unit: 'forever', multiplier: 1 }],
     };
-    const lines = describeMerge(existing, mergePermissions(existing, buildX402Permissions(84532, '1/day'))).join('\n');
+    const lines = describeMerge(existing, mergePermissions(existing, buildX402Permissions(84532, '10/day'))).join('\n');
+    expect(lines).toMatch(/! note\s+50000000 per forever on the same token still applies/);
+  });
+
+  it('says nothing extra when the addition supersedes the only limit there was', () => {
+    const existing: GrantedPermission = {
+      ...EXISTING,
+      spends: [{ token: USDC, allowance: '5000000', unit: 'day', multiplier: 1 }],
+    };
+    const lines = describeMerge(existing, mergePermissions(existing, buildX402Permissions(84532, '10/day'))).join('\n');
     expect(lines).not.toMatch(/! note/);
   });
 });

@@ -236,13 +236,22 @@ export function saveSessionConfig(
   writeSessionConfig({ ...input, createdAt: input.createdAt ?? new Date().toISOString() });
 }
 
+/**
+ * Written to a temporary file and renamed over the real one, which is atomic on
+ * the same filesystem, so a reader never sees a half-written config.
+ *
+ * It matters more than it did: recovering the permission struct made two
+ * commands that only ever read (`x402 status`, `session status`) into writers,
+ * and the MCP server runs alongside a terminal, so two processes writing at
+ * once is ordinary rather than exotic. A torn file loses the permission id,
+ * which is exactly the stranding the orphan list exists to prevent.
+ */
 function writeSessionConfig(config: SessionConfig): void {
   ensureDir(PATHS.root);
-  fs.writeFileSync(PATHS.sessionConfig, JSON.stringify(config, null, 2) + '\n', {
-    encoding: 'utf-8',
-    mode: 0o600,
-  });
-  fs.chmodSync(PATHS.sessionConfig, 0o600);
+  const temp = `${PATHS.sessionConfig}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, JSON.stringify(config, null, 2) + '\n', { encoding: 'utf-8', mode: 0o600 });
+  fs.chmodSync(temp, 0o600);
+  fs.renameSync(temp, PATHS.sessionConfig);
 }
 
 /**

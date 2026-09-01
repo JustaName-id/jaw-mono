@@ -4,6 +4,8 @@ import { keystoreExists } from '../../lib/keystore.js';
 import { loadSessionConfig } from '../../lib/session-config.js';
 import { sessionPayerAddress } from '../../x402/payer.js';
 import { readLiveness } from '../../x402/permission-onchain.js';
+import { recoverPermission } from '../../x402/permission-recovery.js';
+import { loadConfig } from '../../lib/config.js';
 
 export function registerSessionTools(server: McpServer): void {
   server.registerTool(
@@ -43,7 +45,12 @@ export function registerSessionTools(server: McpServer): void {
         // The local file cannot know about a revoke made from keys.jaw.id or
         // from another machine, and an agent reading `expired: false` off it
         // would go on to spend against a permission that no longer exists.
-        const permissionOnChain = await readLiveness(config);
+        // Recovered here too. Wiring this into the three commands and not the
+        // tool left an agent, which is the consumer this whole path exists for,
+        // reading `unknown` forever on a session created before the struct was
+        // stored, while the same user got it recovered at a terminal.
+        const permission = await recoverPermission(config, loadConfig().apiKey);
+        const permissionOnChain = await readLiveness(permission ? { ...config, permission } : config);
         return mcpResult({
           exists: true,
           ...config,

@@ -50,6 +50,18 @@ export async function recoverPermission(
     const relayed = await Promise.race([fetchPermission(session.permissionId, apiKey), expired]);
     const permission = parseGrantedPermission(relayed);
     if (!permission) return undefined;
+    // Checked against the session before it is trusted. The on-chain `getHash`
+    // gate covers the case where the chain can be reached, and `session add`
+    // goes ahead on `unknown`, which is exactly what a chain outside the
+    // client's registry returns: there the union would be built from an
+    // unverified relay response with nothing local to corroborate it. These
+    // three cost nothing and make it a response about this session or none.
+    if (
+      permission.account.toLowerCase() !== session.ownerAddress.toLowerCase() ||
+      permission.spender.toLowerCase() !== session.sessionAddress.toLowerCase()
+    ) {
+      return undefined;
+    }
     // Whether it describes the permission that was granted is settled on chain,
     // by the `getHash` check every read here goes through. Storing one that does
     // not match costs a `mismatch` report, which is what the session already

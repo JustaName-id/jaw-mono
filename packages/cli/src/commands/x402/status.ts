@@ -70,7 +70,7 @@ export default class X402Status extends BaseCommand {
     // Network reads, all of them failing soft. The local half of the answer
     // (caps, spend, expiry) is still worth printing, and an unreachable RPC is
     // itself a useful thing to see.
-    const [balances, liveness] = await Promise.all([
+    const [balances, recovered] = await Promise.all([
       Promise.all(
         [session.ownerAddress as `0x${string}`, payer].map(async (address) => {
           if (!asset) return null;
@@ -83,9 +83,15 @@ export default class X402Status extends BaseCommand {
       ),
       // Recovered first for a session written before the struct was stored,
       // which is otherwise stuck reporting "cannot tell" forever.
-      recoverPermission(session, config.apiKey).then((permission) => readLiveness({ ...session, permission })),
+      recoverPermission(session, config.apiKey),
     ]);
     const [ownerBalance, payerBalance] = balances;
+    // Threaded through the rest of the command, not just the liveness read.
+    // Without this the run that performed the recovery still reported no period
+    // figure, because the on-chain read takes the struct off the session object
+    // and that one was still the version loaded from disk.
+    const current = recovered ? { ...session, permission: recovered } : session;
+    const liveness = await readLiveness(current);
 
     const spent = sumSpentSince(payer, session.createdAt);
 
@@ -96,7 +102,7 @@ export default class X402Status extends BaseCommand {
     // now. Without this the report was silent about the only cap a grant-seeded
     // session enforces. Asked of the chain first, which knows about pulls this
     // CLI's ledger never saw.
-    const periodSpend = await currentPeriodSpendOnChain(policy, payer, session);
+    const periodSpend = await currentPeriodSpendOnChain(policy, payer, current);
     const periodCap = parseBigInt(policy.maxPerPeriod);
     const periodLabel = policy.period ? describePeriod(policy.period.unit, policy.period.multiplier) : null;
 

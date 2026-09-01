@@ -33,8 +33,13 @@ export default class RpcCall extends BaseCommand {
     ...BaseCommand.baseFlags,
     timeout: Flags.integer({
       char: 't',
-      description: 'Request timeout in seconds',
-      default: 120,
+      // No default. A default is indistinguishable from an explicit value, and
+      // this one was passed to getBridge on every run, which made
+      // JAW_BRIDGE_TIMEOUT_MS dead here: the env only applies when no caller
+      // named a timeout. The error text tells people to raise that knob, so it
+      // has to work in the command most likely to hit it. Unset falls through
+      // to the env, then to the built-in 120 seconds.
+      description: 'Request timeout in seconds (default 120, or JAW_BRIDGE_TIMEOUT_MS)',
     }),
     session: Flags.boolean({
       char: 's',
@@ -83,7 +88,9 @@ export default class RpcCall extends BaseCommand {
         apiKey,
         chainId,
         ens: config.ens,
-        timeout: flags.timeout * 1000,
+        // Undefined when the flag was not given, so getBridge falls through to
+        // the env knob and then to its own default.
+        timeout: flags.timeout === undefined ? undefined : flags.timeout * 1000,
       });
 
       if (!flags.quiet) {

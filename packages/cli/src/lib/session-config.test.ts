@@ -301,3 +301,25 @@ describe('saveRevokeProgress', () => {
     expect(after.orphanedPermissions).toEqual([orphan]);
   });
 });
+
+/**
+ * Recovering the permission struct turned two read-only commands into writers,
+ * and the MCP server runs alongside a terminal, so two processes writing at
+ * once is ordinary. A torn file loses the permission id, which is the exact
+ * stranding the orphan list exists to prevent.
+ */
+describe('writing the session config', () => {
+  it('leaves no partial file behind for a reader', () => {
+    saveSessionConfig(SAMPLE_CONFIG);
+    // A rename is atomic on one filesystem, so nothing can observe a half
+    // written config; what is observable is that no temp file survives.
+    const strays = fs.readdirSync(PATHS.root).filter((f) => f.includes('.tmp'));
+    expect(strays).toEqual([]);
+    expect(loadSessionConfig().permissionId).toBe('0xPerm');
+  });
+
+  it('still lands at 0o600 through the rename', () => {
+    saveSessionConfig(SAMPLE_CONFIG);
+    expect(fs.statSync(PATHS.sessionConfig).mode & 0o777).toBe(0o600);
+  });
+});

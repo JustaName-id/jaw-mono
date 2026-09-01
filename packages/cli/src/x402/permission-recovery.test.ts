@@ -108,4 +108,21 @@ describe('recoverPermission', () => {
     });
     expect(recovered).toBeUndefined();
   });
+
+  /**
+   * `session add` proceeds when liveness is `unknown`, and `unknown` is what a
+   * chain outside the client's registry returns. There the union would be built
+   * from a relay response with nothing local to corroborate it, so it has to
+   * describe this session before it is written.
+   */
+  it.each([
+    ['a different account', { account: '0x9999999999999999999999999999999999999999' }],
+    ['a different spender', { spender: '0x8888888888888888888888888888888888888888' }],
+  ])('refuses a struct for %s', async (_label, override) => {
+    const recovered = await recoverPermission(SESSION, 'key', {
+      fetchPermission: async () => ({ ...RELAYED, ...override }),
+    });
+    expect(recovered).toBeUndefined();
+    expect(fs.existsSync(PATHS.sessionConfig)).toBe(false);
+  });
 });

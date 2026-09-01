@@ -134,7 +134,13 @@ export default class SessionAdd extends BaseCommand {
       return;
     }
 
-    const overCeiling = whyGrantExceedsCeiling(merged, session.chainId, config.grantCeiling);
+    // Against what is being added, not the whole merged document. A limit the
+    // session already holds cannot be superseded by an addition that does not
+    // name its window, so judging the merge refused the add over a number the
+    // user never asked for, on a session no command could bring back under the
+    // ceiling short of starting over. The ceiling exists to bound what an agent
+    // can ask for, and that is exactly the addition.
+    const overCeiling = whyGrantExceedsCeiling(addition, session.chainId, config.grantCeiling);
     if (overCeiling) this.error(overCeiling);
 
     if (!flags.quiet && format !== 'json') {
