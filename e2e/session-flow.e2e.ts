@@ -217,11 +217,14 @@ if (STEPS.has('status') && !session()) {
       'status reads the permission as live on chain',
       report.permission?.onChain
     );
-    // The figure that comes from `getCurrentPeriod` rather than the ledger.
+    // The figures that come from `getCurrentPeriod` rather than the ledger.
+    // Every limit is reported now, each with where its number came from.
+    const limits: Array<{ usedFrom: string }> = report.policy?.perPeriod ?? [];
+    check(limits.length > 0, 'status reports the limits the permission carries');
     check(
-      report.spentThisPeriodSource === 'chain',
-      'the period figure came from the contract',
-      report.spentThisPeriodSource
+      limits.every((limit) => limit.usedFrom === 'chain'),
+      'every period figure came from the contract',
+      limits.map((limit) => limit.usedFrom).join(', ')
     );
   } catch {
     check(false, 'status prints parseable json');

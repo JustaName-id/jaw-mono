@@ -58,7 +58,7 @@ export interface X402Policy {
    * Max cumulative base units across the whole session. Not a per-process cap:
    * the running total is rebuilt from the payment ledger since the session was
    * created, so it survives restarts. User-configured only, never seeded from
-   * the grant (see `maxPerPeriod` for that).
+   * the grant (see `perPeriod` for that).
    */
   maxTotalPerSession?: string;
   /**
@@ -109,9 +109,9 @@ export const DEFAULT_X402_POLICY: X402Policy = {
  * them was itself a source of them. A value that cannot be stored out of date
  * cannot go out of date.
  *
- * The reduction is still lossy and now says so in one place: the contract
- * charges every spend limit matching a token, and `maxPerPeriod` is a single
- * number, so `bindingSpendLimit` decides which one it stands for.
+ * Every limit is carried, not reduced to one: the contract charges each of
+ * them, so which refuses depends on the amount and the moment, and a single
+ * pair cannot answer that.
  */
 export function policyFromPermission(permission: GrantedPermission | undefined, chainId: number): X402Policy {
   if (!permission) return {};
@@ -194,12 +194,17 @@ export function resolveSessionX402Policy(
  * price fit comfortably, so what is already used has to be subtracted here.
  *
  * Each cap is measured against what actually consumes it, which is not the same
- * meter for both. `maxPerPeriod` mirrors the on-chain allowance, and what draws
+ * meter for both. A per-period cap mirrors the on-chain allowance, and what draws
  * that down is the top-up itself, so it counts top-ups. `maxTotalPerSession` is
  * the user's own ceiling on what the session may spend, so it counts payments.
  * Reading the period cap off payments made it lag by whatever float the payer
  * still held, and the pull that overshot was refused on chain.
  */
+/** Two limits are the same budget when they meter the same window. */
+function sameLimit(a: { unit: string; multiplier: number }, b: { unit: string; multiplier: number }): boolean {
+  return a.unit === b.unit && a.multiplier === b.multiplier;
+}
+
 export function topUpCeiling(
   policy: X402Policy,
   used: { periodUsage?: LimitUsage[]; spentThisSession?: bigint } = {}
@@ -210,10 +215,13 @@ export function topUpCeiling(
     return parsed > alreadyUsed ? parsed - alreadyUsed : 0n;
   };
   const caps = [
-    // Every limit, not the one that looks tightest. The contract charges all of
-    // them, so a refill sized against any single one can still be refused by
-    // another, and the smallest remaining is the only figure safe against that.
-    ...(used.periodUsage ?? []).map((limit) => left(limit.allowance, limit.toppedUp)),
+    // Every limit the policy holds, not every entry the caller built. The
+    // contract charges all of them, so a refill sized against any single one
+    // can still be refused by another, and a limit whose usage could not be
+    // computed still bounds the pull at its full width rather than vanishing.
+    ...(policy.perPeriod ?? []).map((limit) =>
+      left(limit.allowance, (used.periodUsage ?? []).find((entry) => sameLimit(entry, limit))?.toppedUp)
+    ),
     left(policy.maxTotalPerSession, used.spentThisSession),
   ].filter((cap): cap is bigint => cap !== undefined);
   return caps.length > 0 ? caps.reduce((a, b) => (a < b ? a : b)) : undefined;
@@ -303,25 +311,37 @@ export function checkPolicy(
   // Checked before the session cap: this is the one that mirrors the on-chain
   // permission, so when both would refuse, the reason the chain would give is
   // the more useful one to report.
-  // Refused when any limit would refuse it, which is what the contract does:
-  // it charges every limit whose token matches and reverts on the first that
-  // will not take the amount.
-  const exceeded = (ctx.periodUsage ?? []).filter((limit) => {
+  // Driven by the limits the policy holds, with usage looked up per limit and
+  // absent usage read as zero. Iterating the caller's list instead made a cap
+  // exist only when someone managed to build an entry for it: a limit dropped
+  // while computing usage, which happens on an unparseable anchor, silently
+  // stopped being enforced, and since a seeded grant deletes the session
+  // default there was then nothing bounding a pull at all.
+  const exceeded: Array<{ limit: GrantedPeriodLimit; usage?: LimitUsage; remaining: bigint }> = [];
+  for (const limit of policy.perPeriod ?? []) {
     const cap = parseBigInt(limit.allowance);
-    return cap !== null && limit.spent + amount > cap;
-  });
+    if (cap === null) {
+      return { ok: false, reason: `invalid allowance from grant: ${limit.allowance}` };
+    }
+    const usage = (ctx.periodUsage ?? []).find((entry) => sameLimit(entry, limit));
+    const spent = usage?.spent ?? 0n;
+    if (spent + amount > cap) exceeded.push({ limit, usage, remaining: cap > spent ? cap - spent : 0n });
+  }
   if (exceeded.length > 0) {
     // The one that frees up last, not the smallest. A refusal is read to decide
     // what to do next, and naming the day limit when the month will refuse
-    // again tomorrow sends someone back for nothing.
-    const latest = exceeded.reduce((a, b) => (a.endsAt > b.endsAt ? a : b));
+    // again tomorrow sends someone back for nothing. Without a window from the
+    // caller the order is undefined, so the first is as good as any.
+    const latest = exceeded.reduce((a, b) =>
+      (a.usage?.endsAt?.getTime() ?? 0) >= (b.usage?.endsAt?.getTime() ?? 0) ? a : b
+    );
     const others = exceeded.length - 1;
-    const window = describePeriod(latest.unit, latest.multiplier);
+    const window = describePeriod(latest.limit.unit, latest.limit.multiplier);
+    const resets = latest.usage ? `, which resets ${latest.usage.endsAt.toISOString()}` : '';
     return {
       ok: false,
       reason:
-        `payment ${requirement.amount} would exceed the granted ${latest.allowance} per ${window}, ` +
-        `which resets ${latest.endsAt.toISOString()}` +
+        `payment ${requirement.amount} would exceed the granted ${latest.limit.allowance} per ${window}${resets}` +
         (others > 0 ? ` (${others} other limit${others === 1 ? '' : 's'} also applies)` : ''),
     };
   }

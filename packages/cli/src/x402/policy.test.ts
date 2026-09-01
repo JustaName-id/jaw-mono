@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
 
+/** The limit as the policy holds it: the cap exists here, not in the usage. */
+function limit(allowance: string, unit = 'day') {
+  return { allowance, unit: unit as 'day' | 'month', multiplier: 1, anchor: '2026-01-01T00:00:00.000Z' };
+}
+
 /** A limit with its usage, as the payment paths now hand it to the policy. */
 function usage(allowance: string, toppedUp = 0n, unit = 'day', endsAt = new Date('2026-01-02T00:00:00.000Z')) {
   return {
@@ -239,15 +244,25 @@ describe('topUpCeiling', () => {
   // could ever spend: a 5-USDC/day grant against an explicit 1-USDC session cap
   // moved 5 USDC into the payer for a session that stops at 1.
   it('takes the smaller cap, not the per-period one', () => {
-    expect(topUpCeiling({ maxTotalPerSession: '1000000' }, { periodUsage: [usage('5000000')] })).toBe(1000000n);
+    expect(
+      topUpCeiling(
+        { maxTotalPerSession: '1000000', perPeriod: [limit('5000000')] },
+        { periodUsage: [usage('5000000')] }
+      )
+    ).toBe(1000000n);
   });
 
   it('takes the per-period cap when it is the smaller one', () => {
-    expect(topUpCeiling({ maxTotalPerSession: '5000000' }, { periodUsage: [usage('1000000')] })).toBe(1000000n);
+    expect(
+      topUpCeiling(
+        { maxTotalPerSession: '5000000', perPeriod: [limit('1000000')] },
+        { periodUsage: [usage('1000000')] }
+      )
+    ).toBe(1000000n);
   });
 
   it('uses whichever cap is set on its own', () => {
-    expect(topUpCeiling({}, { periodUsage: [usage('5000000')] })).toBe(5000000n);
+    expect(topUpCeiling({ perPeriod: [limit('5000000')] }, { periodUsage: [usage('5000000')] })).toBe(5000000n);
     expect(topUpCeiling({ maxTotalPerSession: '3000000' })).toBe(3000000n);
   });
 
@@ -258,7 +273,9 @@ describe('topUpCeiling', () => {
   // Pulling the whole cap through a permission that has 1 USDC of allowance left
   // reverts on-chain, refusing a payment whose price fit comfortably.
   it('bounds by what is left of each cap, not its full width', () => {
-    expect(topUpCeiling({}, { periodUsage: [usage('10000000', 9000000n)] })).toBe(1000000n);
+    expect(topUpCeiling({ perPeriod: [limit('10000000')] }, { periodUsage: [usage('10000000', 9000000n)] })).toBe(
+      1000000n
+    );
     expect(topUpCeiling({ maxTotalPerSession: '10000000' }, { spentThisSession: 4000000n })).toBe(6000000n);
   });
 
@@ -267,7 +284,7 @@ describe('topUpCeiling', () => {
   it('measures the period cap by top-ups and the session cap by payments', () => {
     expect(
       topUpCeiling(
-        { maxTotalPerSession: '20000000' },
+        { maxTotalPerSession: '20000000', perPeriod: [limit('10000000')] },
         { periodUsage: [usage('10000000', 5800000n)], spentThisSession: 5300000n }
       )
     ).toBe(4200000n); // the permission's real remainder, not the 4.7 payments suggest
@@ -276,21 +293,21 @@ describe('topUpCeiling', () => {
   it('takes whichever of the two is tighter', () => {
     expect(
       topUpCeiling(
-        { maxTotalPerSession: '20000000' },
+        { maxTotalPerSession: '20000000', perPeriod: [limit('10000000')] },
         { periodUsage: [usage('10000000', 2000000n)], spentThisSession: 19000000n }
       )
     ).toBe(1000000n);
   });
 
   it('floors an exhausted cap at zero rather than going negative', () => {
-    expect(topUpCeiling({}, { periodUsage: [usage('1000000', 5000000n)] })).toBe(0n);
+    expect(topUpCeiling({ perPeriod: [limit('1000000')] }, { periodUsage: [usage('1000000', 5000000n)] })).toBe(0n);
   });
 
   // Hand-edited config must not bound the top-up by a garbage number.
   it('ignores unparseable and negative caps', () => {
-    expect(topUpCeiling({ maxPerPeriod: 'abc', maxTotalPerSession: '2000000' })).toBe(2000000n);
-    expect(topUpCeiling({ maxPerPeriod: '-1', maxTotalPerSession: '2000000' })).toBe(2000000n);
-    expect(topUpCeiling({ maxPerPeriod: 'abc' })).toBeUndefined();
+    expect(topUpCeiling({ perPeriod: [limit('abc')], maxTotalPerSession: '2000000' })).toBe(2000000n);
+    expect(topUpCeiling({ perPeriod: [limit('-1')], maxTotalPerSession: '2000000' })).toBe(2000000n);
+    expect(topUpCeiling({ perPeriod: [limit('abc')] })).toBeUndefined();
   });
 });
 
@@ -350,7 +367,8 @@ describe('per-period cap', () => {
    */
   it('refuses on the limit that frees up last, not the smallest', () => {
     const twoUsdc = { ...base, amount: '2000000' };
-    const result = checkPolicy(twoUsdc, roomy, {
+    const both = { ...roomy, perPeriod: [limit('50000000'), limit('100000000', 'month')] };
+    const result = checkPolicy(twoUsdc, both, {
       periodUsage: [
         { ...usage('50000000', 0n, 'day', new Date('2026-01-02T00:00:00.000Z')), spent: 0n },
         { ...usage('100000000', 0n, 'month', new Date('2026-02-01T00:00:00.000Z')), spent: 99000000n },
@@ -363,7 +381,8 @@ describe('per-period cap', () => {
 
   it('counts the others when more than one would refuse', () => {
     const twoUsdc = { ...base, amount: '2000000' };
-    const result = checkPolicy(twoUsdc, roomy, {
+    const both = { ...roomy, perPeriod: [limit('50000000'), limit('100000000', 'month')] };
+    const result = checkPolicy(twoUsdc, both, {
       periodUsage: [
         { ...usage('50000000', 0n, 'day', new Date('2026-01-02T00:00:00.000Z')), spent: 49000000n },
         { ...usage('100000000', 0n, 'month', new Date('2026-02-01T00:00:00.000Z')), spent: 99000000n },
@@ -390,5 +409,28 @@ describe('per-period cap', () => {
     );
     const result = checkPolicy(oneUsdc, withCeiling, { spentThisSession: 8000000n, periodUsage: limits(0n, 5000000n) });
     expect(result.reason).toContain('per day');
+  });
+
+  /**
+   * The cap lives in the policy, so a limit whose usage could not be computed
+   * still bounds. Driving the check from the caller's list instead meant an
+   * entry dropped while building usage silently removed the cap, and with the
+   * session default deleted by a seeded grant there was then nothing bounding
+   * a pull at all.
+   */
+  it('still refuses when the usage for a limit could not be built', () => {
+    const result = checkPolicy(oneUsdc, { ...policy, perPeriod: [limit('500000')] }, { periodUsage: [] });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain('per day');
+  });
+
+  it('still bounds a top-up when the usage for a limit could not be built', () => {
+    expect(topUpCeiling({ perPeriod: [limit('500000')] }, { periodUsage: [] })).toBe(500000n);
+  });
+
+  it('refuses rather than passing an allowance it cannot read', () => {
+    const result = checkPolicy(oneUsdc, { ...policy, perPeriod: [limit('abc')] }, {});
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain('invalid allowance from grant');
   });
 });

@@ -105,11 +105,25 @@ export default class X402Status extends BaseCommand {
     // Every limit on the payment token, each with its own window and its own
     // usage. Reducing them to one was reporting a month's budget as a day's.
     const limits = await currentLimitUsageOnChain(policy, payer, current);
-    // The one a single payment is refused against, for the readiness verdict.
-    const tightest = limits.reduce<(typeof limits)[number] | null>(
-      (a, b) => (a === null || BigInt(b.allowance) < BigInt(a.allowance) ? b : a),
-      null
-    );
+    // The one with the least room left, which is what the verdict is about.
+    // Picking the smallest allowance instead said `ready: true` for a session
+    // whose month was drained, because today's counter was still at zero, right
+    // under a printed line reading 100 of 100 USDC used this month.
+    //
+    // Unparseable allowances are skipped rather than thrown on: they reach here
+    // from a config file someone can edit, and the rest of this command reports
+    // a bad value instead of dying on it.
+    const remaining = (limit: (typeof limits)[number]) => {
+      const cap = parseBigInt(limit.allowance);
+      if (cap === null) return null;
+      return cap > limit.toppedUp ? cap - limit.toppedUp : 0n;
+    };
+    const tightest = limits.reduce<(typeof limits)[number] | null>((a, b) => {
+      const left = remaining(b);
+      if (left === null) return a;
+      const best = a === null ? null : remaining(a);
+      return best === null || left < best ? b : a;
+    }, null);
 
     // One verdict for both renderers. `ready` used to be its own expression and
     // drifted from the warnings: a setup whose owner was empty printed a loud

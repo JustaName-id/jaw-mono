@@ -51,7 +51,16 @@ export function registerRpcTool(server: McpServer): void {
     recentSends.push(now);
   }
 
-  server.registerTool(
+  // Through an explicit signature, like `jaw_config_set` and `jaw_discover`.
+  // The SDK's registerTool inference over this schema is deep enough that
+  // adding anything to this file tips it over, and it surfaces as a type error
+  // on the schema rather than anywhere near the code that caused it.
+  type RegisterRpc = (
+    name: string,
+    config: { description: string; inputSchema: typeof rpcMethodSchema },
+    handler: (params: { method: string; params?: unknown; chainId?: number; session?: boolean }) => Promise<unknown>
+  ) => void;
+  (server.registerTool as unknown as RegisterRpc)(
     'jaw_rpc',
     {
       description:
@@ -66,8 +75,7 @@ export function registerRpcTool(server: McpServer): void {
         'and jaw://api-reference/{method} for detailed parameter formats and examples.',
       inputSchema: rpcMethodSchema,
     },
-    // @ts-expect-error — MCP SDK deep type inference with z.any() in schema
-    async (params: { method: string; params?: unknown; chainId?: number; session?: boolean }) => {
+    async (params) => {
       try {
         const config = loadConfig();
         const apiKey = resolveApiKey(config);

@@ -273,8 +273,9 @@ export interface OnChainLimit {
  * All of them, because the contract charges all of them: the counter lives at
  * `_lastUpdatedPeriod[permissionHash][spendLimitHash]`, so a permission with
  * several limits on one token has several counters and reading one answers
- * about one budget. Read in a single batch, so N limits cost one round trip
- * rather than N.
+ * about one budget. Issued together and awaited as one, so N limits cost the
+ * latency of one rather than N; the client does not batch them into a single
+ * request, so it is still N+1 calls on the wire.
  *
  * The hash is checked alongside them. `getCurrentPeriod` does not require the
  * permission to exist: handed a struct that hashes to something else it answers

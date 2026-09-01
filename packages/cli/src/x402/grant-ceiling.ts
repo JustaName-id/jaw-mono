@@ -18,7 +18,7 @@ import type { PermissionsConfig } from '../lib/types.js';
  * A ceiling moves the decision to where it belongs. The human names the most
  * they are willing to grant, once, at a terminal; the agent can ask for that or
  * less, and the browser confirms a number that was already bounded. It is the
- * same split the x402 caps already use: `maxPerPeriod` and the rest are
+ * same split the x402 caps already use: the per-period caps and the rest are
  * deliberately unreachable from the MCP tools, because an agent must not raise
  * its own spending caps.
  *

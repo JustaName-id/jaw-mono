@@ -86,10 +86,10 @@ Every payment is bounded by a policy plus the per call ceiling. Nothing is unbou
 | --------------------- | ------- | ------------------------------- |
 | `maxAmountPerPayment` | 1 USDC  | Config, or the built in default |
 | `maxTotalPerSession`  | 10 USDC | Config, or the built in default |
-| `maxPerPeriod`        | none    | Seeded from the on chain grant  |
+| per period            | none    | Seeded from the on chain grant  |
 | `--max-amount`        | none    | One call only                   |
 
-`maxPerPeriod` mirrors the permission and resets with it, so it is not settable from the CLI. Once a grant seeds it, it replaces the 10 USDC session default and is usually the only cap that binds. A `maxTotalPerSession` you set explicitly still applies on top.
+The per-period caps mirror the permission and reset with it, so they are not settable from the CLI. A grant seeds one for every spend limit the permission puts on the token, and they replace the 10 USDC session default. `JustaPermissionManager` charges every limit matching a token rather than stopping at the first, so all of them apply and the tightest is what binds: a session holding 50 a day and 100 a month can move 50 today and no more than 100 across the month. `jaw x402 status` reports each one with its own used figure and reset time. A `maxTotalPerSession` you set explicitly still applies on top.
 
 `maxTotalPerSession` is not a per-process cap. The running total is rebuilt from the ledger, so it survives restarts.
 

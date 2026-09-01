@@ -129,7 +129,7 @@ jaw config set x402.allowedPayTo 0xabc...,0xdef...
 
 Amounts are in base units, so `1000000` is 1 USDC. Array fields are comma separated on the CLI.
 
-Two more caps, `maxPerPeriod` and its `period`, are seeded from the on chain grant and mirror it. They are not settable, because they describe what the permission already enforces.
+The per-period caps are seeded from the on chain grant, one for every spend limit the permission puts on the token, and mirror it. They are not settable, because they describe what the permission already enforces.
 
 :::warning
 These fields are not reachable from the MCP tools. An agent must not be able to raise its own spending caps, only a human at a terminal.

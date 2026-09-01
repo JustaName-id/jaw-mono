@@ -175,7 +175,14 @@ export function registerPayTool(server: McpServer): void {
       )
   );
 
-  server.registerTool(
+  // Same explicit signature as the other handlers, for the same reason: the
+  // SDK's inference over these schemas tips over when the file grows.
+  type RegisterLog = (
+    name: string,
+    config: { description: string; inputSchema: typeof x402LogSchema; annotations: { readOnlyHint: boolean } },
+    handler: (params: { limit?: number }) => Promise<unknown>
+  ) => void;
+  (server.registerTool as unknown as RegisterLog)(
     'jaw_x402_log',
     {
       description:

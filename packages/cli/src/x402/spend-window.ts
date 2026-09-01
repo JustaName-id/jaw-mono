@@ -1,5 +1,6 @@
 import { currentPeriodWindow, normalizePeriod } from './period.js';
 import { sumSpentSince, sumToppedUpSince } from './ledger.js';
+import { parseBigInt } from './amount.js';
 import { readCurrentPeriods, type ReadDeps } from './permission-onchain.js';
 import { USDC_BY_NETWORK } from './asset-registry.js';
 import type { LimitUsage, X402Policy } from './policy.js';
@@ -98,11 +99,13 @@ export async function currentLimitUsageOnChain(
     // the policy skips limits it cannot normalise and the chain list does not.
     const match = onChain.find((candidate) => {
       const normalized = normalizePeriod(candidate.unit, candidate.multiplier);
-      return (
-        normalized?.unit === limit.unit &&
-        normalized.multiplier === limit.multiplier &&
-        BigInt(candidate.allowance) === BigInt(limit.allowance)
-      );
+      if (normalized?.unit !== limit.unit || normalized.multiplier !== limit.multiplier) return false;
+      // Not `BigInt(...)` directly: these strings come off disk, and throwing
+      // here rejects the whole call and takes down a payment the ledger figure
+      // would have served.
+      const a = parseBigInt(candidate.allowance);
+      const b = parseBigInt(limit.allowance);
+      return a !== null && b !== null && a === b;
     });
     if (!match || match.period.status !== 'ok') return limit;
 

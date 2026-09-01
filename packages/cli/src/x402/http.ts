@@ -21,10 +21,8 @@ export interface PayAndFetchOptions {
   policy?: X402Policy;
   /** Base units already spent this session (for `maxTotalPerSession`). */
   spentThisSession?: bigint;
-  /** Base units already spent in the current grant period (for `maxPerPeriod`). */
   /** Every limit on the payment token with what has been drawn against it. */
   periodUsage?: LimitUsage[];
-  /** When the current grant period ends, so a refusal can say when it frees up. */
   /**
    * Stop after choosing a requirement: no funding, no signature, no money. The
    * same request, challenge parse and policy evaluation a real payment runs, so
