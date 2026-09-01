@@ -315,7 +315,9 @@ export function checkPolicy(
     if (!isHexAddress(facilitator) || isZeroAddress(facilitator)) {
       return {
         ok: false,
-        reason: `x402 upto requires extra.facilitatorAddress on ${requirement.network}, got ${JSON.stringify(facilitator)}`,
+        reason:
+          `x402 upto needs a settling facilitator in extra.facilitatorAddress on ${requirement.network}, ` +
+          `got ${JSON.stringify(facilitator)}`,
       };
     }
   }
@@ -328,9 +330,10 @@ export function checkPolicy(
     return { ok: false, reason: `asset not allowed: ${requirement.asset}` };
   }
 
-  // Ahead of the allowlist, because it holds whether or not one is configured:
-  // a payment to address(0) is destroyed, and it is refused here rather than in
-  // a signer so nothing has been funded when it is.
+  // Ahead of the allowlist, because it holds whether or not one is configured.
+  // USDC reverts on a zero recipient rather than burning, so this is not lost
+  // funds; it is a settlement that cannot succeed, which reserves its whole
+  // figure against the caps once the payer has been funded for it.
   if (isZeroAddress(requirement.payTo)) {
     return { ok: false, reason: `payTo is the zero address on ${requirement.network}` };
   }

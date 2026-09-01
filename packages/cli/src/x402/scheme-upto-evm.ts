@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { checksummed, isHexAddress, isZeroAddress } from './address.js';
+import { checksummed, isHexAddress, isZeroAddress, wireAddress } from './address.js';
 import { usdcForNetwork } from './asset-registry.js';
 import {
   PERMIT_WITNESS_TRANSFER_FROM_TYPES,
@@ -112,13 +112,21 @@ export async function buildUptoPayment(
   // The witness names the only address the proxy will accept as the settling
   // caller. Without it there is nothing to bind, and a payment nobody can settle
   // is worse than a refusal: it consumes the ceiling in the ledger for nothing.
+  // Same shape as the checks above: `checkPolicy` refuses a zero recipient
+  // during selection, and this is the signer's own precondition for a caller
+  // that reaches it another way.
+  if (isZeroAddress(requirement.payTo)) {
+    throw new Error(`x402 payTo is the zero address on ${requirement.network}`);
+  }
+
   // `checkPolicy` refuses a challenge without this during selection, before
   // anything has been funded; like the chain check above, this is the signer's
   // own precondition for a caller that reaches it another way.
   const advertisedFacilitator = requirement.extra?.['facilitatorAddress'];
   if (!isHexAddress(advertisedFacilitator) || isZeroAddress(advertisedFacilitator)) {
     throw new Error(
-      `x402 upto requires extra.facilitatorAddress on ${requirement.network}, got ${JSON.stringify(advertisedFacilitator)}`
+      `x402 upto needs a settling facilitator in extra.facilitatorAddress on ${requirement.network}, ` +
+        `got ${JSON.stringify(advertisedFacilitator)}`
     );
   }
 
@@ -156,12 +164,16 @@ export async function buildUptoPayment(
   // advertised, which `accepted` also echoes back, should see its own casing.
   // The signed message keeps the registry value, which is what makes them equal.
   const permit2Authorization: X402Permit2Authorization = {
-    permitted: { token: requirement.asset, amount: message.permitted.amount.toString() },
+    permitted: { token: wireAddress(requirement.asset), amount: message.permitted.amount.toString() },
     from,
     spender: message.spender,
     nonce,
     deadline: deadline.toString(),
-    witness: { to: requirement.payTo, facilitator: advertisedFacilitator, validAfter: validAfter.toString() },
+    witness: {
+      to: wireAddress(requirement.payTo),
+      facilitator: wireAddress(advertisedFacilitator),
+      validAfter: validAfter.toString(),
+    },
   };
 
   return { x402Version: 2, accepted: requirement, payload: { signature, permit2Authorization } };

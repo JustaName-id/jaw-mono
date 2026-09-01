@@ -76,6 +76,11 @@ describe('buildExactPayment', () => {
     expect(recovered.toLowerCase()).toBe(account.address.toLowerCase());
   });
 
+  it('refuses a zero recipient the policy would have skipped', async () => {
+    const zero = { ...requirement, payTo: `0x${'0'.repeat(40)}` as `0x${string}` };
+    await expect(buildExactPayment(zero, account.address, signer)).rejects.toThrow(/zero address/);
+  });
+
   it('rejects an unsupported network', async () => {
     await expect(buildExactPayment({ ...requirement, network: 'eip155:1' }, account.address, signer)).rejects.toThrow(
       /Unsupported x402 network/
@@ -109,7 +114,15 @@ describe('buildExactPayment', () => {
 
     const payload = await buildExactPayment(shouty, account.address, signer, { now: 1_000_000, nonce: NONCE });
 
-    expect(payload.payload.authorization.to).toBe(shouty.payTo);
+    // Lowercased rather than echoed verbatim: a mis-cased string is one viem
+    // refuses, so echoing it would hand the facilitator an unparseable field.
+    expect(payload.payload.authorization.to).toBe(shouty.payTo.toLowerCase());
+    // The two spellings a real server uses round-trip untouched.
+    for (const spell of [(a: string) => a, (a: string) => a.toLowerCase()]) {
+      const req = { ...requirement, payTo: spell(requirement.payTo) as `0x${string}` };
+      const echoed = await buildExactPayment(req, account.address, signer, { now: 1_000_000, nonce: NONCE });
+      expect(echoed.payload.authorization.to).toBe(req.payTo);
+    }
     const clean = await buildExactPayment(requirement, account.address, signer, { now: 1_000_000, nonce: NONCE });
     expect(payload.payload.signature).toBe(clean.payload.signature);
   });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { privateKeyToAccount } from 'viem/accounts';
-import { recoverTypedDataAddress } from 'viem';
+import { isAddress, recoverTypedDataAddress } from 'viem';
 import { buildUptoPayment } from './scheme-upto-evm.js';
 import { X402_UPTO_PROXY_ADDRESS, PERMIT_WITNESS_TRANSFER_FROM_TYPES, permit2Domain } from './permit2.js';
 import type { X402PaymentRequirement, X402UptoPayload } from './types.js';
@@ -125,13 +125,41 @@ describe('buildUptoPayment', () => {
     const payload = await build(shouty);
     const auth = authOf(payload);
 
-    expect(auth.witness.to).toBe(shouty.payTo);
-    // The permitted token is echoed too: the registry decides what gets signed,
-    // not what the facilitator has to string-match against its own challenge.
-    expect(auth.permitted.token).toBe(shouty.asset);
-    expect(auth.witness.facilitator).toBe(misCased(FACILITATOR_MIXED));
+    // Lowercased on the wire, not echoed verbatim: a mis-cased string is one
+    // viem refuses, so echoing it would hand the facilitator a field it cannot
+    // re-hash or encode, which is this fix's own bug one hop downstream. Same
+    // bytes, and still equal to what the server advertised.
+    for (const [got, advertised] of [
+      [auth.witness.to, shouty.payTo],
+      [auth.permitted.token, shouty.asset],
+      [auth.witness.facilitator, misCased(FACILITATOR_MIXED)],
+    ]) {
+      expect(got).toBe(advertised.toLowerCase());
+      expect(isAddress(got)).toBe(true);
+    }
     const cleanSig = ((await build(clean)).payload as X402UptoPayload).signature;
     expect((payload.payload as X402UptoPayload).signature).toBe(cleanSig);
+  });
+
+  /**
+   * The casing a counterparty can parse is echoed back untouched, which is the
+   * whole point of echoing: both spellings a real server uses round-trip.
+   */
+  it('echoes a parseable challenge byte for byte', async () => {
+    for (const spell of [(a: string) => a, (a: string) => a.toLowerCase()]) {
+      const req = {
+        ...requirement,
+        asset: spell(requirement.asset) as `0x${string}`,
+        payTo: spell(requirement.payTo) as `0x${string}`,
+        extra: { ...requirement.extra, facilitatorAddress: spell(FACILITATOR_MIXED) },
+      };
+
+      const auth = authOf(await build(req));
+
+      expect(auth.permitted.token).toBe(req.asset);
+      expect(auth.witness.to).toBe(req.payTo);
+      expect(auth.witness.facilitator).toBe(req.extra.facilitatorAddress);
+    }
   });
 });
 
@@ -165,6 +193,16 @@ describe('buildUptoPayment refusals', () => {
   it('caps the deadline the server may ask for', async () => {
     const forever = { ...requirement, maxTimeoutSeconds: 31_536_000 };
     expect(authOf(await build(forever)).deadline).toBe(String(1_000_000 + 3600));
+  });
+
+  it('refuses a zero recipient the policy would have skipped', async () => {
+    const zero = { ...requirement, payTo: `0x${'0'.repeat(40)}` as `0x${string}` };
+    await expect(build(zero)).rejects.toThrow(/zero address/);
+  });
+
+  it('refuses a zero facilitator, naming the field rather than calling it absent', async () => {
+    const zero = { ...requirement, extra: { facilitatorAddress: `0x${'0'.repeat(40)}` } };
+    await expect(build(zero)).rejects.toThrow(/needs a settling facilitator/);
   });
 
   it('refuses a facilitator that is not an address', async () => {

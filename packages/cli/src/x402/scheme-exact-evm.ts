@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { checksummed } from './address.js';
+import { checksummed, isZeroAddress, wireAddress } from './address.js';
 import { usdcForNetwork } from './asset-registry.js';
 import type { X402EIP3009Authorization, X402PaymentPayload, X402PaymentRequirement } from './types.js';
 
@@ -83,6 +83,12 @@ export async function buildExactPayment(
   // `asset.address` rather than a re-cased `requirement.asset`, for the reason
   // the check above exists: the registry is the source of truth, and the two are
   // now known to be the same address. `payTo` has no registry to fall back on.
+  // `checkPolicy` refuses this during selection, before anything is funded;
+  // the signer keeps its own precondition, as it does for the asset above.
+  if (isZeroAddress(requirement.payTo)) {
+    throw new Error(`x402 payTo is the zero address on ${requirement.network}`);
+  }
+
   const verifyingContract = asset.address;
   const signedPayTo = checksummed(requirement.payTo);
 
@@ -107,7 +113,7 @@ export async function buildExactPayment(
 
   const authorization: X402EIP3009Authorization = {
     from,
-    to: requirement.payTo,
+    to: wireAddress(requirement.payTo),
     value: requirement.amount,
     validAfter,
     validBefore,
