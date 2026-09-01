@@ -10,12 +10,18 @@ import {
   loadSessionKey,
   tryLoadKeystoreAddress,
 } from '../../lib/keystore.js';
-import { saveSessionConfig, tryLoadSessionConfig } from '../../lib/session-config.js';
+import {
+  liveOrphans,
+  parseGrantedPermission,
+  saveSessionConfig,
+  tryLoadSessionConfig,
+  type OrphanedPermission,
+} from '../../lib/session-config.js';
 import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
 import { parsePermissionsConfig } from '../../lib/validation.js';
-import { extractGrantedSpend } from '../../x402/policy.js';
 import { buildX402Permissions, describeX402Grant, DEFAULT_X402_LIMIT } from '../../x402/grant-preset.js';
 import { whyOwnerCannotFundSession, whySpenderCannotPay } from '../../x402/funded-owner.js';
+import { whyGrantExceedsCeiling } from '../../x402/grant-ceiling.js';
 
 export default class SessionSetup extends BaseCommand {
   static override description =
@@ -64,9 +70,29 @@ export default class SessionSetup extends BaseCommand {
       this.error('--limit only applies to --x402. Re-run with --x402, or set the cap inside --permissions.');
     }
 
+    // The ceiling a human set at a terminal, checked against the resolved
+    // permission rather than the --limit string so a hand-written --permissions
+    // is bounded by the same number.
+    //
+    // First of everything, because it is a local refusal and the block below can
+    // revoke the existing permission on chain. Checked after that, a `--limit`
+    // over the ceiling cost the user the permission they already had and left
+    // them with none: the revoke had happened, the new grant never would.
+    const resolvedPermissions = this.resolvePermissions(flags.permissions, config.permissions, {
+      x402: flags.x402,
+      limit: flags.limit,
+      chainId,
+    });
+    const overCeiling = whyGrantExceedsCeiling(resolvedPermissions, chainId, config.grantCeiling);
+    if (overCeiling) this.error(overCeiling);
+
     // 1. Check existing session
     let reuseKey: string | null = null;
     let oldPermissionRevoked = false;
+    // Permissions this key still holds that the new session will not name.
+    // Carried across the overwrite so `session revoke` can still reach them:
+    // the id used to live only in the file being replaced.
+    let orphaned: OrphanedPermission[] = [];
 
     if (keystoreExists()) {
       // A keystore can outlive its session-config: setup interrupted between the
@@ -76,6 +102,7 @@ export default class SessionSetup extends BaseCommand {
       // by hand, which strands the key while its on-chain permission stays live.
       const existing = tryLoadSessionConfig();
       const isActive = existing !== null && existing.expiry > Date.now() / 1000;
+      orphaned = liveOrphans(existing?.orphanedPermissions);
 
       // The prompt path uses readline against process.stdin. With non-TTY stdin
       // (pipes, heredocs, CI), readline races against the awaited bridge call
@@ -139,6 +166,12 @@ export default class SessionSetup extends BaseCommand {
             }
             oldPermissionRevoked = true;
             this.log('Old permission revoked.');
+          } else {
+            orphaned = [orphanOf(existing), ...orphaned];
+            this.log(
+              'Keeping the old permission. It stays live until it expires, and the new session will ' +
+                'not name it, so `jaw session revoke` will revoke both.'
+            );
           }
 
           const reuseAnswer = await ask('Reuse existing session key? (Y/n) ');
@@ -165,11 +198,18 @@ export default class SessionSetup extends BaseCommand {
             `revoked automatically because the permission id is unknown.`
         );
       } else if (isActive) {
-        // --yes mode: log warning but continue
+        // --yes never revokes, so the old permission stays live on the account
+        // after this one is granted. The key that could use it does not survive
+        // here (this path always generates a fresh one, and `saveKeystore`
+        // overwrites), but the grant does, and it is the grant that has to be
+        // revocable. Before this, the warning below was the only trace and the
+        // id went away with the overwritten config.
+        orphaned = [orphanOf(existing), ...orphaned];
         this.logToStderr(
           `Warning: overwriting active session without revoking. ` +
             `Old permission ${existing.permissionId} on chain ${existing.chainId} ` +
-            `remains live until ${new Date(existing.expiry * 1000).toISOString()}.`
+            `remains live until ${new Date(existing.expiry * 1000).toISOString()}. ` +
+            `Recorded on the new session, so \`jaw session revoke\` will revoke it too.`
         );
       }
 
@@ -183,12 +223,8 @@ export default class SessionSetup extends BaseCommand {
     // on-chain state, surface a recovery hint before re-throwing so the user
     // knows their local session-config now references a revoked permission.
     try {
-      // 2. Resolve permissions
-      const permissions = this.resolvePermissions(flags.permissions, config.permissions, {
-        x402: flags.x402,
-        limit: flags.limit,
-        chainId,
-      });
+      // 2. Resolved above, before anything that mutates on-chain state.
+      const permissions = resolvedPermissions;
 
       // 3. Resolve expiry
       const expiryDays = flags.expiry ?? config.sessionExpiry ?? 7;
@@ -242,14 +278,18 @@ export default class SessionSetup extends BaseCommand {
         ens: config.ens,
       });
 
-      let grantResponse: { permissionId: string; account: string };
+      // Kept whole rather than narrowed on the way in. The response carries the
+      // permission as the contract stores it, and every view on the permission
+      // manager takes that struct: narrowing to the id here was what left the
+      // CLI unable to ask the chain anything about its own permission.
+      let granted: unknown;
       try {
         if (flags.x402) {
           const blocked = await whyOwnerCannotFundSession({ chainId, request: (m, p) => bridge.request(m, p) });
           if (blocked) this.error(blocked);
         }
 
-        grantResponse = (await bridge.request('wallet_grantPermissions', [
+        granted = await bridge.request('wallet_grantPermissions', [
           {
             spender: sessionAddress,
             expiry: expiryTimestamp,
@@ -261,10 +301,15 @@ export default class SessionSetup extends BaseCommand {
             // this same transaction; it decides the amount.
             capabilities: { prefundSpender: true },
           },
-        ])) as { permissionId: string; account: string };
+        ]);
       } finally {
         bridge.close();
       }
+
+      const grantResponse = granted as { permissionId: string; account: string };
+      // Undefined from a wallet whose response does not carry the struct, which
+      // leaves the session behaving exactly as sessions did before this field.
+      const permission = parseGrantedPermission(granted);
 
       // 7. Save keystore
       saveKeystore(privateKeyHex, sessionAddress);
@@ -277,7 +322,8 @@ export default class SessionSetup extends BaseCommand {
         chainId,
         expiry: expiryTimestamp,
         mode,
-        grantedSpend: extractGrantedSpend(permissions.spends, chainId),
+        ...(permission ? { permission } : {}),
+        ...(orphaned.length > 0 ? { orphanedPermissions: orphaned } : {}),
       });
 
       // 8.5 The grant asked the wallet to seed the spender. Check that it did.
@@ -379,4 +425,9 @@ export default class SessionSetup extends BaseCommand {
 
     return parsePermissionsConfig(raw);
   }
+}
+
+/** The part of a replaced session worth keeping: enough to revoke it later. */
+function orphanOf(session: { permissionId: string; chainId: number; expiry: number }): OrphanedPermission {
+  return { id: session.permissionId, chainId: session.chainId, expiry: session.expiry };
 }

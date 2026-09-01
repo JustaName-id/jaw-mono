@@ -30,6 +30,8 @@ export interface WSBridgeOptions {
   relayUrl: string;
   session: string;
   timeout?: number;
+  /** How long to wait for the browser to connect. See DEFAULT_CONNECT_TIMEOUT_MS. */
+  connectTimeout?: number;
   config: WSBridgeConfig;
   /** CLI's ECDH private key (hex). Loaded from relay.json for existing sessions. */
   privateKeyHex: string;
@@ -62,6 +64,15 @@ export function buildInitPayload(config: WSBridgeConfig): Record<string, unknown
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
+/**
+ * How long to wait for the browser to reach the relay, which is a different
+ * wait from `DEFAULT_TIMEOUT_MS`: that one covers approving a request once the
+ * page is there, this one covers the page arriving at all. Thirty seconds fits
+ * a browser this process opened itself and nothing else. A URL carried to a
+ * phone, a first passkey enrolment, or a machine with no browser to open takes
+ * longer than that before anyone has done anything wrong.
+ */
+const DEFAULT_CONNECT_TIMEOUT_MS = 30_000;
 
 /**
  * Maximum outbound message size (5 MB).
@@ -86,6 +97,7 @@ export class WSBridge {
   private readonly relayUrl: string;
   private readonly session: string;
   private readonly timeout: number;
+  private readonly connectTimeout: number;
   private readonly config: WSBridgeConfig;
   private readonly privateKeyHex: string;
   readonly publicKeyHex: string;
@@ -111,6 +123,7 @@ export class WSBridge {
     this.relayUrl = options.relayUrl;
     this.session = options.session;
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
+    this.connectTimeout = options.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS;
     this.config = options.config;
     this.privateKeyHex = options.privateKeyHex;
     this.publicKeyHex = options.publicKeyHex;
@@ -153,8 +166,13 @@ export class WSBridge {
 
       const timer = setTimeout(() => {
         ws.close();
-        reject(new Error('Browser did not connect in time.\n' + 'Run `jaw disconnect` then try again.'));
-      }, 30_000);
+        reject(
+          new Error(
+            `Browser did not connect within ${Math.round(this.connectTimeout / 1000)}s.\n` +
+              'Run `jaw disconnect` then try again, or raise JAW_BRIDGE_TIMEOUT_MS.'
+          )
+        );
+      }, this.connectTimeout);
 
       const sendEncryptedInit = async () => {
         if (!this.sharedSecret) return;

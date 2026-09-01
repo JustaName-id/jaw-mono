@@ -5,6 +5,7 @@ import { getBridge } from '../../lib/bridge-singleton.js';
 import { SessionBridge } from '../../lib/session-bridge.js';
 import { supportsSessionMode } from '../../lib/rpc-classifier.js';
 import { loadConfig } from '../../lib/config.js';
+import { tryLoadSessionConfig } from '../../lib/session-config.js';
 import type { JawConfig } from '../../lib/types.js';
 
 function resolveApiKey(config: JawConfig): string {
@@ -79,8 +80,16 @@ export function registerRpcTool(server: McpServer): void {
       try {
         const config = loadConfig();
         const apiKey = resolveApiKey(config);
-        const chainId = resolveChainId(params.chainId, config);
         const useSession = params.session ?? envSessionEnabled();
+        // In session mode the session's own chain is the only one that can
+        // work: `SessionBridge` refuses any other, and an agent that never
+        // asked for a chain would otherwise be told its session was made for
+        // the wrong one. An explicit `chainId` still wins, so asking for a
+        // different chain on purpose still gets that refusal.
+        const chainId =
+          useSession && params.chainId === undefined
+            ? (tryLoadSessionConfig()?.chainId ?? resolveChainId(undefined, config))
+            : resolveChainId(params.chainId, config);
 
         let bridge: { request(method: string, params?: unknown): Promise<unknown>; close(): void };
 

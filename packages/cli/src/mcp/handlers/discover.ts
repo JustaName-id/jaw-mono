@@ -40,6 +40,17 @@ export function registerDiscoverTool(server: McpServer): void {
         if (!params.query && !params.payTo) {
           return mcpError(new Error('pass a `query` to search, or a `payTo` address to list one seller’s services'));
         }
+        // Priced for the chain the agent can actually pay on. `network` only
+        // picks which of a service's prices to show, and `selectPrice` falls
+        // back to the cheapest of the rest when the service has none there, so
+        // preferring the session's chain never hides a service. Defaulting to
+        // Base showed a mainnet price to a session that could only pay on
+        // Sepolia.
+        // Deliberately not defaulted to the session's chain, unlike the balance
+        // and rpc tools. `network` is a search filter here, not just the price
+        // to display (`search.set('network', ...)` in discoverServices), so a
+        // session on a testnet would search a catalogue where nothing is
+        // registered and get back nothing at all.
         return mcpDiscoverResult(await discoverServices(params));
       } catch (err) {
         return mcpError(err);

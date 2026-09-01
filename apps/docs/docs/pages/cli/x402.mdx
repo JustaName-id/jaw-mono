@@ -111,12 +111,12 @@ Every payment is bounded by a policy plus the per call ceiling. Nothing is unbou
 | --------------------- | ------- | ------------------------------- |
 | `maxAmountPerPayment` | 1 USDC  | Config, or the built in default |
 | `maxTotalPerSession`  | 10 USDC | Config, or the built in default |
-| `maxPerPeriod`        | none    | Seeded from the on chain grant  |
+| per period            | none    | Seeded from the on chain grant  |
 | `--max-amount`        | none    | One call only                   |
 
 Under `upto` every one of these measures the ceiling the challenge advertised. See [Fixed Prices and Ceilings](#fixed-prices-and-ceilings).
 
-`maxPerPeriod` mirrors the permission and resets with it, so it is not settable from the CLI. Once a grant seeds it, it replaces the 10 USDC session default and is usually the only cap that binds. A `maxTotalPerSession` you set explicitly still applies on top.
+The per-period caps mirror the permission and reset with it, so they are not settable from the CLI. A grant seeds one for every spend limit the permission puts on the token, and they replace the 10 USDC session default. `JustaPermissionManager` charges every limit matching a token rather than stopping at the first, so all of them apply and the tightest is what binds: a session holding 50 a day and 100 a month can move 50 today and no more than 100 across the month. `jaw x402 status` reports each one with its own used figure and reset time. A `maxTotalPerSession` you set explicitly still applies on top.
 
 `maxTotalPerSession` is not a per-process cap. The running total is rebuilt from the ledger, so it survives restarts.
 
@@ -144,8 +144,16 @@ Set `allowedPayTo` to the recipients you expect. It pins where funds can go even
 
 These keys are deliberately unreachable from the MCP tools. An agent must not be able to raise its own spending caps, only a human at a terminal.
 
+The same split covers what an agent may ask to be granted. An agent with shell access can run `jaw session setup --x402 --limit` itself, and without a bound the browser approval screen is the only check on the number it picks. Set a ceiling once, at a terminal:
+
+```bash
+jaw config set grantCeiling 10/day
+```
+
+A grant is refused when it asks for more than that allowance, or when it resets more often than that period, since the same allowance on a shorter period is more money over the same time. It is checked against the resolved permission, so a hand-written `--permissions` is bounded by it too. The ceiling is an amount of USDC, so with one set, a spend it cannot be priced against is refused rather than waved through: another token, or a chain with no USDC in the registry. Unset means no ceiling.
+
 :::warning
-These caps bound `jaw x402 pay` and `jaw_pay_and_fetch`. They are not a bound on the session itself. A session key can also be driven through `jaw_rpc`, and a `wallet_sendCalls` sent that way spends the permission directly: no cap here applies to it, and it leaves no ledger row, so `jaw x402 status` will report more of the period left than there is.
+These caps bound `jaw x402 pay` and `jaw_pay_and_fetch`. They are not a bound on the session itself. A session key can also be driven through `jaw_rpc`, and a `wallet_sendCalls` sent that way spends the permission directly: no cap here applies to it, and it leaves no ledger row. `jaw x402 status` reads the period figure off the chain when it can, so it still sees that spend; the session total is counted from the ledger alone and stays a floor.
 
 What bounds a session in every case is the grant: `JustaPermissionManager` meters each transfer against the period allowance on chain, and `jaw session revoke` ends it. Size the grant for what the agent should be able to spend, and treat the caps here as the second line rather than the first.
 :::

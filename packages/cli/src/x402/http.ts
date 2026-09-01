@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { errorMessage } from '../lib/errors.js';
 import { parseBigInt } from './amount.js';
 import { encodePaymentPayload } from './scheme-exact-evm.js';
+import type { LimitUsage } from './policy.js';
 import { asks, checkPolicy, type PolicyContext, type X402Policy } from './policy.js';
 import type { Payer } from './payer.js';
 import {
@@ -23,10 +24,8 @@ export interface PayAndFetchOptions {
   policy?: X402Policy;
   /** Base units already spent this session (for `maxTotalPerSession`). */
   spentThisSession?: bigint;
-  /** Base units already spent in the current grant period (for `maxPerPeriod`). */
-  spentThisPeriod?: bigint;
-  /** When the current grant period ends, so a refusal can say when it frees up. */
-  periodEndsAt?: Date;
+  /** Every limit on the payment token with what has been drawn against it. */
+  periodUsage?: LimitUsage[];
   /**
    * Stop after choosing a requirement: no funding, no signature, no money. The
    * same request, challenge parse and policy evaluation a real payment runs, so
@@ -498,8 +497,7 @@ export async function payAndFetch(
   const ctx: PolicyContext = {
     host: hostOf(resource),
     spentThisSession: opts.spentThisSession,
-    spentThisPeriod: opts.spentThisPeriod,
-    periodEndsAt: opts.periodEndsAt,
+    periodUsage: opts.periodUsage,
   };
   const { requirement, reason } = selectRequirement(challenge.accepts, opts, ctx);
   if (!requirement) {

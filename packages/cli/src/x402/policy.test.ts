@@ -1,9 +1,53 @@
 import { describe, it, expect } from 'vitest';
+
+/** The limit as the policy holds it: the cap exists here, not in the usage. */
+function limit(allowance: string, unit = 'day') {
+  return { allowance, unit: unit as 'day' | 'month', multiplier: 1, anchor: '2026-01-01T00:00:00.000Z' };
+}
+
+/** A limit with its usage, as the payment paths now hand it to the policy. */
+function usage(allowance: string, toppedUp = 0n, unit = 'day', endsAt = new Date('2026-01-02T00:00:00.000Z')) {
+  return {
+    allowance,
+    unit: unit as 'day' | 'month',
+    multiplier: 1,
+    anchor: '2026-01-01T00:00:00.000Z',
+    spent: 0n,
+    toppedUp,
+    endsAt,
+    source: 'ledger' as const,
+  };
+}
+
+const BASE = 8453;
+const BASE_USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+
+/**
+ * A granted permission, which is now the only place a policy is derived from.
+ * The session used to also carry a `grantedSpend` summary of one limit, and the
+ * two could describe different budgets; deriving on read removes the question.
+ */
+function permissionWith(spends: Array<{ allowance: string; unit: string; multiplier?: number; token?: string }>) {
+  return {
+    account: '0x1111111111111111111111111111111111111111',
+    spender: '0x2222222222222222222222222222222222222222',
+    start: Math.floor(new Date('2026-01-01T00:00:00.000Z').getTime() / 1000),
+    end: Math.floor(new Date('2026-02-01T00:00:00.000Z').getTime() / 1000),
+    salt: '0xabc',
+    calls: [{ target: BASE_USDC, selector: '0xa9059cbb' }],
+    spends: spends.map((s) => ({
+      token: s.token ?? BASE_USDC,
+      allowance: s.allowance,
+      unit: s.unit,
+      multiplier: s.multiplier ?? 1,
+    })),
+  };
+}
+
 import {
   checkPolicy,
   resolveX402Policy,
-  policyFromGrant,
-  extractGrantedSpend,
+  policyFromPermission,
   DEFAULT_X402_POLICY,
   isX402PolicyKey,
   X402_SCALAR_KEYS,
@@ -225,78 +269,98 @@ describe('resolveX402Policy', () => {
   });
 });
 
-describe('policyFromGrant', () => {
-  const grant = { token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', allowance: '5000000', network: 'eip155:8453' };
-
-  it('returns an empty policy when there is no grant', () => {
-    expect(policyFromGrant(undefined)).toEqual({});
+describe('policyFromPermission', () => {
+  it('returns an empty policy when the session carries no permission', () => {
+    expect(policyFromPermission(undefined, BASE)).toEqual({});
   });
 
-  it('seeds the session cap and allowlists from the granted spend', () => {
-    expect(policyFromGrant(grant)).toEqual({
-      maxTotalPerSession: '5000000',
-      allowedAssets: ['0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'],
+  it('seeds the per-period cap, the allowlists and the anchor from the permission', () => {
+    expect(policyFromPermission(permissionWith([{ allowance: '5000000', unit: 'day' }]), BASE)).toEqual({
+      allowedAssets: [BASE_USDC],
       allowedNetworks: ['eip155:8453'],
+      perPeriod: [{ allowance: '5000000', unit: 'day', multiplier: 1, anchor: '2026-01-01T00:00:00.000Z' }],
     });
+  });
+
+  /**
+   * The contract charges every limit matching a token, so the policy carries
+   * all of them. Reducing to one meant answering "what refuses this payment"
+   * and "what runs out first" with the same number, and they come apart.
+   */
+  it('carries every limit the permission puts on the token', () => {
+    const policy = policyFromPermission(
+      permissionWith([
+        { allowance: '100000000', unit: 'month' },
+        { allowance: '1000000', unit: 'day' },
+      ]),
+      BASE
+    );
+    expect(policy.perPeriod?.map((l) => [l.allowance, l.unit])).toEqual([
+      ['100000000', 'month'],
+      ['1000000', 'day'],
+    ]);
+  });
+
+  // The SDK rewrites `year` to months before encoding, so the local window has
+  // to land where the permission actually enforces it.
+  it('normalises a yearly grant to the months the contract stores', () => {
+    const policy = policyFromPermission(permissionWith([{ allowance: '5000000', unit: 'year', multiplier: 2 }]), BASE);
+    expect(policy.perPeriod?.[0]).toMatchObject({ unit: 'month', multiplier: 24 });
+  });
+
+  it('ignores a spend in a token the chain has no registry entry for', () => {
+    const other = '0x9999999999999999999999999999999999999999';
+    expect(policyFromPermission(permissionWith([{ allowance: '5000000', unit: 'day', token: other }]), BASE)).toEqual(
+      {}
+    );
+  });
+
+  it('returns an empty policy on a chain with no registry USDC', () => {
+    expect(policyFromPermission(permissionWith([{ allowance: '5000000', unit: 'day' }]), 1)).toEqual({});
   });
 });
 
 describe('resolveX402Policy — grant layer', () => {
-  const grant = { token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', allowance: '5000000', network: 'eip155:8453' };
+  const seeded = () => policyFromPermission(permissionWith([{ allowance: '5000000', unit: 'day' }]), BASE);
 
-  it('seeds the session cap and allowlists from the grant, keeping the default per-payment cap', () => {
-    const policy = resolveX402Policy(undefined, policyFromGrant(grant));
-    expect(policy.maxTotalPerSession).toBe('5000000'); // from the grant, not the 10 USDC default
-    expect(policy.allowedNetworks).toEqual(['eip155:8453']); // narrowed to the granted chain
-    expect(policy.maxAmountPerPayment).toBe(DEFAULT_X402_POLICY.maxAmountPerPayment); // default still applies
+  it('seeds the per-period cap and allowlists, keeping the default per-payment cap', () => {
+    const policy = resolveX402Policy(undefined, seeded());
+    expect(policy.perPeriod?.[0].allowance).toBe('5000000');
+    expect(policy.allowedNetworks).toEqual(['eip155:8453']);
+    expect(policy.maxAmountPerPayment).toBe(DEFAULT_X402_POLICY.maxAmountPerPayment);
   });
 
-  it('lets config tighten the session cap below the grant', () => {
-    const policy = resolveX402Policy({ maxTotalPerSession: '1000000' }, policyFromGrant(grant)); // 1 < 5 USDC
-    expect(policy.maxTotalPerSession).toBe('1000000'); // config tightens
-    expect(policy.allowedNetworks).toEqual(['eip155:8453']); // grant seed still applies where config is silent
-  });
-
-  it('leaves config untouched when there is no grant', () => {
+  it('leaves config untouched when there is no permission', () => {
     const policy = resolveX402Policy({ maxTotalPerSession: '50000000' });
     expect(policy.maxTotalPerSession).toBe('50000000');
   });
 
   // The session cap used to be pinned to the grant. That clamp only existed
-  // because a per-period allowance was being written into a session-wide field,
-  // and it silently rewrote whatever the user configured. With the allowance on
-  // maxPerPeriod the two caps measure different things, so config owns this one.
-  it('no longer rewrites a config session cap above the granted per-period allowance', () => {
-    const periodGrant = { ...grant, unit: 'day' as const, multiplier: 1, periodAnchor: '2026-01-01T00:00:00.000Z' };
-    const policy = resolveX402Policy({ maxTotalPerSession: '50000000' }, policyFromGrant(periodGrant));
-    expect(policy.maxTotalPerSession).toBe('50000000'); // honoured, not clamped to 5000000
-    expect(policy.maxPerPeriod).toBe('5000000'); // the grant still constrains each period
+  // because a per-period allowance was written into a session-wide field, and
+  // it silently rewrote whatever the user configured.
+  it('does not rewrite a config session cap from the per-period allowance', () => {
+    const policy = resolveX402Policy({ maxTotalPerSession: '50000000' }, seeded());
+    expect(policy.maxTotalPerSession).toBe('50000000');
+    expect(policy.perPeriod?.[0].allowance).toBe('5000000');
   });
 });
 
 describe('resolveSessionX402Policy', () => {
-  const grantedSpend = {
-    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-    allowance: '5000000',
-    network: 'eip155:8453',
-    unit: 'day' as const,
-    multiplier: 1,
-    periodAnchor: '2026-01-01T00:00:00.000Z',
-  };
+  const session = { chainId: BASE, permission: permissionWith([{ allowance: '5000000', unit: 'day' }]) };
 
   // The regression this exists to stop: `jaw x402 pay` and `jaw x402 status`
   // resolved from config alone, so they ran on the 10-USDC defaults across every
   // registry network while the MCP tool refused at the granted per-period cap.
   it('seeds from the session grant, matching what the MCP path enforces', () => {
-    const policy = resolveSessionX402Policy(undefined, { grantedSpend });
-    expect(policy.maxPerPeriod).toBe('5000000');
+    const policy = resolveSessionX402Policy(undefined, session);
+    expect(policy.perPeriod?.[0].allowance).toBe('5000000');
     expect(policy.allowedNetworks).toEqual(['eip155:8453']);
     expect(policy.maxTotalPerSession).toBeUndefined(); // the 10-USDC default gives way to the grant
   });
 
   it('falls back to config-only resolution when the session has no grant', () => {
     expect(resolveSessionX402Policy(undefined, undefined)).toEqual(DEFAULT_X402_POLICY);
-    expect(resolveSessionX402Policy(undefined, {})).toEqual(DEFAULT_X402_POLICY);
+    expect(resolveSessionX402Policy(undefined, { chainId: BASE })).toEqual(DEFAULT_X402_POLICY);
   });
 });
 
@@ -305,15 +369,25 @@ describe('topUpCeiling', () => {
   // could ever spend: a 5-USDC/day grant against an explicit 1-USDC session cap
   // moved 5 USDC into the payer for a session that stops at 1.
   it('takes the smaller cap, not the per-period one', () => {
-    expect(topUpCeiling({ maxPerPeriod: '5000000', maxTotalPerSession: '1000000' })).toBe(1000000n);
+    expect(
+      topUpCeiling(
+        { maxTotalPerSession: '1000000', perPeriod: [limit('5000000')] },
+        { periodUsage: [usage('5000000')] }
+      )
+    ).toBe(1000000n);
   });
 
   it('takes the per-period cap when it is the smaller one', () => {
-    expect(topUpCeiling({ maxPerPeriod: '1000000', maxTotalPerSession: '5000000' })).toBe(1000000n);
+    expect(
+      topUpCeiling(
+        { maxTotalPerSession: '5000000', perPeriod: [limit('1000000')] },
+        { periodUsage: [usage('1000000')] }
+      )
+    ).toBe(1000000n);
   });
 
   it('uses whichever cap is set on its own', () => {
-    expect(topUpCeiling({ maxPerPeriod: '5000000' })).toBe(5000000n);
+    expect(topUpCeiling({ perPeriod: [limit('5000000')] }, { periodUsage: [usage('5000000')] })).toBe(5000000n);
     expect(topUpCeiling({ maxTotalPerSession: '3000000' })).toBe(3000000n);
   });
 
@@ -324,7 +398,9 @@ describe('topUpCeiling', () => {
   // Pulling the whole cap through a permission that has 1 USDC of allowance left
   // reverts on-chain, refusing a payment whose price fit comfortably.
   it('bounds by what is left of each cap, not its full width', () => {
-    expect(topUpCeiling({ maxPerPeriod: '10000000' }, { toppedUpThisPeriod: 9000000n })).toBe(1000000n);
+    expect(topUpCeiling({ perPeriod: [limit('10000000')] }, { periodUsage: [usage('10000000', 9000000n)] })).toBe(
+      1000000n
+    );
     expect(topUpCeiling({ maxTotalPerSession: '10000000' }, { spentThisSession: 4000000n })).toBe(6000000n);
   });
 
@@ -333,8 +409,8 @@ describe('topUpCeiling', () => {
   it('measures the period cap by top-ups and the session cap by payments', () => {
     expect(
       topUpCeiling(
-        { maxPerPeriod: '10000000', maxTotalPerSession: '20000000' },
-        { toppedUpThisPeriod: 5800000n, spentThisSession: 5300000n }
+        { maxTotalPerSession: '20000000', perPeriod: [limit('10000000')] },
+        { periodUsage: [usage('10000000', 5800000n)], spentThisSession: 5300000n }
       )
     ).toBe(4200000n); // the permission's real remainder, not the 4.7 payments suggest
   });
@@ -342,83 +418,28 @@ describe('topUpCeiling', () => {
   it('takes whichever of the two is tighter', () => {
     expect(
       topUpCeiling(
-        { maxPerPeriod: '10000000', maxTotalPerSession: '20000000' },
-        { toppedUpThisPeriod: 2000000n, spentThisSession: 19000000n }
+        { maxTotalPerSession: '20000000', perPeriod: [limit('10000000')] },
+        { periodUsage: [usage('10000000', 2000000n)], spentThisSession: 19000000n }
       )
     ).toBe(1000000n);
   });
 
   it('floors an exhausted cap at zero rather than going negative', () => {
-    expect(topUpCeiling({ maxPerPeriod: '1000000' }, { toppedUpThisPeriod: 5000000n })).toBe(0n);
+    expect(topUpCeiling({ perPeriod: [limit('1000000')] }, { periodUsage: [usage('1000000', 5000000n)] })).toBe(0n);
   });
 
   // Hand-edited config must not bound the top-up by a garbage number.
-  it('ignores unparseable and negative caps', () => {
-    expect(topUpCeiling({ maxPerPeriod: 'abc', maxTotalPerSession: '2000000' })).toBe(2000000n);
-    expect(topUpCeiling({ maxPerPeriod: '-1', maxTotalPerSession: '2000000' })).toBe(2000000n);
-    expect(topUpCeiling({ maxPerPeriod: 'abc' })).toBeUndefined();
-  });
-});
-
-describe('policyFromGrant — period-aware grants', () => {
-  const base = { token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', allowance: '5000000', network: 'eip155:8453' };
-
-  it('puts a per-period allowance on maxPerPeriod, never on the session total', () => {
-    const policy = policyFromGrant({ ...base, unit: 'day', multiplier: 1, periodAnchor: '2026-01-01T00:00:00.000Z' });
-    expect(policy.maxPerPeriod).toBe('5000000');
-    expect(policy.period).toEqual({ unit: 'day', multiplier: 1, anchor: '2026-01-01T00:00:00.000Z' });
-    // Seeding this would cap a 7-day session at one day's allowance for its whole life.
-    expect(policy.maxTotalPerSession).toBeUndefined();
-  });
-
-  it('falls back to a session-wide cap when the grant records no period', () => {
-    // Session configs written before the period was persisted: the allowance was
-    // already being read as session-wide, so keep meaning that.
-    const policy = policyFromGrant(base);
-    expect(policy.maxTotalPerSession).toBe('5000000');
-    expect(policy.maxPerPeriod).toBeUndefined();
-  });
-});
-
-describe('extractGrantedSpend', () => {
-  const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-
-  it('pulls the USDC spend for the session chain, hex allowance to base units', () => {
-    const spends = [{ token: USDC_BASE.toLowerCase(), allowance: '0x4c4b40' }]; // 5_000_000
-    expect(extractGrantedSpend(spends, 8453)).toEqual({
-      token: USDC_BASE, // canonical registry form, not the lowercased input
-      allowance: '5000000',
-      network: 'eip155:8453',
-    });
-  });
-
-  it('returns undefined when there is no spends array', () => {
-    expect(extractGrantedSpend(undefined, 8453)).toBeUndefined();
-  });
-
-  it('returns undefined when no spend matches the registry USDC', () => {
-    const spends = [{ token: '0x000000000000000000000000000000000000dEaD', allowance: '0x1' }];
-    expect(extractGrantedSpend(spends, 8453)).toBeUndefined();
-  });
-
-  it('returns undefined for a chain with no registry USDC', () => {
-    const spends = [{ token: USDC_BASE, allowance: '0x1' }];
-    expect(extractGrantedSpend(spends, 1)).toBeUndefined();
-  });
-
-  it('returns undefined for a malformed hex allowance rather than a bad cap', () => {
-    const spends = [{ token: USDC_BASE, allowance: 'not-hex' }];
-    expect(extractGrantedSpend(spends, 8453)).toBeUndefined();
-  });
-
-  it('keeps a zero allowance (base units 0), which blocks all payments', () => {
-    const spends = [{ token: USDC_BASE, allowance: '0x0' }];
-    expect(extractGrantedSpend(spends, 8453)?.allowance).toBe('0');
-  });
-
-  it('returns undefined for a negative allowance rather than seeding a negative cap', () => {
-    const spends = [{ token: USDC_BASE, allowance: '-0x100' }];
-    expect(extractGrantedSpend(spends, 8453)).toBeUndefined();
+  /**
+   * A cap that cannot be read bounds at zero rather than dropping out.
+   * `checkPolicy` refuses outright on the same input, and letting it vanish
+   * here was the fail-open shape this file exists to keep closed: with the
+   * session default deleted by a seeded grant, nothing local would bound the
+   * pull at all.
+   */
+  it('bounds at zero for an unreadable or negative cap rather than ignoring it', () => {
+    expect(topUpCeiling({ perPeriod: [limit('abc')], maxTotalPerSession: '2000000' })).toBe(0n);
+    expect(topUpCeiling({ perPeriod: [limit('-1')], maxTotalPerSession: '2000000' })).toBe(0n);
+    expect(topUpCeiling({ perPeriod: [limit('abc')] })).toBe(0n);
   });
 });
 
@@ -430,23 +451,23 @@ describe('topUpFloat as a settable policy key', () => {
 });
 
 describe('per-period cap', () => {
-  const grant = {
-    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-    allowance: '5000000', // 5 USDC
-    network: 'eip155:8453',
-    unit: 'day' as const,
-    multiplier: 1,
-    periodAnchor: '2026-01-01T00:00:00.000Z',
-  };
-  const policy = resolveX402Policy(undefined, policyFromGrant(grant));
+  // Seeded from a permission, so the 10-USDC session default gives way to the
+  // grant, the way it does for a real session.
+  const policy = resolveX402Policy(
+    undefined,
+    policyFromPermission(permissionWith([{ allowance: '5000000', unit: 'day' }]), BASE)
+  );
+  // The per-payment default is 1 USDC, which would refuse before any limit does.
+  const roomy = { ...policy, maxAmountPerPayment: '100000000' };
+  const limits = (toppedUp: bigint, spent: bigint) => [{ ...usage('5000000', toppedUp), spent }];
   const oneUsdc = { ...base, amount: '1000000' };
 
   it('allows spending up to the period allowance', () => {
-    expect(checkPolicy(oneUsdc, policy, { spentThisPeriod: 4000000n })).toEqual({ ok: true });
+    expect(checkPolicy(oneUsdc, policy, { periodUsage: limits(0n, 4000000n) })).toEqual({ ok: true });
   });
 
   it('refuses once the period allowance is used up', () => {
-    const result = checkPolicy(oneUsdc, policy, { spentThisPeriod: 5000000n });
+    const result = checkPolicy(oneUsdc, policy, { periodUsage: limits(0n, 5000000n) });
     expect(result.ok).toBe(false);
     expect(result.reason).toContain('per day');
   });
@@ -458,76 +479,102 @@ describe('per-period cap', () => {
   it('does not strand a multi-period grant after the first period', () => {
     // Day 3, having already spent 5 USDC on each of days 1 and 2.
     const spentAcrossSession = 10000000n;
-    const result = checkPolicy(oneUsdc, policy, { spentThisSession: spentAcrossSession, spentThisPeriod: 0n });
+    const result = checkPolicy(oneUsdc, policy, { spentThisSession: spentAcrossSession, periodUsage: limits(0n, 0n) });
     expect(result).toEqual({ ok: true });
   });
 
   it('names the window and when it resets, so the refusal is diagnosable', () => {
     const result = checkPolicy(oneUsdc, policy, {
-      spentThisPeriod: 5000000n,
-      periodEndsAt: new Date('2026-01-04T00:00:00.000Z'),
+      periodUsage: [{ ...usage('5000000', 0n, 'day', new Date('2026-01-04T00:00:00.000Z')), spent: 5000000n }],
     });
     expect(result.reason).toContain('2026-01-04T00:00:00.000Z');
+    expect(result.reason).toContain('per day');
+  });
+
+  /**
+   * The case this whole change exists for. A session holding 50 a day and 100 a
+   * month, 60 already drawn this month: the day limit has room and the month
+   * does not, and the refusal has to name the month, because being told to wait
+   * until tomorrow sends someone back into the same refusal.
+   */
+  it('refuses on the limit that frees up last, not the smallest', () => {
+    const twoUsdc = { ...base, amount: '2000000' };
+    const both = { ...roomy, perPeriod: [limit('50000000'), limit('100000000', 'month')] };
+    const result = checkPolicy(twoUsdc, both, {
+      periodUsage: [
+        { ...usage('50000000', 0n, 'day', new Date('2026-01-02T00:00:00.000Z')), spent: 0n },
+        { ...usage('100000000', 0n, 'month', new Date('2026-02-01T00:00:00.000Z')), spent: 99000000n },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain('per month');
+    expect(result.reason).toContain('2026-02-01T00:00:00.000Z');
+  });
+
+  it('counts the others when more than one would refuse', () => {
+    const twoUsdc = { ...base, amount: '2000000' };
+    const both = { ...roomy, perPeriod: [limit('50000000'), limit('100000000', 'month')] };
+    const result = checkPolicy(twoUsdc, both, {
+      periodUsage: [
+        { ...usage('50000000', 0n, 'day', new Date('2026-01-02T00:00:00.000Z')), spent: 49000000n },
+        { ...usage('100000000', 0n, 'month', new Date('2026-02-01T00:00:00.000Z')), spent: 99000000n },
+      ],
+    });
+    expect(result.reason).toContain('per month');
+    expect(result.reason).toContain('1 other limit also applies');
   });
 
   it('still enforces a session ceiling the user configured on top', () => {
-    const withCeiling = resolveX402Policy({ maxTotalPerSession: '8000000' }, policyFromGrant(grant));
-    const result = checkPolicy(oneUsdc, withCeiling, { spentThisSession: 8000000n, spentThisPeriod: 0n });
+    const withCeiling = resolveX402Policy(
+      { maxTotalPerSession: '8000000' },
+      policyFromPermission(permissionWith([{ allowance: '5000000', unit: 'day' }]), BASE)
+    );
+    const result = checkPolicy(oneUsdc, withCeiling, { spentThisSession: 8000000n, periodUsage: limits(0n, 0n) });
     expect(result.ok).toBe(false);
     expect(result.reason).toContain('maxTotalPerSession');
   });
 
   it('reports the granted period cap ahead of the session cap when both would refuse', () => {
-    const withCeiling = resolveX402Policy({ maxTotalPerSession: '8000000' }, policyFromGrant(grant));
-    const result = checkPolicy(oneUsdc, withCeiling, { spentThisSession: 8000000n, spentThisPeriod: 5000000n });
+    const withCeiling = resolveX402Policy(
+      { maxTotalPerSession: '8000000' },
+      policyFromPermission(permissionWith([{ allowance: '5000000', unit: 'day' }]), BASE)
+    );
+    const result = checkPolicy(oneUsdc, withCeiling, { spentThisSession: 8000000n, periodUsage: limits(0n, 5000000n) });
     expect(result.reason).toContain('per day');
   });
-});
 
-describe('extractGrantedSpend — period capture', () => {
-  const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-  const anchor = new Date('2026-01-01T00:00:00.000Z');
-
-  it('carries the unit and multiplier so the allowance keeps its dimension', () => {
-    const grant = extractGrantedSpend(
-      [{ token: USDC_BASE, allowance: '0x4C4B40', unit: 'day', multiplier: 1 }],
-      8453,
-      anchor
-    );
-    expect(grant).toMatchObject({ allowance: '5000000', unit: 'day', multiplier: 1 });
-    expect(grant?.periodAnchor).toBe('2026-01-01T00:00:00.000Z');
+  /**
+   * The cap lives in the policy, so a limit whose usage could not be computed
+   * still bounds. Driving the check from the caller's list instead meant an
+   * entry dropped while building usage silently removed the cap, and with the
+   * session default deleted by a seeded grant there was then nothing bounding
+   * a pull at all.
+   */
+  it('still refuses when the usage for a limit could not be built', () => {
+    const result = checkPolicy(oneUsdc, { ...policy, perPeriod: [limit('500000')] }, { periodUsage: [] });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain('per day');
   });
 
-  it('defaults a missing multiplier to 1', () => {
-    const grant = extractGrantedSpend([{ token: USDC_BASE, allowance: '0x4C4B40', unit: 'week' }], 8453, anchor);
-    expect(grant?.multiplier).toBe(1);
+  it('still bounds a top-up when the usage for a limit could not be built', () => {
+    expect(topUpCeiling({ perPeriod: [limit('500000')] }, { periodUsage: [] })).toBe(500000n);
   });
 
-  // The contract has no Year unit; the SDK rewrites 'year' to month x12 before
-  // encoding, so the local window has to be the same one the permission enforces.
-  it('normalises year to twelve months, as the SDK does before encoding', () => {
-    const grant = extractGrantedSpend([{ token: USDC_BASE, allowance: '0x4C4B40', unit: 'year' }], 8453, anchor);
-    expect(grant).toMatchObject({ unit: 'month', multiplier: 12 });
+  it('refuses rather than passing an allowance it cannot read', () => {
+    const result = checkPolicy(oneUsdc, { ...policy, perPeriod: [limit('abc')] }, {});
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain('invalid allowance from grant');
   });
 
-  it('scales a multi-year multiplier the same way', () => {
-    const grant = extractGrantedSpend(
-      [{ token: USDC_BASE, allowance: '0x4C4B40', unit: 'year', multiplier: 2 }],
-      8453,
-      anchor
-    );
-    expect(grant).toMatchObject({ unit: 'month', multiplier: 24 });
-  });
-
-  it('records no period for a unit with no meaning at all', () => {
-    const grant = extractGrantedSpend([{ token: USDC_BASE, allowance: '0x4C4B40', unit: 'decade' }], 8453, anchor);
-    expect(grant?.allowance).toBe('5000000');
-    expect(grant?.unit).toBeUndefined();
-    expect(grant?.periodAnchor).toBeUndefined();
-  });
-
-  it('records no period when the grant omits the unit entirely', () => {
-    const grant = extractGrantedSpend([{ token: USDC_BASE, allowance: '0x4C4B40' }], 8453, anchor);
-    expect(grant?.unit).toBeUndefined();
+  /**
+   * `parseGrantedPermission` only checks that the start is a positive integer,
+   * and a positive integer can still be outside the Date range: 99999999999999
+   * passes that check, is finite, and makes `toISOString` raise. Guarding the
+   * number rather than the Date left the crash the guard was added for.
+   */
+  it('returns an empty policy for a start no Date can represent', () => {
+    const wild = { ...permissionWith([{ allowance: '5000000', unit: 'day' }]), start: 99999999999999 };
+    expect(() => policyFromPermission(wild, BASE)).not.toThrow();
+    expect(policyFromPermission(wild, BASE)).toEqual({});
   });
 });

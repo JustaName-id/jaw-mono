@@ -33,14 +33,25 @@ const h = vi.hoisted(() => {
       expiry: Math.floor(Date.now() / 1000) + 6 * 86400,
       createdAt: anchor,
       mode: 'eip7702' as const,
-      grantedSpend: {
+      // The policy is derived from this on read. It used to be summarised into
+      // a second `grantedSpend` field written at grant time, and the two could
+      // describe different budgets.
+      permission: {
+        account: '0x2222222222222222222222222222222222222222',
+        spender: '0x1111111111111111111111111111111111111111',
+        start: Math.floor(new Date(anchor).getTime() / 1000),
+        end: Math.floor(Date.now() / 1000) + 6 * 86400,
+        salt: '0xabc',
         // Registry USDC on Base Sepolia, so the asset lookup resolves.
-        token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-        allowance: '5000000', // 5 USDC per day
-        network: 'eip155:84532',
-        unit: 'day' as const,
-        multiplier: 1,
-        periodAnchor: anchor,
+        calls: [{ target: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', selector: '0xa9059cbb' }],
+        spends: [
+          {
+            token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+            allowance: '5000000', // 5 USDC per day
+            unit: 'day',
+            multiplier: 1,
+          },
+        ],
       },
     },
   };
@@ -65,6 +76,7 @@ vi.mock('../../lib/config.js', () => ({
 vi.mock('../../lib/session-config.js', () => ({
   tryLoadSessionConfig: () => h.session,
   isLegacySession: () => false,
+  liveOrphans: () => [],
 }));
 
 vi.mock('../../x402/payer.js', () => ({ sessionPayerAddress: () => h.payer }));
@@ -83,7 +95,14 @@ beforeAll(async () => {
   oclifConfig = await Config.load({ root: packageRoot });
 });
 
+const ONE_LIMIT = [
+  { token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', allowance: '5000000', unit: 'day', multiplier: 1 },
+];
+
 beforeEach(() => {
+  // The fixture is shared and hoisted, so a test that widens the permission
+  // must not leak into the next one.
+  h.session.permission.spends = ONE_LIMIT.map((s) => ({ ...s }));
   // The base flags read these, and an inherited value would override the argv
   // the tests pass.
   delete process.env.JAW_OUTPUT;
@@ -120,9 +139,11 @@ async function runStatus(argv: string[]): Promise<string[]> {
 describe('jaw x402 status', () => {
   it('reports the period figure from top-ups and the session figure from payments', async () => {
     const result = JSON.parse((await runStatus(['--output', 'json'])).join('\n'));
-    expect(result.spentThisPeriod).toBe('5000000');
+    // The period figure counts top-ups, the session figure counts payments:
+    // one 0.1 USDC payment behind a 5 USDC pull is 5 against the allowance.
+    expect(result.policy.perPeriod[0].used).toBe('5000000');
+    expect(result.policy.perPeriod[0].allowance).toBe('5000000');
     expect(result.spentThisSession).toBe('100000');
-    expect(result.policy.maxPerPeriod).toBe('5000000');
   });
 
   it('flags the drained grant and flips ready, even though payments barely started', async () => {
@@ -136,5 +157,35 @@ describe('jaw x402 status', () => {
     const output = (await runStatus([])).join('\n');
     expect(output).toContain('at least 5 USDC of 5 USDC used this day');
     expect(output).toContain('at least 0.1 USDC of unlimited spent this session');
+  });
+
+  /**
+   * The contract charges every limit whose token matches, so the cap on screen
+   * is one of several and the tightest binds. The number that stands for it is
+   * the smallest allowance, which answers "what refuses this payment" rather
+   * than "what runs out first": 50 a day beside 100 a month picks the 50 and
+   * overstates the month fifteenfold. Showing the others is cheaper than
+   * choosing better on the reader's behalf.
+   */
+  it('names the other limits on the same token instead of reporting one as the answer', async () => {
+    h.session.permission.spends = [
+      { token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', allowance: '5000000', unit: 'day', multiplier: 1 },
+      { token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', allowance: '100000000', unit: 'month', multiplier: 1 },
+    ];
+
+    const lines = (await runStatus([])).join('\n');
+    expect(lines).toMatch(/of 5 USDC used this day/);
+    expect(lines).toMatch(/of 100 USDC used this month/);
+    expect(lines).toMatch(/all of them apply, so the tightest is what binds/);
+
+    const report = JSON.parse((await runStatus(['--output', 'json'])).join('\n'));
+    expect(report.policy.perPeriod.map((l: { allowance: string }) => l.allowance)).toEqual(['5000000', '100000000']);
+  });
+
+  it('says nothing extra when the token has a single limit', async () => {
+    const lines = (await runStatus([])).join('\n');
+    expect(lines).not.toMatch(/all of them apply/);
+    const report = JSON.parse((await runStatus(['--output', 'json'])).join('\n'));
+    expect(report.policy.perPeriod).toHaveLength(1);
   });
 });

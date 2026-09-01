@@ -1,4 +1,61 @@
-# E2E (real browser)
+# E2E
+
+Two scripts, neither part of `nx test`: both need something the test suite
+deliberately does not have, a running dev server or a live chain.
+
+## permission-onchain (real chain)
+
+Asks the deployed `JustaPermissionManager` on the session's chain whether the
+struct the CLI rebuilds hashes to the permission that was granted, and whether
+the period window it computes locally is the one the contract is in. Read-only:
+`eth_call` plus one relay GET, no signing and no spending.
+
+It exists because the unit tests verify that the code does what its author
+believed the contract does, and that belief was wrong twice while this was being
+written. A test written from the same belief agrees with it; the chain does not.
+
+```bash
+bun e2e/permission-onchain.e2e.ts
+```
+
+Needs a live session in `~/.jaw` on a chain in the USDC registry and an apiKey
+in `~/.jaw/config.json`. A session from before the CLI stored the struct works:
+the script recovers it from the relay, the same way the CLI now does.
+
+## session-flow (real chain, real approval)
+
+Runs `session setup`, `session add`, `x402 status` and `session revoke` against
+Base Sepolia and checks the on-chain effect of each one. Semi-automated: it
+drives the CLI and the assertions, prints the approval URL, and waits for you to
+approve with your own passkey.
+
+Driving the approval would need a passkey the test owns, which means an account
+it created, which the API key cannot register (it manages no ENS domains) and
+which would hold no USDC to fund a grant with. A person with a funded account is
+the cheaper answer.
+
+```bash
+bunx nx build @jaw.id/cli
+bun e2e/session-flow.e2e.ts
+JAW_E2E_STEPS=setup,status bun e2e/session-flow.e2e.ts   # a subset
+JAW_E2E_NO_BROWSER=1 bun e2e/session-flow.e2e.ts         # print the URL instead
+```
+
+The CLI opens the browser itself, which is what you want when you are sitting in
+front of it. `JAW_E2E_NO_BROWSER=1` prints the URL instead, for a machine with no
+browser to open. Both waits on a person are raised to fifteen minutes;
+`JAW_E2E_APPROVAL_MS` changes that.
+
+Each run gets a fresh scratch home. Pass `JAW_E2E_HOME=<dir>` to reuse one, which
+is how a run picks up where an earlier one stopped: the steps each need a person,
+and the session one creates is the input to the next.
+
+Every command runs with `HOME` pointed at a throwaway directory, so it reads and
+writes a scratch `~/.jaw` and your own session is untouched. It does spend: each
+grant carries a small USDC prefund to the session, and the grant and revoke cost
+gas, paid by the account you approve with.
+
+## iframe-transport (real browser)
 
 A minimal real-browser check for the embedded iframe transport — covers what
 jsdom/unit tests cannot (real CSS compositing and the browser's iframe

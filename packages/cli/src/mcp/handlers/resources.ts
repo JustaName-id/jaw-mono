@@ -106,12 +106,15 @@ session, and only the known USDC deployments on supported networks. Configure
 limits from a terminal with jaw config set x402.<field>
 (maxAmountPerPayment, maxTotalPerSession, topUpFloat, allowedAssets,
 allowedNetworks, allowedHosts, allowedPayTo). These cannot be changed through
-the tools, only by a human at the CLI. Two caps are NOT settable: maxPerPeriod
-and its period are seeded from the on-chain grant and mirror it, resetting every
-period exactly as the permission does. Once a grant seeds maxPerPeriod it
-replaces the 10-USDC session default, so it is usually the only cap that binds;
-an explicitly configured maxTotalPerSession still applies on top of it. Read the
-live numbers with jaw x402 status rather than assuming the defaults.
+the tools, only by a human at the CLI. The per-period caps are NOT settable
+either: they come from the grant, one for every spend limit the permission puts
+on the token, and each resets over its own window exactly as the permission
+does. The contract charges every one of them, so the tightest is what binds: a
+session holding 50 a day and 100 a month can move 50 today and no more than 100
+across the month. They replace the 10-USDC session default; an explicitly
+configured maxTotalPerSession still applies on top. Read the live numbers with
+jaw x402 status, which reports each limit under policy.perPeriod with its used
+figure and its reset time, rather than assuming the defaults.
 A payment over a cap, or to a disallowed asset/network/host/recipient, is
 refused rather than paid. Payments are only signed for https URLs
 (or localhost); a 402 over cleartext http is refused. Setting allowedPayTo to
