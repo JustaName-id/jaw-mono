@@ -33,6 +33,12 @@ export interface BridgeOptions {
  */
 export async function getBridge(options: BridgeOptions): Promise<WSBridge> {
   const config = loadConfig();
+  // Two minutes is a comfortable default for someone already signed in at a
+  // terminal, and tight for everyone else: a first passkey, a URL carried to a
+  // phone, an approval driven by something other than a person. The wait is on
+  // a human, so it has to be adjustable without a code change.
+  const envTimeout = Number(process.env['JAW_BRIDGE_TIMEOUT_MS']);
+  const timeout = options.timeout ?? (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : undefined);
   const keysUrl = options.keysUrl ?? config.keysUrl ?? DEFAULT_KEYS_URL;
   const relayUrl = options.relayUrl ?? config.relayUrl ?? DEFAULT_RELAY_URL;
   const chainId = options.chainId ?? config.defaultChain ?? 1;
@@ -48,7 +54,7 @@ export async function getBridge(options: BridgeOptions): Promise<WSBridge> {
   let relaySession = loadRelaySession();
   if (relaySession && relaySession.relayUrl === relayUrl && relaySession.peerPublicKey) {
     try {
-      return await connectBridge(relaySession, options, chainId, keysUrl, relayUrl, false);
+      return await connectBridge({ ...options, timeout }, relaySession, chainId, keysUrl, relayUrl, false);
     } catch {
       // Connection failed — stale session or relay restarted.
       // Delete and fall through to create a new one.
@@ -63,7 +69,7 @@ export async function getBridge(options: BridgeOptions): Promise<WSBridge> {
   // New session — this is the only path that opens a browser
   const session = await createNewSession(relayUrl);
   saveRelaySession(session);
-  return await connectBridge(session, options, chainId, keysUrl, relayUrl, true);
+  return await connectBridge({ ...options, timeout }, session, chainId, keysUrl, relayUrl, true);
 }
 
 async function createNewSession(relayUrl: string): Promise<RelaySession> {
@@ -82,8 +88,8 @@ async function createNewSession(relayUrl: string): Promise<RelaySession> {
 }
 
 async function connectBridge(
-  relaySession: RelaySession,
   options: BridgeOptions,
+  relaySession: RelaySession,
   chainId: number,
   keysUrl: string,
   relayUrl: string,

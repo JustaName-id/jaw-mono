@@ -43,9 +43,19 @@ const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-e2e-home-'));
 const SCRATCH = path.join(HOME, '.jaw');
 
 let failures = 0;
+let skipped = 0;
 const check = (ok: boolean, label: string, detail = '') => {
   if (!ok) failures += 1;
   console.log(`${ok ? '  ok  ' : '  FAIL'} ${label}${detail ? `\n         ${detail}` : ''}`);
+};
+/**
+ * A step that cannot run because an earlier one did not is not a failure, and
+ * reporting it as one buries the single thing that went wrong under a column of
+ * red. The first run of this printed five failures for one unapproved grant.
+ */
+const skip = (label: string, why: string) => {
+  skipped += 1;
+  console.log(`  --   skipped: ${label}\n         ${why}`);
 };
 const step = (name: string) => console.log(`\n── ${name} ${'─'.repeat(Math.max(0, 60 - name.length))}`);
 
@@ -76,7 +86,17 @@ if (!fs.existsSync(CLI)) {
 function run(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [CLI, ...args], {
-      env: { ...process.env, HOME, JAW_API_KEY: key, JAW_NO_BROWSER: '1', JAW_CHAIN_ID: String(CHAIN) },
+      env: {
+        ...process.env,
+        HOME,
+        JAW_API_KEY: key,
+        JAW_NO_BROWSER: '1',
+        JAW_CHAIN_ID: String(CHAIN),
+        // The wait is on a person reading a URL out of this output and
+        // approving in a browser. The default two minutes is for someone
+        // already sitting in front of the browser it opens itself.
+        JAW_BRIDGE_TIMEOUT_MS: process.env['JAW_E2E_APPROVAL_MS'] ?? '900000',
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -135,7 +155,7 @@ if (STEPS.has('add')) {
   step('session add --x402 --limit 2/day');
   const before = session();
   if (!before) {
-    check(false, 'add needs a session, run the setup step first');
+    skip('session add', 'no session to add to, so this proves nothing either way');
   } else {
     const { code } = await run(['session', 'add', '--x402', '--limit', '2/day']);
     check(code === 0, 'add exits 0');
@@ -160,7 +180,10 @@ if (STEPS.has('add')) {
   }
 }
 
-if (STEPS.has('status')) {
+if (STEPS.has('status') && !session()) {
+  step('x402 status');
+  skip('x402 status', 'no session, so the report has nothing to read on chain');
+} else if (STEPS.has('status')) {
   step('x402 status');
   const { code, stdout } = await run(['x402', 'status', '--output', 'json']);
   check(code === 0, 'status exits 0');
@@ -185,20 +208,31 @@ if (STEPS.has('status')) {
 if (STEPS.has('revoke')) {
   step('session revoke');
   const before = session();
-  const { code } = await run(['session', 'revoke']);
-  check(code === 0, 'revoke exits 0');
-  check(!fs.existsSync(path.join(SCRATCH, 'session-config.json')), 'the local session was cleaned up');
-  check(!fs.existsSync(path.join(SCRATCH, 'keystore.json')), 'the session key was deleted');
+  if (!before) {
+    // The first run of this reported three passes here having revoked nothing:
+    // with no session, the command says so and exits 0, and every "the files
+    // are gone" check is true because they were never written. A green result
+    // for a run where nothing happened is worse than a red one.
+    skip('session revoke', 'no session was created, so there is nothing whose revocation could be checked');
+  } else {
+    const { code } = await run(['session', 'revoke']);
+    check(code === 0, 'revoke exits 0');
+    check(!fs.existsSync(path.join(SCRATCH, 'session-config.json')), 'the local session was cleaned up');
+    check(!fs.existsSync(path.join(SCRATCH, 'keystore.json')), 'the session key was deleted');
 
-  if (before) {
     const state = await onChain(before);
     check(state.status === 'ok' && state.revoked, 'the permission is revoked on chain', state.status);
   }
 }
 
+// A run where everything was skipped proves nothing, so it does not get to
+// exit 0 just because nothing failed.
+const ran = failures > 0 || skipped === 0;
 console.log(
-  failures === 0
+  failures === 0 && ran
     ? `\nall checks passed\n\nScratch home left at ${HOME} if you want to look; nothing there is needed.\n`
-    : `\n${failures} check(s) failed. Scratch home: ${HOME}\n`
+    : failures === 0
+      ? `\nnothing was verified: ${skipped} step(s) skipped. Scratch home: ${HOME}\n`
+      : `\n${failures} check(s) failed, ${skipped} skipped. Scratch home: ${HOME}\n`
 );
-process.exit(failures === 0 ? 0 : 1);
+process.exit(failures === 0 && ran ? 0 : 1);

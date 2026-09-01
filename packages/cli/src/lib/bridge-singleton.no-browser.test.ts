@@ -17,13 +17,17 @@ vi.mock('open', () => ({
 }));
 
 const onBrowserNeeded: Array<(() => Promise<void>) | undefined> = [];
+const constructed: Array<{ timeout?: number }> = [];
 vi.mock('./ws-bridge.js', () => ({
-  WSBridge: vi.fn().mockImplementation(() => ({
-    connect: vi.fn(async (needed?: () => Promise<void>) => {
-      onBrowserNeeded.push(needed);
-      await needed?.();
-    }),
-  })),
+  WSBridge: vi.fn().mockImplementation((options: { timeout?: number }) => {
+    constructed.push(options);
+    return {
+      connect: vi.fn(async (needed?: () => Promise<void>) => {
+        onBrowserNeeded.push(needed);
+        await needed?.();
+      }),
+    };
+  }),
 }));
 
 vi.mock('./config.js', () => ({ loadConfig: vi.fn().mockReturnValue({}) }));
@@ -42,6 +46,8 @@ let written: string[] = [];
 beforeEach(() => {
   opened.length = 0;
   onBrowserNeeded.length = 0;
+  constructed.length = 0;
+  delete process.env.JAW_BRIDGE_TIMEOUT_MS;
   written = [];
   delete process.env.JAW_NO_BROWSER;
   vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
@@ -89,5 +95,23 @@ describe('getBridge, without a browser to open', () => {
     expect(url.searchParams.get('session')).toBeTruthy();
     expect(url.searchParams.get('relay')).toBe('wss://relay.jaw.id');
     expect(url.hash).toMatch(/^#pk=/);
+  });
+
+  /**
+   * The wait is on a person: opening a link, maybe on another device, maybe
+   * enrolling a passkey for the first time. Two minutes suits someone already
+   * signed in at a terminal and nobody else, and the default is not reachable
+   * from any command.
+   */
+  it('takes the approval wait from the environment', async () => {
+    process.env.JAW_BRIDGE_TIMEOUT_MS = '600000';
+    await connect();
+    expect(constructed[0]?.timeout).toBe(600000);
+  });
+
+  it('leaves the default alone for a value that is not a positive number', async () => {
+    process.env.JAW_BRIDGE_TIMEOUT_MS = 'soon';
+    await connect();
+    expect(constructed[0]?.timeout).toBeUndefined();
   });
 });
