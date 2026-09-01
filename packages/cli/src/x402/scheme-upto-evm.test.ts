@@ -10,6 +10,8 @@ const PK = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
 const account = privateKeyToAccount(PK);
 const NONCE = ('0x' + '11'.repeat(32)) as `0x${string}`;
 const FACILITATOR = '0x1111111111111111111111111111111111111111';
+// One with letters in it, so casing is something that can actually be wrong.
+const FACILITATOR_MIXED = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 
 const requirement: X402PaymentRequirement = {
   scheme: 'upto',
@@ -96,6 +98,44 @@ describe('buildUptoPayment', () => {
     expect(typeof auth.permitted.amount).toBe('string');
     expect(typeof auth.deadline).toBe('string');
     expect(typeof auth.witness.validAfter).toBe('string');
+  });
+
+  /**
+   * viem checksums `address` fields when it hashes the typed data, so a server
+   * that cased an address badly used to throw inside the signer. That happens
+   * after the funder has already topped the payer up, so the casing of a string
+   * on the wire cost a real transfer and refused the payment anyway. Casing is
+   * not a reason to refuse: it is fixed here and the payment goes out.
+   */
+  it('signs a challenge whose addresses arrive mis-cased', async () => {
+    const shouty = {
+      ...requirement,
+      payTo: requirement.payTo.toUpperCase().replace('0X', '0x') as `0x${string}`,
+      extra: { ...requirement.extra, facilitatorAddress: FACILITATOR_MIXED.toUpperCase().replace('0X', '0x') },
+    };
+
+    const auth = authOf(await build(shouty));
+
+    expect(auth.witness.to).toBe(requirement.payTo);
+    expect(auth.witness.facilitator).toBe(FACILITATOR_MIXED);
+  });
+
+  /**
+   * And the re-casing does not change what was signed: an `address` is encoded
+   * lowercased either way, so the signature is the one the raw string would have
+   * produced had viem accepted it.
+   */
+  it('signs the same bytes whatever the casing was', async () => {
+    const mixed = { ...requirement, extra: { ...requirement.extra, facilitatorAddress: FACILITATOR_MIXED } };
+    const lower = {
+      ...requirement,
+      extra: { ...requirement.extra, facilitatorAddress: FACILITATOR_MIXED.toLowerCase() },
+    };
+
+    const a = await build(mixed);
+    const b = await build(lower);
+
+    expect((a.payload as X402UptoPayload).signature).toBe((b.payload as X402UptoPayload).signature);
   });
 });
 

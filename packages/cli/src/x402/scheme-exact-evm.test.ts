@@ -88,6 +88,30 @@ describe('buildExactPayment', () => {
     const rogue = { ...requirement, asset: '0x0000000000000000000000000000000000000bad' as `0x${string}` };
     await expect(buildExactPayment(rogue, account.address, signer)).rejects.toThrow(/asset mismatch/);
   });
+
+  /**
+   * The mismatch check above compares case-insensitively, so an asset that is
+   * the registry's USDC in the wrong casing gets past it. viem checksums
+   * `address` fields when it hashes, so it used to throw here instead, after the
+   * funder had already topped the payer up. Both server-supplied addresses are
+   * normalised now: the asset back to the registry's own value, `payTo` in
+   * place.
+   */
+  it('signs a challenge whose addresses arrive mis-cased', async () => {
+    const shouty = {
+      ...requirement,
+      asset: requirement.asset.toUpperCase().replace('0X', '0x') as `0x${string}`,
+      payTo: requirement.payTo.toUpperCase().replace('0X', '0x') as `0x${string}`,
+    };
+
+    const payload = await buildExactPayment(shouty, account.address, signer, { now: 1_000_000, nonce: NONCE });
+
+    expect(payload.payload.authorization.to).toBe(requirement.payTo);
+    // Byte-identical to the well-cased challenge: an `address` encodes
+    // lowercased either way, so re-casing changes nothing that was signed.
+    const clean = await buildExactPayment(requirement, account.address, signer, { now: 1_000_000, nonce: NONCE });
+    expect(payload.payload.signature).toBe(clean.payload.signature);
+  });
 });
 
 describe('encodePaymentPayload', () => {

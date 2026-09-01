@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { getAddress } from 'viem';
 import { usdcForNetwork } from './asset-registry.js';
 import type { X402EIP3009Authorization, X402PaymentPayload, X402PaymentRequirement } from './types.js';
 
@@ -72,6 +73,20 @@ export async function buildExactPayment(
     );
   }
 
+  // Both of these are server-supplied and reach viem as `address` fields, which
+  // viem checksums at signing time. The comparison above is case-insensitive on
+  // purpose, so an asset differing from the registry only in casing gets past it
+  // and throws inside `sign()` instead, after the payer has already been funded:
+  // a top-up spent on a payment that never goes out.
+  //
+  // `asset.address` rather than a re-cased `requirement.asset`, for the reason
+  // the check above exists: the registry is the source of truth, and the two are
+  // now known to be the same address. `payTo` has no registry to fall back on,
+  // so it is checksummed in place. An `address` encodes lowercased either way,
+  // so neither changes what the signature covers.
+  const verifyingContract = asset.address;
+  const payTo = getAddress(requirement.payTo);
+
   // Prefer the server-advertised EIP-712 domain name/version (extra), else the
   // registry's known values for this USDC deployment.
   const name = typeof requirement.extra?.['name'] === 'string' ? (requirement.extra['name'] as string) : asset.usdcName;
@@ -93,7 +108,7 @@ export async function buildExactPayment(
 
   const authorization: X402EIP3009Authorization = {
     from,
-    to: requirement.payTo,
+    to: payTo,
     value: requirement.amount,
     validAfter,
     validBefore,
@@ -101,12 +116,12 @@ export async function buildExactPayment(
   };
 
   const signature = await sign({
-    domain: { name, version, chainId: asset.chainId, verifyingContract: requirement.asset },
+    domain: { name, version, chainId: asset.chainId, verifyingContract },
     types: TRANSFER_WITH_AUTHORIZATION_TYPES,
     primaryType: 'TransferWithAuthorization',
     message: {
       from,
-      to: requirement.payTo,
+      to: payTo,
       value: BigInt(requirement.amount),
       validAfter: BigInt(validAfter),
       validBefore: BigInt(validBefore),
