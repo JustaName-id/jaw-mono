@@ -132,6 +132,7 @@ describe('recoverPermission', () => {
   it.each([
     ['a different account', { account: '0x9999999999999999999999999999999999999999' }],
     ['a different spender', { spender: '0x8888888888888888888888888888888888888888' }],
+    ['a different window', { end: RELAYED.end + 86400 }],
   ])('refuses a struct for %s', async (_label, override) => {
     const recovered = await recoverPermission(SESSION, 'key', {
       fetchPermission: async () => ({ ...RELAYED, ...override }),

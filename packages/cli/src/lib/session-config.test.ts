@@ -284,20 +284,21 @@ describe('saveRevokeProgress', () => {
   });
 
   /**
-   * A revoked permission leaves a session that can do nothing, and `expiry` is
-   * already the flag every caller reads to decide that. It is also what stops
-   * the next revoke from spending a browser round trip on an id the relay no
-   * longer has, since revoking is not idempotent.
+   * On its own field rather than by rewriting `expiry`, which is what this did
+   * first. `expiry` means when the permission ends, and the recovered-struct
+   * check compares it against the permission's own `end`: overwriting it meant
+   * a partly revoked session could never recover its struct again, and went
+   * back to reporting "cannot tell", which is the state recovery exists to end.
    */
-  it('expires the session once its own permission is revoked', () => {
+  it('marks the session permission as revoked without touching its expiry', () => {
     saveSessionConfig({ ...SAMPLE_CONFIG, orphanedPermissions: [orphan] });
     const before = loadSessionConfig();
-    expect(before.expiry).toBeGreaterThan(Date.now() / 1000);
 
     saveRevokeProgress(before, { orphans: [orphan], ownPermissionRevoked: true });
 
     const after = loadSessionConfig();
-    expect(after.expiry).toBeLessThanOrEqual(Math.ceil(Date.now() / 1000));
+    expect(after.permissionRevoked).toBe(true);
+    expect(after.expiry).toBe(before.expiry);
     expect(after.orphanedPermissions).toEqual([orphan]);
   });
 });

@@ -272,4 +272,21 @@ describe('jaw session revoke', () => {
     await expect(runRevoke()).rejects.toThrow(/could not be revoked/);
     expect(h.deleted).toEqual({ keystore: false, config: false });
   });
+
+  /**
+   * An earlier run got the session's own permission revoked and then failed on
+   * something else. Revoking is not idempotent, so attempting it again spends a
+   * browser round trip that can only fail, and the flag is what stops it. It
+   * used to be a rewritten `expiry`, which made that field mean two things and
+   * broke the recovered-struct check that reads it.
+   */
+  it('skips a permission an earlier run already revoked', async () => {
+    h.session.permissionRevoked = true;
+    h.session.orphanedPermissions = [{ id: '0xorphan', chainId: 84532, expiry: Math.floor(Date.now() / 1000) + 86400 }];
+
+    await runRevoke();
+
+    expect(revokedIds()).toEqual(['0xorphan']);
+    expect(h.deleted).toEqual({ keystore: true, config: true });
+  });
 });

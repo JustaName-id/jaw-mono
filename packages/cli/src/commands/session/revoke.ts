@@ -47,7 +47,10 @@ export default class SessionRevoke extends BaseCommand {
     // than saying nothing.
     const orphans = liveOrphans(sessionConfig.orphanedPermissions, now);
     const own: OrphanedPermission | null =
-      sessionConfig.expiry > now
+      // `permissionRevoked` is set by an earlier run that got this far and then
+      // failed on something else. Revoking is not idempotent, so attempting it
+      // again spends a browser round trip that can only fail.
+      !sessionConfig.permissionRevoked && sessionConfig.expiry > now
         ? { id: sessionConfig.permissionId, chainId: sessionConfig.chainId, expiry: sessionConfig.expiry }
         : null;
     const total = orphans.length + (own ? 1 : 0);

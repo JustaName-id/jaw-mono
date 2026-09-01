@@ -152,8 +152,12 @@ export default class SessionAdd extends BaseCommand {
     const mergeOverCeiling = whyGrantExceedsCeiling(merged, session.chainId, config.grantCeiling);
     if (mergeOverCeiling) {
       this.logToStderr(
-        `Warning: this session already holds more than the grant ceiling on this machine allows, and ` +
-          `re-granting carries it over. ${mergeOverCeiling}`
+        // Not "holds more than the ceiling allows": three of the five reasons
+        // this returns are "cannot be measured against it" rather than "is over
+        // it", and a chain with no registry USDC produced a sentence that
+        // contradicted itself.
+        `Warning: what this session already holds does not clear the grant ceiling on this machine, ` +
+          `and re-granting carries it over. ${mergeOverCeiling}`
       );
     }
 

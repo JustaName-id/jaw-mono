@@ -59,7 +59,7 @@ export async function recoverPermission(
     if (
       permission.account.toLowerCase() !== session.ownerAddress.toLowerCase() ||
       permission.spender.toLowerCase() !== session.sessionAddress.toLowerCase() ||
-      permission.end !== session.expiry
+      permission.end !== session.expiry // safe now that nothing else rewrites expiry
     ) {
       return undefined;
     }
