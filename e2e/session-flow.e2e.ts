@@ -173,22 +173,32 @@ if (STEPS.has('add')) {
     const { code } = await run(['session', 'add', '--x402', '--limit', '2/day']);
     check(code === 0, 'add exits 0');
 
-    const after = session();
-    check(after?.permissionId !== before.permissionId, 'the session names a new permission');
-    check(after?.sessionAddress === before.sessionAddress, 'the session key survived, so the agent kept its address');
-    // The timestamp the session spend total is counted from. Restamping it
-    // would hand the session cap a clean slate for adding a capability.
-    check(after?.createdAt === before.createdAt, 'the session spend total was not reset');
-    check(
-      (after?.orphanedPermissions as unknown[] | undefined) === undefined,
-      'the old permission was revoked, so nothing was left orphaned'
-    );
+    if (code !== 0) {
+      // Everything below describes a merge that did not happen, and against an
+      // unchanged session most of it is trivially true: the key "survived", the
+      // timestamp was "not reset", nothing was "left orphaned". One run
+      // reported six greens that way, including that the old permission had
+      // been revoked while it was still live. An assertion is only worth
+      // anything when the thing it describes actually took place.
+      skip('the checks on the merge', 'add did not complete, so there is no merge to check');
+    } else {
+      const after = session();
+      check(after?.permissionId !== before.permissionId, 'the session names a new permission');
+      check(after?.sessionAddress === before.sessionAddress, 'the session key survived, so the agent kept its address');
+      // The timestamp the session spend total is counted from. Restamping it
+      // would hand the session cap a clean slate for adding a capability.
+      check(after?.createdAt === before.createdAt, 'the session spend total was not reset');
+      check(
+        (after?.orphanedPermissions as unknown[] | undefined) === undefined,
+        'the old permission was revoked, so nothing was left orphaned'
+      );
 
-    if (after) {
-      const state = await onChain(after);
-      check(state.status === 'ok', 'the merged permission hashes to what was granted', state.status);
-      const old = await onChain(before);
-      check(old.status !== 'ok' || old.revoked, 'the permission it replaced is revoked on chain');
+      if (after) {
+        const state = await onChain(after);
+        check(state.status === 'ok', 'the merged permission hashes to what was granted', state.status);
+        const old = await onChain(before);
+        check(old.status !== 'ok' || old.revoked, 'the permission it replaced is revoked on chain');
+      }
     }
   }
 }
