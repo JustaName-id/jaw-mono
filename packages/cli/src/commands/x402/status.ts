@@ -13,6 +13,7 @@ import { USDC_BY_NETWORK } from '../../x402/asset-registry.js';
 import { gasReserve } from '../../x402/gas-reserve.js';
 import { formatUsdc, formatRemaining, diagnose } from '../../x402/status-report.js';
 import { readLiveness, type PermissionLiveness } from '../../x402/permission-onchain.js';
+import { recoverPermission } from '../../x402/permission-recovery.js';
 import type { OutputFormat } from '../../lib/types.js';
 
 /**
@@ -80,7 +81,9 @@ export default class X402Status extends BaseCommand {
           }
         })
       ),
-      readLiveness(session),
+      // Recovered first for a session written before the struct was stored,
+      // which is otherwise stuck reporting "cannot tell" forever.
+      recoverPermission(session, config.apiKey).then((permission) => readLiveness({ ...session, permission })),
     ]);
     const [ownerBalance, payerBalance] = balances;
 

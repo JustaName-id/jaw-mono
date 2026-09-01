@@ -1,7 +1,9 @@
 import { BaseCommand } from '../../base-command.js';
 import { keystoreExists } from '../../lib/keystore.js';
 import { isLegacySession, liveOrphans, loadSessionConfig } from '../../lib/session-config.js';
+import { loadConfig } from '../../lib/config.js';
 import { readLiveness, type PermissionLiveness } from '../../x402/permission-onchain.js';
+import { recoverPermission } from '../../x402/permission-recovery.js';
 import type { OutputFormat } from '../../lib/types.js';
 
 export default class SessionStatus extends BaseCommand {
@@ -27,7 +29,11 @@ export default class SessionStatus extends BaseCommand {
     // needs no read; a revoke made from keys.jaw.id or from another machine
     // leaves this file saying the session is fine. Fails soft to 'unknown',
     // which is what a session written before the struct was stored reports.
-    const liveness = await readLiveness(config);
+    // Best-effort, and quiet without an API key: this command has never needed
+    // one, and a session written before the struct existed should not start
+    // demanding a key to report what it always reported.
+    const permission = await recoverPermission(config, loadConfig().apiKey);
+    const liveness = await readLiveness({ ...config, permission });
     // Permissions from earlier sessions that are still live on chain. Said in
     // terms of the permission rather than of this key: setup generates a fresh
     // key whenever it is not reusing one, and `--yes` always does, so the key

@@ -19,6 +19,7 @@ import { buildX402Permissions, DEFAULT_X402_LIMIT } from '../../x402/grant-prese
 import { whyGrantExceedsCeiling } from '../../x402/grant-ceiling.js';
 import { whyOwnerCannotFundSession, whySpenderCannotPay } from '../../x402/funded-owner.js';
 import { readLiveness } from '../../x402/permission-onchain.js';
+import { recoverPermission } from '../../x402/permission-recovery.js';
 import { mergePermissions, describeMerge } from '../../x402/merge-permissions.js';
 
 /**
@@ -95,7 +96,9 @@ export default class SessionAdd extends BaseCommand {
     // struct has it. A session written before that field keeps working; it just
     // cannot be merged against, because the old scope is not knowable from a
     // permission id.
-    const existing = session.permission;
+    // Recovered from the relay when the session predates the CLI storing it,
+    // so an older session can be added to rather than told to start over.
+    const existing = await recoverPermission(session, apiKey);
     if (!existing) {
       this.error(
         'This session does not carry the permission it was granted, so what it already allows cannot be read. ' +
@@ -110,7 +113,7 @@ export default class SessionAdd extends BaseCommand {
     // the capability loss this command exists to prevent. Not knowing is not a
     // reason to refuse: it is what every session reports without a reachable
     // node.
-    const liveness = await readLiveness(session);
+    const liveness = await readLiveness({ ...session, permission: existing });
     if (liveness === 'revoked') {
       this.error(
         'The permission this session names was revoked on chain. Run `jaw session setup` to create a new one.'

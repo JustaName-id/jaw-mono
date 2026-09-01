@@ -1,4 +1,28 @@
-# E2E (real browser)
+# E2E
+
+Two scripts, neither part of `nx test`: both need something the test suite
+deliberately does not have, a running dev server or a live chain.
+
+## permission-onchain (real chain)
+
+Asks the deployed `JustaPermissionManager` on the session's chain whether the
+struct the CLI rebuilds hashes to the permission that was granted, and whether
+the period window it computes locally is the one the contract is in. Read-only:
+`eth_call` plus one relay GET, no signing and no spending.
+
+It exists because the unit tests verify that the code does what its author
+believed the contract does, and that belief was wrong twice while this was being
+written. A test written from the same belief agrees with it; the chain does not.
+
+```bash
+bun e2e/permission-onchain.e2e.ts
+```
+
+Needs a live session in `~/.jaw` on a chain in the USDC registry and an apiKey
+in `~/.jaw/config.json`. A session from before the CLI stored the struct works:
+the script recovers it from the relay, the same way the CLI now does.
+
+## iframe-transport (real browser)
 
 A minimal real-browser check for the embedded iframe transport — covers what
 jsdom/unit tests cannot (real CSS compositing and the browser's iframe

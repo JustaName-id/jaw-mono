@@ -246,6 +246,15 @@ function writeSessionConfig(config: SessionConfig): void {
 }
 
 /**
+ * Store a permission struct recovered for a session that was written without
+ * one, leaving the rest of the file alone. Same reason as below for not going
+ * through `saveSessionConfig`: it stamps a fresh `createdAt`.
+ */
+export function saveRecoveredPermission(config: SessionConfig, permission: GrantedPermission): void {
+  writeSessionConfig({ ...config, permission });
+}
+
+/**
  * Record what a revoke has already done, so the rest of it can be retried.
  *
  * Revoking is not idempotent: core reads the permission from the relay before

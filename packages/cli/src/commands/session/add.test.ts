@@ -27,6 +27,7 @@ const h = vi.hoisted(() => ({
   progress: [] as unknown[],
   onSave: undefined as (() => void) | undefined,
   onRevoke: undefined as (() => void) | undefined,
+  recovered: undefined as unknown,
 }));
 
 vi.mock('../../lib/config.js', () => ({ loadConfig: () => h.config }));
@@ -49,6 +50,10 @@ vi.mock('../../x402/funded-owner.js', () => ({
   whySpenderCannotPay: async () => null,
 }));
 vi.mock('../../x402/permission-onchain.js', () => ({ readLiveness: async () => h.liveness }));
+// Kept off the network: without this the "no struct" case reaches the relay.
+vi.mock('../../x402/permission-recovery.js', () => ({
+  recoverPermission: async (session: { permission?: unknown }) => session.permission ?? h.recovered,
+}));
 
 vi.mock('../../lib/bridge-singleton.js', () => ({
   getBridge: async () => ({
@@ -105,6 +110,7 @@ beforeEach(() => {
   h.progress = [];
   h.onSave = undefined;
   h.onRevoke = undefined;
+  h.recovered = undefined;
   h.session = {
     ownerAddress: '0x1111111111111111111111111111111111111111',
     sessionAddress: '0x2222222222222222222222222222222222222222',
