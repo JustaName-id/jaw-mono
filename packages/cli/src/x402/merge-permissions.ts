@@ -1,4 +1,5 @@
 import { toFunctionSelector } from 'viem';
+import { describeSpendPeriod } from './period.js';
 import type { GrantedPermission } from '../lib/session-config.js';
 import type { PermissionsConfig } from '../lib/types.js';
 
@@ -128,10 +129,14 @@ export function describeMerge(existing: GrantedPermission, merged: PermissionsCo
     const was = had.get(spendKey(spend));
     const now = BigInt(spend.allowance);
     if (was === undefined) {
-      lines.push(`  + spend   ${spend.allowance} of ${spend.token} per ${label(spend)}`);
+      lines.push(
+        `  + spend   ${spend.allowance} of ${spend.token} per ${describeSpendPeriod(spend.unit, spend.multiplier)}`
+      );
       changed.push(spend);
     } else if (was !== now) {
-      lines.push(`  ~ spend   ${spend.token} per ${label(spend)}: ${was} to ${now}`);
+      lines.push(
+        `  ~ spend   ${spend.token} per ${describeSpendPeriod(spend.unit, spend.multiplier)}: ${was} to ${now}`
+      );
       changed.push(spend);
     }
   }
@@ -146,16 +151,11 @@ export function describeMerge(existing: GrantedPermission, merged: PermissionsCo
     const others = (merged.spends ?? []).filter((o) => o !== spend && tokenKey(o) === tokenKey(spend));
     for (const other of others) {
       lines.push(
-        `  ! note    ${other.allowance} per ${label(other)} on the same token still applies; ` +
+        `  ! note    ${other.allowance} per ${describeSpendPeriod(other.unit, other.multiplier)} on the same token still applies; ` +
           'every limit on a token is charged, so the tightest of them binds'
       );
     }
   }
 
   return lines;
-}
-
-function label(spend: { unit: string; multiplier?: number }): string {
-  const n = Math.max(1, Math.floor(spend.multiplier ?? 1));
-  return n === 1 ? spend.unit : `${n} ${spend.unit}s`;
 }

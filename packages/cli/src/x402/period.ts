@@ -130,8 +130,26 @@ export function currentPeriodWindow(input: PeriodWindowInput): PeriodWindow {
 
 /** Human-readable period label for refusal messages, e.g. "day" or "3 days". */
 export function describePeriod(unit: PeriodUnit, multiplier?: number): string {
-  const n = Math.max(1, Math.floor(multiplier ?? 1));
+  // 'the whole permission' reads right inside a refusal about an allowance and
+  // wrong after 'per', which is why the plain form below is its own function
+  // rather than a flag on this one.
   if (unit === 'forever') return 'the whole permission';
+  return describeSpendPeriod(unit, multiplier);
+}
+
+/**
+ * A spend limit's window, as it reads after "per".
+ *
+ * Takes a plain string because a grant may say `year`, which is not a
+ * `PeriodUnit`: the contract has no such unit and the SDK rewrites it to months
+ * before encoding, but the document the user wrote still says it.
+ *
+ * Here rather than beside each caller. Two byte-identical copies of this had
+ * grown in `grant-ceiling` and `merge-permissions`, the second one added while
+ * fixing a review comment about the first.
+ */
+export function describeSpendPeriod(unit: string, multiplier?: number): string {
+  const n = Math.max(1, Math.floor(multiplier ?? 1));
   return n === 1 ? unit : `${n} ${unit}s`;
 }
 

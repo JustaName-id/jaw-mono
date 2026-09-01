@@ -1,6 +1,6 @@
 import { parseUnits } from 'viem';
 import { parseLimit, type LimitPeriod } from './grant-preset.js';
-import { periodLengthSeconds } from './period.js';
+import { describeSpendPeriod, periodLengthSeconds } from './period.js';
 import { USDC_BY_NETWORK } from './asset-registry.js';
 import { formatUsdc } from './status-report.js';
 import type { PermissionsConfig } from '../lib/types.js';
@@ -108,10 +108,4 @@ export function whyGrantExceedsCeiling(
   }
 
   return null;
-}
-
-/** `describePeriod` takes the contract's units; a grant may also say `year`. */
-function describeSpendPeriod(unit: string, multiplier: number): string {
-  const n = Math.max(1, Math.floor(multiplier));
-  return n === 1 ? unit : `${n} ${unit}s`;
 }
