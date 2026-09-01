@@ -127,4 +127,31 @@ describe('getBridge, without a browser to open', () => {
     expect(constructed[0]?.timeout).toBeUndefined();
     expect(constructed[0]?.connectTimeout).toBeUndefined();
   });
+
+  /**
+   * Raising the wait for a person to approve also raised how long a *probe*
+   * waits, and those are opposite cases. Reusing a session opens nothing: it
+   * asks whether an earlier command's browser is still connected, and when it
+   * is not the useful answer is to give up and open a fresh one. With the long
+   * wait applied there, `session add` printed "Opening browser to approve",
+   * opened nothing, and sat silent for fifteen minutes before trying.
+   */
+  it('does not make the probe of a reused session wait on a human', async () => {
+    process.env.JAW_BRIDGE_TIMEOUT_MS = '900000';
+    const { loadRelaySession } = await import('./relay-session.js');
+    vi.mocked(loadRelaySession).mockReturnValueOnce({
+      session: 'existing',
+      relayUrl: 'wss://relay.jaw.id',
+      privateKey: 'priv',
+      publicKey: 'pub',
+      peerPublicKey: 'peer',
+      startedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await connect();
+
+    expect(constructed[0]?.connectTimeout).toBeUndefined();
+    // The approval wait still travels, for the request made once it connects.
+    expect(constructed[0]?.timeout).toBe(900000);
+  });
 });

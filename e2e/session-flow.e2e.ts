@@ -23,6 +23,8 @@
  *
  * Run:  bun e2e/session-flow.e2e.ts
  *       JAW_E2E_STEPS=setup,status bun e2e/session-flow.e2e.ts   (a subset)
+ *       JAW_E2E_NO_BROWSER=1 bun e2e/session-flow.e2e.ts          (print the URL)
+ *       JAW_E2E_HOME=<dir> JAW_E2E_STEPS=add bun e2e/...           (resume a run)
  * Exit: 0 on pass, 1 on failure or unmet prerequisites.
  */
 
@@ -39,7 +41,12 @@ const STEPS = new Set((process.env['JAW_E2E_STEPS'] ?? 'setup,add,status,revoke'
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = path.join(REPO, 'packages/cli/bin/run.js');
 
-const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-e2e-home-'));
+/**
+ * A fresh scratch home per run, unless one is named. Reusing it is what lets a
+ * run pick up where an earlier one stopped: the steps are separable, each needs
+ * a person, and a session created by one of them is the input to the next.
+ */
+const HOME = process.env['JAW_E2E_HOME'] ?? fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-e2e-home-'));
 const SCRATCH = path.join(HOME, '.jaw');
 
 let failures = 0;
@@ -90,7 +97,13 @@ function run(args: string[]): Promise<{ code: number; stdout: string; stderr: st
         ...process.env,
         HOME,
         JAW_API_KEY: key,
-        JAW_NO_BROWSER: '1',
+        // Left unset on purpose: the CLI opening the browser itself is the
+        // whole point of the default, and it lands on the exact URL. Printing
+        // it instead asked a person to copy 292 characters of query string and
+        // fragment out of a terminal, which is how the first attempt at this
+        // was spent. `JAW_E2E_NO_BROWSER=1` is for a machine with no browser to
+        // open, where the URL has to travel somewhere else.
+        ...(process.env['JAW_E2E_NO_BROWSER'] ? { JAW_NO_BROWSER: '1' } : {}),
         JAW_CHAIN_ID: String(CHAIN),
         // The wait is on a person reading a URL out of this output and
         // approving in a browser. The default two minutes is for someone

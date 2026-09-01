@@ -38,7 +38,17 @@ the cheaper answer.
 bunx nx build @jaw.id/cli
 bun e2e/session-flow.e2e.ts
 JAW_E2E_STEPS=setup,status bun e2e/session-flow.e2e.ts   # a subset
+JAW_E2E_NO_BROWSER=1 bun e2e/session-flow.e2e.ts         # print the URL instead
 ```
+
+The CLI opens the browser itself, which is what you want when you are sitting in
+front of it. `JAW_E2E_NO_BROWSER=1` prints the URL instead, for a machine with no
+browser to open. Both waits on a person are raised to fifteen minutes;
+`JAW_E2E_APPROVAL_MS` changes that.
+
+Each run gets a fresh scratch home. Pass `JAW_E2E_HOME=<dir>` to reuse one, which
+is how a run picks up where an earlier one stopped: the steps each need a person,
+and the session one creates is the input to the next.
 
 Every command runs with `HOME` pointed at a throwaway directory, so it reads and
 writes a scratch `~/.jaw` and your own session is untouched. It does spend: each

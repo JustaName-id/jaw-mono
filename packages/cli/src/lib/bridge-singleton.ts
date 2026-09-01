@@ -56,14 +56,13 @@ export async function getBridge(options: BridgeOptions): Promise<WSBridge> {
   let relaySession = loadRelaySession();
   if (relaySession && relaySession.relayUrl === relayUrl && relaySession.peerPublicKey) {
     try {
-      return await connectBridge(
-        { ...options, timeout, connectTimeout: timeout },
-        relaySession,
-        chainId,
-        keysUrl,
-        relayUrl,
-        false
-      );
+      // Deliberately not the long wait: nothing is opened here, so this only
+      // asks whether the browser from an earlier command is still connected.
+      // When it is not, the answer is to give up quickly and fall through to a
+      // fresh session that does open one. Waiting the human-sized wait to find
+      // that out leaves the command silent for as long as someone will stare at
+      // it, having just told them a browser was opening.
+      return await connectBridge({ ...options, timeout }, relaySession, chainId, keysUrl, relayUrl, false);
     } catch {
       // Connection failed — stale session or relay restarted.
       // Delete and fall through to create a new one.
