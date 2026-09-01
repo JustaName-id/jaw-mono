@@ -17,9 +17,9 @@ vi.mock('open', () => ({
 }));
 
 const onBrowserNeeded: Array<(() => Promise<void>) | undefined> = [];
-const constructed: Array<{ timeout?: number }> = [];
+const constructed: Array<{ timeout?: number; connectTimeout?: number }> = [];
 vi.mock('./ws-bridge.js', () => ({
-  WSBridge: vi.fn().mockImplementation((options: { timeout?: number }) => {
+  WSBridge: vi.fn().mockImplementation((options: { timeout?: number; connectTimeout?: number }) => {
     constructed.push(options);
     return {
       connect: vi.fn(async (needed?: () => Promise<void>) => {
@@ -109,9 +109,22 @@ describe('getBridge, without a browser to open', () => {
     expect(constructed[0]?.timeout).toBe(600000);
   });
 
-  it('leaves the default alone for a value that is not a positive number', async () => {
+  /**
+   * Two waits, and the first attempt at this raised only the second. The one
+   * that runs out while a person is opening a URL is the browser reaching the
+   * relay, hardcoded at thirty seconds and untouched by the knob that was
+   * supposed to cover it, so the E2E timed out again with the setting applied.
+   */
+  it('raises the wait for the browser to connect, not just the one to approve', async () => {
+    process.env.JAW_BRIDGE_TIMEOUT_MS = '600000';
+    await connect();
+    expect(constructed[0]?.connectTimeout).toBe(600000);
+  });
+
+  it('leaves both defaults alone for a value that is not a positive number', async () => {
     process.env.JAW_BRIDGE_TIMEOUT_MS = 'soon';
     await connect();
     expect(constructed[0]?.timeout).toBeUndefined();
+    expect(constructed[0]?.connectTimeout).toBeUndefined();
   });
 });

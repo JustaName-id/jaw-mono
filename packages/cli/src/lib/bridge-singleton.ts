@@ -26,6 +26,7 @@ export interface BridgeOptions {
   chainId?: number;
   ens?: string;
   timeout?: number;
+  connectTimeout?: number;
 }
 
 /**
@@ -33,10 +34,11 @@ export interface BridgeOptions {
  */
 export async function getBridge(options: BridgeOptions): Promise<WSBridge> {
   const config = loadConfig();
-  // Two minutes is a comfortable default for someone already signed in at a
-  // terminal, and tight for everyone else: a first passkey, a URL carried to a
-  // phone, an approval driven by something other than a person. The wait is on
-  // a human, so it has to be adjustable without a code change.
+  // Both waits on a person: thirty seconds for the browser to reach the relay,
+  // two minutes to approve once it is there. Those suit a browser this process
+  // opened itself and nothing else. A first passkey, a URL carried to a phone,
+  // or a machine with no browser to open takes longer than either before
+  // anyone has done anything wrong, so one knob raises both.
   const envTimeout = Number(process.env['JAW_BRIDGE_TIMEOUT_MS']);
   const timeout = options.timeout ?? (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : undefined);
   const keysUrl = options.keysUrl ?? config.keysUrl ?? DEFAULT_KEYS_URL;
@@ -54,7 +56,14 @@ export async function getBridge(options: BridgeOptions): Promise<WSBridge> {
   let relaySession = loadRelaySession();
   if (relaySession && relaySession.relayUrl === relayUrl && relaySession.peerPublicKey) {
     try {
-      return await connectBridge({ ...options, timeout }, relaySession, chainId, keysUrl, relayUrl, false);
+      return await connectBridge(
+        { ...options, timeout, connectTimeout: timeout },
+        relaySession,
+        chainId,
+        keysUrl,
+        relayUrl,
+        false
+      );
     } catch {
       // Connection failed — stale session or relay restarted.
       // Delete and fall through to create a new one.
@@ -69,7 +78,14 @@ export async function getBridge(options: BridgeOptions): Promise<WSBridge> {
   // New session — this is the only path that opens a browser
   const session = await createNewSession(relayUrl);
   saveRelaySession(session);
-  return await connectBridge({ ...options, timeout }, session, chainId, keysUrl, relayUrl, true);
+  return await connectBridge(
+    { ...options, timeout, connectTimeout: timeout },
+    session,
+    chainId,
+    keysUrl,
+    relayUrl,
+    true
+  );
 }
 
 async function createNewSession(relayUrl: string): Promise<RelaySession> {
@@ -104,6 +120,7 @@ async function connectBridge(
     relayUrl,
     session: relaySession.session,
     timeout: options.timeout,
+    connectTimeout: options.connectTimeout,
     config: {
       apiKey: options.apiKey,
       chainId,
