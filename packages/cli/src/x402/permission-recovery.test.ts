@@ -23,6 +23,16 @@ vi.mock('../lib/paths.js', () => {
 const { recoverPermission } = await import('./permission-recovery.js');
 const { PATHS } = await import('../lib/paths.js');
 
+/**
+ * A session being recovered always has a file on disk, and the write merges
+ * into what is there rather than into the caller's snapshot, so the tests have
+ * to put it there.
+ */
+function onDisk(config: Record<string, unknown>) {
+  fs.writeFileSync(PATHS.sessionConfig, JSON.stringify(config, null, 2) + '\n');
+  return config;
+}
+
 const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
 
 /** What the relay stores, which is the struct plus the id and chain. */
@@ -43,7 +53,9 @@ const SESSION = {
   sessionAddress: RELAYED.spender,
   permissionId: '0xabc',
   chainId: 84532,
-  expiry: Math.floor(Date.now() / 1000) + 86400,
+  // The permission's own end. They are the same number in practice, and the
+  // recovery refuses a struct whose window does not describe this session.
+  expiry: RELAYED.end,
   createdAt: new Date('2026-08-01T00:00:00.000Z').toISOString(),
   mode: 'eip7702' as const,
 };
@@ -63,6 +75,7 @@ describe('recoverPermission', () => {
   });
 
   it('recovers the struct from the relay and writes it back', async () => {
+    onDisk(SESSION);
     const recovered = await recoverPermission(SESSION, 'key', { fetchPermission: async () => RELAYED });
 
     expect(recovered).toMatchObject({ salt: '0xdef', start: RELAYED.start });
@@ -73,6 +86,7 @@ describe('recoverPermission', () => {
   });
 
   it('only pays for the round trip once', async () => {
+    onDisk(SESSION);
     const fetchPermission = vi.fn(async () => RELAYED);
     await recoverPermission(SESSION, 'key', { fetchPermission });
     const stored = JSON.parse(fs.readFileSync(PATHS.sessionConfig, 'utf-8'));
@@ -121,6 +135,40 @@ describe('recoverPermission', () => {
   ])('refuses a struct for %s', async (_label, override) => {
     const recovered = await recoverPermission(SESSION, 'key', {
       fetchPermission: async () => ({ ...RELAYED, ...override }),
+    });
+    expect(recovered).toBeUndefined();
+    expect(fs.existsSync(PATHS.sessionConfig)).toBe(false);
+  });
+
+  /**
+   * Recovery holds its snapshot across a relay round trip. A `session revoke`
+   * running beside it writes progress between browser approvals, and renaming
+   * the old copy back over that would restore the expiry and the orphan list it
+   * had just cleared, sending the next revoke at ids that are already gone.
+   */
+  it('merges into the file as it is now, not the snapshot it was handed', async () => {
+    onDisk({ ...SESSION, orphanedPermissions: [{ id: '0xorphan', chainId: 84532, expiry: 1 }] });
+
+    const recovered = await recoverPermission(SESSION, 'key', {
+      fetchPermission: async () => {
+        // What another process wrote while this one was waiting on the relay.
+        onDisk({ ...SESSION, orphanedPermissions: [] });
+        return RELAYED;
+      },
+    });
+
+    const written = JSON.parse(fs.readFileSync(PATHS.sessionConfig, 'utf-8'));
+    expect(written.permission).toEqual(recovered);
+    expect(written.orphanedPermissions).toEqual([]);
+  });
+
+  it('writes nothing when the session went away while it was waiting', async () => {
+    onDisk(SESSION);
+    const recovered = await recoverPermission(SESSION, 'key', {
+      fetchPermission: async () => {
+        fs.rmSync(PATHS.sessionConfig);
+        return RELAYED;
+      },
     });
     expect(recovered).toBeUndefined();
     expect(fs.existsSync(PATHS.sessionConfig)).toBe(false);

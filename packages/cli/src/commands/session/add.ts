@@ -143,6 +143,20 @@ export default class SessionAdd extends BaseCommand {
     const overCeiling = whyGrantExceedsCeiling(addition, session.chainId, config.grantCeiling);
     if (overCeiling) this.error(overCeiling);
 
+    // The merge is checked too, and only warned about. What is granted is the
+    // union, so a limit the session already holds rides into a new permission
+    // on a machine whose ceiling is lower, and checking only the addition
+    // cannot see that. It is not a refusal because the addition did not ask for
+    // it and no command can lower it, so refusing would block `session add` on
+    // that session for good. Saying it is what is left.
+    const mergeOverCeiling = whyGrantExceedsCeiling(merged, session.chainId, config.grantCeiling);
+    if (mergeOverCeiling) {
+      this.logToStderr(
+        `Warning: this session already holds more than the grant ceiling on this machine allows, and ` +
+          `re-granting carries it over. ${mergeOverCeiling}`
+      );
+    }
+
     if (!flags.quiet && format !== 'json') {
       this.log('Adding to the current session:\n');
       for (const change of changes) this.log(change);

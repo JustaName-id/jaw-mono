@@ -265,9 +265,10 @@ export type OnChainPeriod =
  * `token` picks the limit, matching the token the local policy was seeded from.
  * The counter lives at `_lastUpdatedPeriod[permissionHash][spendLimitHash]`, so
  * a permission carrying more than one limit for the same token has more than
- * one counter, and reading the wrong one reads a different budget. The first
- * matching limit is the one `extractGrantedSpend` seeds from, so it is the one
- * used here.
+ * one counter, and reading the wrong one reads a different budget. Of those,
+ * the one used is whichever `bindingSpendLimit` picks, which is the same one
+ * `extractGrantedSpend` seeds the policy from: the counter and the cap have to
+ * describe the same budget or the report compares two different things.
  */
 export async function readCurrentPeriod(
   target: PermissionReadTarget & { token: string },

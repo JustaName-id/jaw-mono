@@ -58,7 +58,8 @@ export async function recoverPermission(
     // three cost nothing and make it a response about this session or none.
     if (
       permission.account.toLowerCase() !== session.ownerAddress.toLowerCase() ||
-      permission.spender.toLowerCase() !== session.sessionAddress.toLowerCase()
+      permission.spender.toLowerCase() !== session.sessionAddress.toLowerCase() ||
+      permission.end !== session.expiry
     ) {
       return undefined;
     }
@@ -66,8 +67,11 @@ export async function recoverPermission(
     // by the `getHash` check every read here goes through. Storing one that does
     // not match costs a `mismatch` report, which is what the session already
     // showed as `unknown`, and never a wrong answer.
-    saveRecoveredPermission(session, permission);
-    return permission;
+    // Undefined when it did not land, which means the session went away while
+    // this was waiting on the relay. Handing the struct back anyway would let a
+    // caller go on to merge against, or report on, a session that no longer
+    // exists.
+    return saveRecoveredPermission(session, permission) ? permission : undefined;
   } catch {
     return undefined;
   } finally {

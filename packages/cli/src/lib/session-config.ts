@@ -259,8 +259,22 @@ function writeSessionConfig(config: SessionConfig): void {
  * one, leaving the rest of the file alone. Same reason as below for not going
  * through `saveSessionConfig`: it stamps a fresh `createdAt`.
  */
-export function saveRecoveredPermission(config: SessionConfig, permission: GrantedPermission): void {
-  writeSessionConfig({ ...config, permission });
+export function saveRecoveredPermission(config: SessionConfig, permission: GrantedPermission): boolean {
+  // Merged into the file as it is now, not into the snapshot the caller loaded.
+  // Recovery holds its copy across a relay round trip, and in that time a
+  // `session revoke` running beside it writes progress between browser
+  // approvals: renaming the old copy back over it would restore the expiry and
+  // the orphan list that revoke had just cleared, and the next revoke would
+  // re-attempt ids that are already gone. Reading immediately before the write
+  // does not make this a transaction, it makes the window microseconds instead
+  // of the length of a network call.
+  //
+  // A session that disappeared in the meantime stays gone: the only thing being
+  // added here is a cache of something the relay can produce again.
+  const current = tryLoadSessionConfig();
+  if (!current || current.permissionId !== config.permissionId) return false;
+  writeSessionConfig({ ...current, permission });
+  return true;
 }
 
 /**

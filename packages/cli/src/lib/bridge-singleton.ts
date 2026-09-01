@@ -40,7 +40,13 @@ export async function getBridge(options: BridgeOptions): Promise<WSBridge> {
   // or a machine with no browser to open takes longer than either before
   // anyone has done anything wrong, so one knob raises both.
   const envTimeout = Number(process.env['JAW_BRIDGE_TIMEOUT_MS']);
-  const timeout = options.timeout ?? (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : undefined);
+  const fromEnv = Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : undefined;
+  const timeout = options.timeout ?? fromEnv;
+  // Resolved on its own, never from the caller's request timeout. Deriving it
+  // meant `jaw rpc call --timeout 300` silently gave the browser five minutes
+  // to connect, and then dropping that flag's default cut the same wait to
+  // thirty seconds. Neither followed from anything the caller asked for.
+  const connectTimeout = options.connectTimeout ?? fromEnv;
   const keysUrl = options.keysUrl ?? config.keysUrl ?? DEFAULT_KEYS_URL;
   const relayUrl = options.relayUrl ?? config.relayUrl ?? DEFAULT_RELAY_URL;
   const chainId = options.chainId ?? config.defaultChain ?? 1;
@@ -77,14 +83,7 @@ export async function getBridge(options: BridgeOptions): Promise<WSBridge> {
   // New session — this is the only path that opens a browser
   const session = await createNewSession(relayUrl);
   saveRelaySession(session);
-  return await connectBridge(
-    { ...options, timeout, connectTimeout: timeout },
-    session,
-    chainId,
-    keysUrl,
-    relayUrl,
-    true
-  );
+  return await connectBridge({ ...options, timeout, connectTimeout }, session, chainId, keysUrl, relayUrl, true);
 }
 
 async function createNewSession(relayUrl: string): Promise<RelaySession> {

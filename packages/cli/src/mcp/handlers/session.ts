@@ -50,10 +50,11 @@ export function registerSessionTools(server: McpServer): void {
         // reading `unknown` forever on a session created before the struct was
         // stored, while the same user got it recovered at a terminal.
         const permission = await recoverPermission(config, loadConfig().apiKey);
-        const permissionOnChain = await readLiveness(permission ? { ...config, permission } : config);
+        const current = permission ? { ...config, permission } : config;
+        const permissionOnChain = await readLiveness(current);
         return mcpResult({
           exists: true,
-          ...config,
+          ...current,
           expired: config.expiry <= Date.now() / 1000,
           permissionOnChain,
           ...(payerAddress ? { payerAddress } : {}),
