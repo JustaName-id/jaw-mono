@@ -15,12 +15,22 @@ import type { PermissionsConfig } from '../lib/types.js';
  * and an approval. That makes a grant screen the entire security boundary, and
  * screens get clicked through.
  *
- * A ceiling moves the decision to where it belongs. The human names the most
- * they are willing to grant, once, at a terminal; the agent can ask for that or
+ * A ceiling narrows that for anyone driving the CLI from a terminal. The human
+ * names the most they are willing to grant, once; the agent can ask for that or
  * less, and the browser confirms a number that was already bounded. It is the
  * same split the x402 caps already use: the per-period caps and the rest are
  * deliberately unreachable from the MCP tools, because an agent must not raise
  * its own spending caps.
+ *
+ * It is not the bound the design leans on, and it cannot be, because it assumes
+ * a terminal. The case being built for is the MCP added to a chat client as a
+ * connector, which asks for a budget, asks again when that runs low, and may
+ * have no local machine in the picture at all. A bound has to be enforced and
+ * visible where the human actually is, which is the grant screen. Not the bare
+ * screen above, which is exactly the one that gets clicked through: one that
+ * shows the amount and the period it is being asked to approve. That part is
+ * keys-side. Read this as a convenience for terminal users and the screen as
+ * the control.
  *
  * Unset means no ceiling, which is what every install has today.
  */
