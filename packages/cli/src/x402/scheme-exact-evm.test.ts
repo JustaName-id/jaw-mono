@@ -106,6 +106,12 @@ describe('buildExactPayment', () => {
     const misCased = (a: string) => a.toUpperCase().replace('0X', '0x');
     const shouty = { ...requirement, payTo: misCased(requirement.payTo) as `0x${string}` };
     await expect(buildExactPayment(shouty, account.address, signer)).rejects.toThrow(/payTo is not a readable address/);
+    // The asset too: the mismatch check above it compares case-insensitively,
+    // so an unreadable spelling of the registry's USDC gets past that one.
+    const badAsset = { ...requirement, asset: misCased(requirement.asset) as `0x${string}` };
+    await expect(buildExactPayment(badAsset, account.address, signer)).rejects.toThrow(
+      /asset is not a readable address/
+    );
   });
 
   /**

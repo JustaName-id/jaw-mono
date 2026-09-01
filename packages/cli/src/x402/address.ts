@@ -9,8 +9,10 @@ import { isAddress } from 'viem';
  * other client in this flow hits the same wall, so a challenge advertising one
  * cannot be turned into a payment document anybody downstream can parse.
  *
- * The two are the same predicate: a value round-trips through `getAddress`
- * exactly when strict `isAddress` accepts it. Verified against the repo's viem.
+ * Not a round-trip through `getAddress`, which is a different and wrong test:
+ * `getAddress` returns the checksummed spelling, so an all-lowercase address
+ * fails to round-trip while being perfectly readable. Strict `isAddress` is
+ * the predicate, and it is what every counterparty applies.
  *
  * We cannot paper over it by re-casing, because `accepted` echoes the chosen
  * requirement byte for byte so the server can verify against what it
@@ -26,6 +28,14 @@ import { isAddress } from 'viem';
  */
 export const isPayableAddress = (value: unknown): value is `0x${string}` =>
   typeof value === 'string' && isAddress(value);
+
+/**
+ * Shape alone, so a refusal can tell a field that is absent or garbage apart
+ * from one that is present and merely unreadable. The two send whoever reads
+ * the refusal to different places, so they do not share a message.
+ */
+export const isHexShaped = (value: unknown): value is `0x${string}` =>
+  typeof value === 'string' && /^0x[0-9a-fA-F]{40}$/.test(value);
 
 /**
  * address(0) has the shape and none of the meaning. As a facilitator the proxy

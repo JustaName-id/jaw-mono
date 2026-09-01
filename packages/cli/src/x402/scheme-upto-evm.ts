@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { isPayableAddress, isZeroAddress } from './address.js';
+import { isHexShaped, isPayableAddress, isZeroAddress } from './address.js';
 import { usdcForNetwork } from './asset-registry.js';
 import {
   PERMIT_WITNESS_TRANSFER_FROM_TYPES,
@@ -109,27 +109,41 @@ export async function buildUptoPayment(
     );
   }
 
-  // The witness names the only address the proxy will accept as the settling
-  // caller. Without it there is nothing to bind, and a payment nobody can settle
-  // is worse than a refusal: it consumes the ceiling in the ledger for nothing.
-  // `checkPolicy` refuses both of these during selection, before anything is
-  // funded; like the chain check above, these are the signer's own
-  // preconditions for a caller that reaches it another way.
-  if (!isPayableAddress(requirement.payTo)) {
-    throw new Error(`x402 payTo is not a readable address on ${requirement.network}: ${requirement.payTo}`);
+  // `checkPolicy` refuses all of these during selection, before anything is
+  // funded; like the chain check above, they are the signer's own preconditions
+  // for a caller that reaches it another way.
+  //
+  // `asset` as well as `payTo`: the mismatch check above is case-insensitive, so
+  // an unreadable spelling of the registry's USDC passes it, and while the
+  // signed message uses the registry value, `permitted.token` and `accepted`
+  // both carry the advertised one out to the facilitator.
+  for (const [field, value] of [
+    ['asset', requirement.asset],
+    ['payTo', requirement.payTo],
+  ] as const) {
+    if (!isPayableAddress(value)) {
+      throw new Error(`x402 ${field} is not a readable address on ${requirement.network}: ${value}`);
+    }
   }
   if (isZeroAddress(requirement.payTo)) {
     throw new Error(`x402 payTo is the zero address on ${requirement.network}`);
   }
 
-  // `checkPolicy` refuses a challenge without this during selection, before
-  // anything has been funded; like the chain check above, this is the signer's
-  // own precondition for a caller that reaches it another way.
+  // The witness names the only address the proxy will accept as the settling
+  // caller. Without it there is nothing to bind, and a payment nobody can settle
+  // is worse than a refusal: it consumes the ceiling in the ledger for nothing.
   const advertisedFacilitator = requirement.extra?.['facilitatorAddress'];
-  if (!isPayableAddress(advertisedFacilitator) || isZeroAddress(advertisedFacilitator)) {
+  if (!isHexShaped(advertisedFacilitator) || isZeroAddress(advertisedFacilitator)) {
     throw new Error(
       `x402 upto needs a settling facilitator in extra.facilitatorAddress on ${requirement.network}, ` +
         `got ${JSON.stringify(advertisedFacilitator)}`
+    );
+  }
+  // Present and the right shape but unreadable: a different problem from an
+  // absent one, and it sends whoever reads this somewhere else.
+  if (!isPayableAddress(advertisedFacilitator)) {
+    throw new Error(
+      `x402 extra.facilitatorAddress is not a readable address on ${requirement.network}: ${advertisedFacilitator}`
     );
   }
 

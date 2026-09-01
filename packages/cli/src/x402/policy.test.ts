@@ -112,6 +112,23 @@ describe('checkPolicy', () => {
       expect(verdict.reason).toContain(`${field} is not a readable address`);
     }
 
+    // Reported as unreadable rather than as whichever allowlist it also missed,
+    // which is why the check sits ahead of them.
+    const withAllowlist = checkPolicy(
+      { ...base, asset: shouty(base.asset) as `0x${string}` },
+      {
+        allowedAssets: [base.asset],
+      }
+    );
+    expect(withAllowlist.reason).toContain('asset is not a readable address');
+
+    // An unreadable facilitator is not an absent one, and does not say it is.
+    const badFacilitator = checkPolicy(
+      { ...base, scheme: 'upto', extra: { facilitatorAddress: shouty(base.payTo) } },
+      {}
+    );
+    expect(badFacilitator.reason).toContain('facilitatorAddress is not a readable address');
+
     // Both spellings a real server uses are payable.
     for (const spell of [(a: string) => a, (a: string) => a.toLowerCase()]) {
       expect(checkPolicy({ ...base, payTo: spell(base.payTo) as `0x${string}` }, {}).ok).toBe(true);

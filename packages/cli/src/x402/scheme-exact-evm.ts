@@ -78,8 +78,16 @@ export async function buildExactPayment(
   // above. The mismatch check is case-insensitive on purpose, so it is these
   // that keep an unreadable address from reaching viem, which would throw at
   // signing time with the payer already topped up. See address.ts.
-  if (!isPayableAddress(requirement.payTo)) {
-    throw new Error(`x402 payTo is not a readable address on ${requirement.network}: ${requirement.payTo}`);
+  // `asset` as well as `payTo`: the mismatch check above is case-insensitive, so
+  // an unreadable spelling of the registry's USDC passes it, and while the
+  // domain uses the registry value, `accepted` carries the advertised one out.
+  for (const [field, value] of [
+    ['asset', requirement.asset],
+    ['payTo', requirement.payTo],
+  ] as const) {
+    if (!isPayableAddress(value)) {
+      throw new Error(`x402 ${field} is not a readable address on ${requirement.network}: ${value}`);
+    }
   }
   if (isZeroAddress(requirement.payTo)) {
     throw new Error(`x402 payTo is the zero address on ${requirement.network}`);

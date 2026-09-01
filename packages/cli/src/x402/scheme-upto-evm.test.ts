@@ -113,8 +113,14 @@ describe('buildUptoPayment', () => {
     await expect(build({ ...requirement, payTo: misCased(requirement.payTo) as `0x${string}` })).rejects.toThrow(
       /payTo is not a readable address/
     );
+    await expect(build({ ...requirement, asset: misCased(requirement.asset) as `0x${string}` })).rejects.toThrow(
+      /asset is not a readable address/
+    );
+    // Present and hex-shaped but unreadable reads differently from absent, so
+    // whoever hits it is not sent looking for a field that is right there.
     const badFacilitator = { ...requirement, extra: { facilitatorAddress: misCased(FACILITATOR_MIXED) } };
-    await expect(build(badFacilitator)).rejects.toThrow(/needs a settling facilitator/);
+    await expect(build(badFacilitator)).rejects.toThrow(/facilitatorAddress is not a readable address/);
+    await expect(build({ ...requirement, extra: {} })).rejects.toThrow(/needs a settling facilitator/);
   });
 
   /**
