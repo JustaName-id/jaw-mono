@@ -121,7 +121,12 @@ export function policyFromPermission(permission: GrantedPermission | undefined, 
   const forToken = permission.spends.filter((spend) => spend.token.toLowerCase() === usdc.address.toLowerCase());
   if (forToken.length === 0) return {};
 
-  const anchor = new Date(permission.start * 1000).toISOString();
+  // Guarded: `toISOString` throws on a start that is not a real timestamp, and
+  // the session file is JSON that a person can edit. Everything else in this
+  // module degrades on bad input rather than taking the command down.
+  const startMs = permission.start * 1000;
+  if (!Number.isFinite(startMs)) return {};
+  const anchor = new Date(startMs).toISOString();
   const perPeriod: GrantedPeriodLimit[] = [];
   for (const spend of forToken) {
     let allowance: string;
@@ -200,9 +205,22 @@ export function resolveSessionX402Policy(
  * Reading the period cap off payments made it lag by whatever float the payer
  * still held, and the pull that overshot was refused on chain.
  */
-/** Two limits are the same budget when they meter the same window. */
-function sameLimit(a: { unit: string; multiplier: number }, b: { unit: string; multiplier: number }): boolean {
-  return a.unit === b.unit && a.multiplier === b.multiplier;
+/**
+ * Two limits are the same budget when they meter the same window for the same
+ * allowance.
+ *
+ * The allowance is part of it, not decoration. `normalizePeriod` maps a yearly
+ * grant onto months, while the merge keys on the raw unit, so `session add` can
+ * leave a `year` and a `month` limit that both normalise to the same window.
+ * Keyed on the window alone they both resolved to the first usage entry, and
+ * the on-chain figures, which are matched by allowance too, were then read off
+ * the wrong limit.
+ */
+function sameLimit(
+  a: { unit: string; multiplier: number; allowance: string },
+  b: { unit: string; multiplier: number; allowance: string }
+): boolean {
+  return a.unit === b.unit && a.multiplier === b.multiplier && a.allowance === b.allowance;
 }
 
 export function topUpCeiling(
@@ -219,8 +237,13 @@ export function topUpCeiling(
     // contract charges all of them, so a refill sized against any single one
     // can still be refused by another, and a limit whose usage could not be
     // computed still bounds the pull at its full width rather than vanishing.
-    ...(policy.perPeriod ?? []).map((limit) =>
-      left(limit.allowance, (used.periodUsage ?? []).find((entry) => sameLimit(entry, limit))?.toppedUp)
+    // An allowance that cannot be read bounds at zero rather than dropping out.
+    // `checkPolicy` refuses outright on the same input, and letting it vanish
+    // here is the shape this set out to remove: with the session default
+    // deleted by a seeded grant, nothing local would bound the pull.
+    ...(policy.perPeriod ?? []).map(
+      (limit) =>
+        left(limit.allowance, (used.periodUsage ?? []).find((entry) => sameLimit(entry, limit))?.toppedUp) ?? 0n
     ),
     left(policy.maxTotalPerSession, used.spentThisSession),
   ].filter((cap): cap is bigint => cap !== undefined);
@@ -317,7 +340,7 @@ export function checkPolicy(
   // while computing usage, which happens on an unparseable anchor, silently
   // stopped being enforced, and since a seeded grant deletes the session
   // default there was then nothing bounding a pull at all.
-  const exceeded: Array<{ limit: GrantedPeriodLimit; usage?: LimitUsage; remaining: bigint }> = [];
+  const exceeded: Array<{ limit: GrantedPeriodLimit; usage?: LimitUsage }> = [];
   for (const limit of policy.perPeriod ?? []) {
     const cap = parseBigInt(limit.allowance);
     if (cap === null) {
@@ -325,7 +348,7 @@ export function checkPolicy(
     }
     const usage = (ctx.periodUsage ?? []).find((entry) => sameLimit(entry, limit));
     const spent = usage?.spent ?? 0n;
-    if (spent + amount > cap) exceeded.push({ limit, usage, remaining: cap > spent ? cap - spent : 0n });
+    if (spent + amount > cap) exceeded.push({ limit, usage });
   }
   if (exceeded.length > 0) {
     // The one that frees up last, not the smallest. A refusal is read to decide

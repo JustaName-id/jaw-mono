@@ -78,11 +78,19 @@ limits from a terminal with jaw config set x402.<field>
 (maxAmountPerPayment, maxTotalPerSession, topUpFloat, allowedAssets,
 allowedNetworks, allowedHosts, allowedPayTo). These cannot be changed through
 the tools, only by a human at the CLI. The per-period caps are NOT settable
-either: they come from the grant, one per spend limit the permission puts on
-the token, and each resets over its own window exactly as the permission does.
-The contract charges every one of them, so the tightest is what binds, and
-jaw x402 status reports them under policy.perPeriod with the used figure and
-the reset time for each.
+either: they come from the grant, one for every spend limit the permission puts
+on the token, and each resets over its own window exactly as the permission
+does. The contract charges every one of them, so the tightest is what binds: a
+session holding 50 a day and 100 a month can move 50 today and no more than 100
+across the month. They replace the 10-USDC session default; an explicitly
+configured maxTotalPerSession still applies on top. Read the live numbers with
+jaw x402 status, which reports each limit under policy.perPeriod with its used
+figure and its reset time, rather than assuming the defaults.
+A payment over a cap, or to a disallowed asset/network/host/recipient, is
+refused rather than paid. Payments are only signed for https URLs
+(or localhost); a 402 over cleartext http is refused. Setting allowedPayTo to
+the recipients you expect is strongly recommended: it pins where funds can go
+even if a server or the network tampers with the challenge.
 
 FLOW
 fetch url -> 402? -> within caps? -> payer short? pull the shortfall from the

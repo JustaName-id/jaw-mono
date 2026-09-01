@@ -304,10 +304,17 @@ describe('topUpCeiling', () => {
   });
 
   // Hand-edited config must not bound the top-up by a garbage number.
-  it('ignores unparseable and negative caps', () => {
-    expect(topUpCeiling({ perPeriod: [limit('abc')], maxTotalPerSession: '2000000' })).toBe(2000000n);
-    expect(topUpCeiling({ perPeriod: [limit('-1')], maxTotalPerSession: '2000000' })).toBe(2000000n);
-    expect(topUpCeiling({ perPeriod: [limit('abc')] })).toBeUndefined();
+  /**
+   * A cap that cannot be read bounds at zero rather than dropping out.
+   * `checkPolicy` refuses outright on the same input, and letting it vanish
+   * here was the fail-open shape this file exists to keep closed: with the
+   * session default deleted by a seeded grant, nothing local would bound the
+   * pull at all.
+   */
+  it('bounds at zero for an unreadable or negative cap rather than ignoring it', () => {
+    expect(topUpCeiling({ perPeriod: [limit('abc')], maxTotalPerSession: '2000000' })).toBe(0n);
+    expect(topUpCeiling({ perPeriod: [limit('-1')], maxTotalPerSession: '2000000' })).toBe(0n);
+    expect(topUpCeiling({ perPeriod: [limit('abc')] })).toBe(0n);
   });
 });
 

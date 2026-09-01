@@ -104,7 +104,27 @@ export default class X402Status extends BaseCommand {
     // CLI's ledger never saw.
     // Every limit on the payment token, each with its own window and its own
     // usage. Reducing them to one was reporting a month's budget as a day's.
-    const limits = await currentLimitUsageOnChain(policy, payer, current);
+    const usage = await currentLimitUsageOnChain(policy, payer, current);
+    // Joined onto the limits the policy holds, not read off the usage list. A
+    // limit whose usage could not be computed is still enforced by
+    // `checkPolicy`, and reporting only what has usage made it invisible here:
+    // no line, no json entry, and a `ready: true` for a session whose grant is
+    // the thing bounding it.
+    const limits = (policy.perPeriod ?? []).map((limit) => {
+      const measured = usage.find(
+        (entry) =>
+          entry.unit === limit.unit && entry.multiplier === limit.multiplier && entry.allowance === limit.allowance
+      );
+      return (
+        measured ?? {
+          ...limit,
+          spent: 0n,
+          toppedUp: 0n,
+          endsAt: null,
+          source: 'unmeasured' as const,
+        }
+      );
+    });
     // The one with the least room left, which is what the verdict is about.
     // Picking the smallest allowance instead said `ready: true` for a session
     // whose month was drained, because today's counter was still at zero, right
@@ -169,9 +189,9 @@ export default class X402Status extends BaseCommand {
               allowance: limit.allowance,
               unit: limit.unit,
               multiplier: limit.multiplier,
-              used: limit.toppedUp.toString(),
+              used: limit.endsAt === null ? null : limit.toppedUp.toString(),
               usedFrom: limit.source,
-              resetsAt: limit.endsAt.toISOString(),
+              resetsAt: limit.endsAt === null ? null : limit.endsAt.toISOString(),
             })),
             topUpFloat: policy.topUpFloat,
           },
@@ -207,10 +227,14 @@ export default class X402Status extends BaseCommand {
     // stand for all, which is how a 100-a-month cap was reported as 50 a day.
     for (const limit of limits) {
       const floor = limit.source === 'chain' ? '' : 'at least ';
+      // A limit with no window is one whose usage could not be computed. It
+      // still binds, so it is reported, and the missing figure is named as
+      // missing rather than printed as a zero.
+      const window = limit.endsAt === null ? ' (usage unknown)' : ` (resets ${limit.endsAt.toISOString()})`;
+      const used = limit.endsAt === null ? '?' : `${floor}${formatUsdc(limit.toppedUp.toString(), decimals)}`;
       this.log(
-        `          ${floor}${formatUsdc(limit.toppedUp.toString(), decimals)} of ` +
-          `${formatUsdc(limit.allowance, decimals)} used this ${describePeriod(limit.unit, limit.multiplier)} ` +
-          `(resets ${limit.endsAt.toISOString()})`
+        `          ${used} of ${formatUsdc(limit.allowance, decimals)} used this ` +
+          `${describePeriod(limit.unit, limit.multiplier)}${window}`
       );
     }
     if (limits.length > 1) {
