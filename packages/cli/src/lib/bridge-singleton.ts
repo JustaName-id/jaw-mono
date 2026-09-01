@@ -115,6 +115,15 @@ async function connectBridge(
     openBrowser
       ? async () => {
           const bridgeUrl = buildBridgeUrl(keysUrl, relaySession.session, relayUrl, relaySession.publicKey);
+          // Over SSH, in a container, or under a test driver, there is no
+          // browser worth opening and `open` either does nothing or opens one on
+          // the wrong machine, leaving the command waiting on an approval nobody
+          // was told how to give. Printing the URL is the way out, and it goes
+          // to stderr so it cannot land in the middle of `--output json`.
+          if (process.env['JAW_NO_BROWSER']) {
+            process.stderr.write(`Open this URL to approve:\n${bridgeUrl}\n`);
+            return;
+          }
           const { default: open } = await import('open');
           await open(bridgeUrl);
         }
