@@ -21,6 +21,9 @@ const h = vi.hoisted(() => ({
   requests: [] as Array<{ method: string; params: unknown }>,
   failRevoke: false,
   stderr: [] as string[],
+  ownerBlocked: null as string | null,
+  liveness: 'active' as string,
+  connected: '0x1111111111111111111111111111111111111111',
 }));
 
 vi.mock('../../lib/config.js', () => ({ loadConfig: () => h.config }));
@@ -32,10 +35,19 @@ vi.mock('../../lib/session-config.js', async (importOriginal) => ({
     h.saved = config;
   },
 }));
+// The guards `setup --x402` runs, which `add --x402` skipped. Mocked rather
+// than reached, since they read balances on chain.
+vi.mock('../../x402/funded-owner.js', () => ({
+  whyOwnerCannotFundSession: async () => h.ownerBlocked,
+  whySpenderCannotPay: async () => null,
+}));
+vi.mock('../../x402/permission-onchain.js', () => ({ readLiveness: async () => h.liveness }));
+
 vi.mock('../../lib/bridge-singleton.js', () => ({
   getBridge: async () => ({
     request: async (method: string, params: unknown) => {
       h.requests.push({ method, params });
+      if (method === 'eth_requestAccounts') return [h.connected];
       if (method === 'wallet_revokePermissions' && h.failRevoke) throw new Error('user rejected');
       if (method === 'wallet_grantPermissions') {
         return {
@@ -77,6 +89,9 @@ beforeEach(() => {
   h.requests = [];
   h.failRevoke = false;
   h.stderr = [];
+  h.ownerBlocked = null;
+  h.liveness = 'active';
+  h.connected = '0x1111111111111111111111111111111111111111';
   h.session = {
     ownerAddress: '0x1111111111111111111111111111111111111111',
     sessionAddress: '0x2222222222222222222222222222222222222222',
@@ -131,8 +146,12 @@ describe('jaw session add', () => {
    */
   it('grants before it revokes, and revokes the old one', async () => {
     await runAdd(['--x402']);
-    expect(h.requests.map((r) => r.method)).toEqual(['wallet_grantPermissions', 'wallet_revokePermissions']);
-    expect((h.requests[1].params as Array<{ id: string }>)[0].id).toBe('0xold');
+    expect(h.requests.map((r) => r.method)).toEqual([
+      'eth_requestAccounts',
+      'wallet_grantPermissions',
+      'wallet_revokePermissions',
+    ]);
+    expect((h.requests[2].params as Array<{ id: string }>)[0].id).toBe('0xold');
     expect(h.saved?.permissionId).toBe('0xnew');
     expect(h.saved?.orphanedPermissions).toBeUndefined();
   });
@@ -182,5 +201,71 @@ describe('jaw session add', () => {
 
   it('refuses when nothing was asked for', async () => {
     await expect(runAdd([])).rejects.toThrow(/Nothing to add/);
+  });
+
+  /**
+   * `createdAt` is what the session spend total is counted from. Restamping it
+   * would hand the session cap a clean slate as a side effect of adding a
+   * capability, so an agent near its total would get a full budget back.
+   */
+  it('keeps the timestamp the session cap is counted from', async () => {
+    const before = h.session.createdAt;
+    await runAdd(['--x402']);
+    expect(h.saved?.createdAt).toBe(before);
+  });
+
+  /**
+   * The connected account decides who the union belongs to. A different one
+   * grants a permission owned by someone else, leaves the revoke of the old one
+   * failing because that account does not own it, and moves where payments pull
+   * from.
+   */
+  it('refuses when a different account is connected in the browser', async () => {
+    h.connected = '0x9999999999999999999999999999999999999999';
+    await expect(runAdd(['--x402'])).rejects.toThrow(/is connected in the browser/);
+    expect(h.requests.map((r) => r.method)).toEqual(['eth_requestAccounts']);
+  });
+
+  // The same guard setup runs: the grant carries a transfer to the session, and
+  // an owner that cannot cover it leaves a permission that cannot be used.
+  it('refuses when the owner cannot fund the session', async () => {
+    h.ownerBlocked = 'holds 0 USDC';
+    await expect(runAdd(['--x402'])).rejects.toThrow(/holds 0 USDC/);
+    expect(h.requests.map((r) => r.method)).not.toContain('wallet_grantPermissions');
+  });
+
+  /**
+   * Merging against a struct the chain does not recognise, and then revoking the
+   * permission that is live, is the capability loss this command exists to
+   * prevent.
+   */
+  it.each([
+    ['revoked', /revoked on chain/],
+    ['mismatch', /does not match the one that was granted/],
+  ])('refuses a session the chain reports as %s', async (liveness, message) => {
+    h.liveness = liveness;
+    await expect(runAdd(['--x402'])).rejects.toThrow(message);
+    expect(h.requests).toEqual([]);
+  });
+
+  // Not knowing is what every session reports without a reachable node, so it
+  // cannot be a refusal.
+  it('goes ahead when the chain could not be asked', async () => {
+    h.liveness = 'unknown';
+    await runAdd(['--x402']);
+    expect(h.saved?.permissionId).toBe('0xnew');
+  });
+
+  /**
+   * The example printed in the command's own help. `parsePermissionsConfig`
+   * rejects a defined-but-empty `spends`, so a calls-only session taking a
+   * calls-only addition threw after the browser had already been opened.
+   */
+  it('adds a call to a session that spends nothing', async () => {
+    const lines = await runAdd(['--permissions', JSON.stringify({ calls: [{ target: NFT, selector: '0xdeadbeef' }] })]);
+    expect(lines.join(' ')).not.toMatch(/non-empty/);
+    const params = (granted()?.params as Array<Record<string, unknown>>)[0];
+    expect((params.permissions as { spends?: unknown }).spends).toBeUndefined();
+    expect(h.saved?.permissionId).toBe('0xnew');
   });
 });

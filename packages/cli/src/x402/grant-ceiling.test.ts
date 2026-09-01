@@ -90,12 +90,33 @@ describe('whyGrantExceedsCeiling', () => {
     expect(why).toMatch(/not a valid limit/);
   });
 
-  it('says nothing on a chain with no registry asset to price against', () => {
+  /**
+   * The registry covers four chains. Skipping the check on the rest would leave
+   * a ceiling that is true only where someone happened to look, and a grant on
+   * any other chain would be the way around it.
+   */
+  it('refuses a spend on a chain with no registry asset to price against', () => {
     const handWritten = {
       calls: [{ target: USDC, functionSignature: 'transfer(address,uint256)' }],
       spends: [{ token: USDC, allowance: '99000000', unit: 'day', multiplier: 1 }],
     };
-    expect(whyGrantExceedsCeiling(handWritten, 1, '10/day')).toBeNull();
+    expect(whyGrantExceedsCeiling(handWritten, 1, '10/day')).toMatch(/no USDC in the registry/);
+  });
+
+  it('allows a calls-only permission there, since it spends nothing', () => {
+    const callsOnly = { calls: [{ target: USDC, functionSignature: 'transfer(address,uint256)' }] };
+    expect(whyGrantExceedsCeiling(callsOnly, 1, '10/day')).toBeNull();
+  });
+
+  /**
+   * A month is measured at its shortest for the grant and at its longest for the
+   * ceiling, so without saying it outright 28 days against 31 refused a grant at
+   * exactly the ceiling's own period.
+   */
+  it.each(['month', 'year'] as const)('allows a grant at the ceiling on a %s period', (period) => {
+    expect(
+      whyGrantExceedsCeiling(buildX402Permissions(BASE_SEPOLIA, `10/${period}`), BASE_SEPOLIA, `10/${period}`)
+    ).toBeNull();
   });
 
   it('says nothing for a calls-only permission, which spends nothing', () => {

@@ -220,8 +220,20 @@ export function liveOrphans(
  * `SessionBridge` as if an old CLI had made it, so the compiler holds the
  * invariant rather than a test having to.
  */
-export function saveSessionConfig(input: Omit<SessionConfig, 'createdAt' | 'mode'> & { mode: 'eip7702' }): void {
-  writeSessionConfig({ ...input, createdAt: new Date().toISOString() });
+export function saveSessionConfig(
+  input: Omit<SessionConfig, 'createdAt' | 'mode'> & {
+    mode: 'eip7702';
+    /**
+     * Carried over when a session is being replaced in place rather than
+     * started, which `session add` does. `createdAt` is what the session total
+     * is counted from (`sumSpentSince(payer, session.createdAt)`), so stamping a
+     * fresh one there would hand the session cap a clean slate as a side effect
+     * of adding a capability.
+     */
+    createdAt?: string;
+  }
+): void {
+  writeSessionConfig({ ...input, createdAt: input.createdAt ?? new Date().toISOString() });
 }
 
 function writeSessionConfig(config: SessionConfig): void {

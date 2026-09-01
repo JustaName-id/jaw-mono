@@ -1,3 +1,4 @@
+import { toFunctionSelector } from 'viem';
 import type { GrantedPermission } from '../lib/session-config.js';
 import type { PermissionsConfig } from '../lib/types.js';
 
@@ -16,9 +17,30 @@ import type { PermissionsConfig } from '../lib/types.js';
  * against.
  */
 
-/** A call is the same call when it targets the same function on the same contract. */
-function callKey(call: { target: string; selector: string }): string {
-  return `${call.target.toLowerCase()}:${call.selector.toLowerCase()}`;
+/**
+ * A call is the same call when it targets the same function on the same
+ * contract.
+ *
+ * The selector is derived from the signature when that is all an entry carries,
+ * which is how the x402 preset writes them while the stored permission carries
+ * selectors. Comparing the two forms directly matched nothing, so
+ * `session add --x402` was never a no-op: every run re-granted, revoked, cost
+ * two browser approvals, and left another copy of the same call on the
+ * permission.
+ */
+function callKey(call: { target: string; selector?: string; functionSignature?: string }): string | null {
+  const selector = call.selector ?? (call.functionSignature ? safeSelector(call.functionSignature) : undefined);
+  return selector ? `${call.target.toLowerCase()}:${selector.toLowerCase()}` : null;
+}
+
+function safeSelector(signature: string): string | undefined {
+  try {
+    return toFunctionSelector(signature);
+  } catch {
+    // A signature the SDK will reject later. Left unkeyed rather than thrown on:
+    // this is a merge, and the grant is where a bad signature belongs refused.
+    return undefined;
+  }
 }
 
 /**
@@ -40,12 +62,7 @@ export function mergePermissions(existing: GrantedPermission, addition: Permissi
   }));
   const seenCalls = new Set(existing.calls.map(callKey));
   for (const call of addition.calls ?? []) {
-    // An addition may name a function by signature, which is what the preset
-    // does. Keyed on the selector only when it has one; a signature-only entry
-    // cannot be compared without hashing it, and a duplicate call is harmless
-    // (the contract takes a list of allowed calls, not a set of budgets), so it
-    // is passed through rather than resolved here.
-    const key = call.selector ? callKey({ target: call.target, selector: call.selector }) : null;
+    const key = callKey(call);
     if (key && seenCalls.has(key)) continue;
     if (key) seenCalls.add(key);
     calls.push(call);
@@ -85,7 +102,13 @@ export function mergePermissions(existing: GrantedPermission, addition: Permissi
     };
   }
 
-  return { calls, spends };
+  // Absent rather than empty. The validator rejects a `spends: []` outright,
+  // and a calls-only session merged with a calls-only addition produces exactly
+  // that, so every such add threw after the browser had already been opened.
+  return {
+    ...(calls.length > 0 ? { calls } : {}),
+    ...(spends.length > 0 ? { spends } : {}),
+  };
 }
 
 /** One line per change, for the summary printed before the browser opens. */
@@ -93,7 +116,8 @@ export function describeMerge(existing: GrantedPermission, merged: PermissionsCo
   const lines: string[] = [];
   const hadCalls = new Set(existing.calls.map(callKey));
   for (const call of merged.calls ?? []) {
-    if (call.selector && hadCalls.has(callKey({ target: call.target, selector: call.selector }))) continue;
+    const key = callKey(call);
+    if (key && hadCalls.has(key)) continue;
     lines.push(`  + call    ${call.target} ${call.selector ?? call.functionSignature ?? ''}`.trimEnd());
   }
 

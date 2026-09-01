@@ -78,7 +78,16 @@ export function whyGrantExceedsCeiling(
   }
 
   const usdc = Object.values(USDC_BY_NETWORK).find((asset) => asset.chainId === chainId);
-  if (!usdc) return null; // no registry asset here, so nothing to price the ceiling in
+  if (!usdc) {
+    // The ceiling is an amount of USDC, and this chain has none in the registry
+    // to price it against. A permission that spends nothing is still fine; one
+    // that spends is refused for the same reason an unpriceable token is, since
+    // silently skipping the check on four-fifths of the chains would leave the
+    // ceiling true only where someone happened to look.
+    return (permissions.spends ?? []).length > 0
+      ? `The grant ceiling is set to ${ceiling}, and chain ${chainId} has no USDC in the registry to measure a spend against it. Grant on a supported chain, or remove the ceiling with \`jaw config set grantCeiling ""\`.`
+      : null;
+  }
 
   const maxAllowance = parseUnits(parsed.amount, usdc.decimals);
   const ceilingSeconds = periodSeconds(MAX_SECONDS, parsed.period, 1);
@@ -107,7 +116,15 @@ export function whyGrantExceedsCeiling(
     if (grantSeconds === null) {
       return `This permission uses a spend period this CLI does not recognise: ${spend.unit}.`;
     }
-    if (grantSeconds < ceilingSeconds) {
+    // The same period as the ceiling is never too short, and it has to be said
+    // outright: a month is measured at its shortest here and at its longest on
+    // the ceiling, so 28 days against 31 refused `10/month` under a `10/month`
+    // ceiling. The two tables exist to keep a *different* unit from rounding
+    // its way past, and an identical one needs no rounding at all.
+    // `parseLimit` gives the ceiling a multiplier of one, so any grant on the
+    // same unit runs at least as long as it.
+    const sameUnit = spend.unit === parsed.period;
+    if (!sameUnit && grantSeconds < ceilingSeconds) {
       return `This grant resets its allowance every ${describe(spend.unit, spend.multiplier ?? 1)}, which is more often than the ${ceiling} ceiling set on this machine allows. A shorter period is more money over the same time, even at the same allowance.`;
     }
   }

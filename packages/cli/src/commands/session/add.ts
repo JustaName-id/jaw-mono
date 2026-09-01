@@ -16,6 +16,8 @@ import { parsePermissionsConfig } from '../../lib/validation.js';
 import { extractGrantedSpend } from '../../x402/policy.js';
 import { buildX402Permissions, DEFAULT_X402_LIMIT } from '../../x402/grant-preset.js';
 import { whyGrantExceedsCeiling } from '../../x402/grant-ceiling.js';
+import { whyOwnerCannotFundSession, whySpenderCannotPay } from '../../x402/funded-owner.js';
+import { readLiveness } from '../../x402/permission-onchain.js';
 import { mergePermissions, describeMerge } from '../../x402/merge-permissions.js';
 
 /**
@@ -100,6 +102,26 @@ export default class SessionAdd extends BaseCommand {
       );
     }
 
+    // The union is computed from the stored struct, so it has to still describe
+    // the permission on chain. A `mismatch` means it does not, and `revoked`
+    // means there is nothing to add to; going ahead in either case would merge
+    // against a scope that is not live and then revoke the one that is, which is
+    // the capability loss this command exists to prevent. Not knowing is not a
+    // reason to refuse: it is what every session reports without a reachable
+    // node.
+    const liveness = await readLiveness(session);
+    if (liveness === 'revoked') {
+      this.error(
+        'The permission this session names was revoked on chain. Run `jaw session setup` to create a new one.'
+      );
+    }
+    if (liveness === 'mismatch') {
+      this.error(
+        'The permission stored for this session does not match the one that was granted, so what it ' +
+          'already allows cannot be read. Run `jaw session setup` to recreate it.'
+      );
+    }
+
     const addition = this.resolveAddition(flags, session.chainId);
     const merged = mergePermissions(existing, addition);
     const changes = describeMerge(existing, merged);
@@ -125,6 +147,31 @@ export default class SessionAdd extends BaseCommand {
     const bridge = await getBridge({ keysUrl: config.keysUrl, apiKey, chainId: session.chainId, ens: config.ens });
     let granted: unknown;
     try {
+      // The account connected in the browser decides who the union belongs to.
+      // A different one would grant a permission owned by someone else, leave
+      // the revoke of the old one failing because that account does not own it,
+      // and quietly move where payments pull from. Checked before the grant,
+      // since afterwards it is on chain.
+      const accounts = (await bridge.request('eth_requestAccounts')) as string[] | undefined;
+      const connected = accounts?.[0];
+      if (connected && connected.toLowerCase() !== session.ownerAddress.toLowerCase()) {
+        this.error(
+          `This session's permission belongs to ${session.ownerAddress}, but ${connected} is connected in the ` +
+            'browser. Connect that account, or run `jaw session setup` to start a session on this one.'
+        );
+      }
+
+      // The same guard setup runs: the grant carries a transfer to the session,
+      // and an owner that cannot cover it leaves a permission that cannot be
+      // used until it is funded and the whole thing is done again.
+      if (flags.x402) {
+        const blocked = await whyOwnerCannotFundSession({
+          chainId: session.chainId,
+          request: (m, p) => bridge.request(m, p),
+        });
+        if (blocked) this.error(blocked);
+      }
+
       granted = await bridge.request('wallet_grantPermissions', [
         {
           spender: session.sessionAddress,
@@ -174,6 +221,10 @@ export default class SessionAdd extends BaseCommand {
       chainId: session.chainId,
       expiry: session.expiry,
       mode: 'eip7702',
+      // Kept, not restamped: it is what the session spend total is counted
+      // from, and adding a capability must not hand the session cap a clean
+      // slate.
+      createdAt: session.createdAt,
       grantedSpend: extractGrantedSpend(
         permissions.spends,
         session.chainId,
@@ -191,6 +242,14 @@ export default class SessionAdd extends BaseCommand {
             ],
           }),
     });
+
+    if (flags.x402) {
+      const unfunded = await whySpenderCannotPay({
+        chainId: session.chainId,
+        spender: session.sessionAddress as `0x${string}`,
+      });
+      if (unfunded) this.logToStderr(`\nWarning: ${unfunded}`);
+    }
 
     const summary = {
       sessionAddress: session.sessionAddress,

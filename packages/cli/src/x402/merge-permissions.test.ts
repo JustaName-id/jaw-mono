@@ -110,4 +110,32 @@ describe('describeMerge', () => {
     const merged = mergePermissions(EXISTING, { calls: [{ target: NFT, selector: MINT }] });
     expect(describeMerge(EXISTING, merged)).toEqual([]);
   });
+
+  /**
+   * The preset names the call by signature and the stored permission by
+   * selector, so nothing matched and `add --x402` was never a no-op: every run
+   * re-granted, cost two browser approvals, and left another copy of the same
+   * call on the permission.
+   */
+  it('matches a call named by signature against one already granted by selector', () => {
+    const existing: GrantedPermission = {
+      ...EXISTING,
+      calls: [{ target: USDC, selector: TRANSFER }],
+      spends: [{ token: USDC, allowance: '10000000', unit: 'day', multiplier: 1 }],
+    };
+    const merged = mergePermissions(existing, buildX402Permissions(84532, '10/day'));
+    expect(merged.calls).toHaveLength(1);
+    expect(describeMerge(existing, merged)).toEqual([]);
+  });
+
+  /**
+   * `parsePermissionsConfig` rejects a defined-but-empty `spends`, so a
+   * calls-only session merged with a calls-only addition threw after the browser
+   * had already been opened.
+   */
+  it('leaves an empty spends out rather than sending an empty array', () => {
+    const merged = mergePermissions(EXISTING, { calls: [{ target: NFT, selector: '0xdeadbeef' }] });
+    expect(merged.spends).toBeUndefined();
+    expect(merged.calls).toHaveLength(2);
+  });
 });
