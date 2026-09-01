@@ -33,14 +33,25 @@ const h = vi.hoisted(() => {
       expiry: Math.floor(Date.now() / 1000) + 6 * 86400,
       createdAt: anchor,
       mode: 'eip7702' as const,
-      grantedSpend: {
+      // The policy is derived from this on read. It used to be summarised into
+      // a second `grantedSpend` field written at grant time, and the two could
+      // describe different budgets.
+      permission: {
+        account: '0x2222222222222222222222222222222222222222',
+        spender: '0x1111111111111111111111111111111111111111',
+        start: Math.floor(new Date(anchor).getTime() / 1000),
+        end: Math.floor(Date.now() / 1000) + 6 * 86400,
+        salt: '0xabc',
         // Registry USDC on Base Sepolia, so the asset lookup resolves.
-        token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-        allowance: '5000000', // 5 USDC per day
-        network: 'eip155:84532',
-        unit: 'day' as const,
-        multiplier: 1,
-        periodAnchor: anchor,
+        calls: [{ target: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', selector: '0xa9059cbb' }],
+        spends: [
+          {
+            token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+            allowance: '5000000', // 5 USDC per day
+            unit: 'day',
+            multiplier: 1,
+          },
+        ],
       },
     },
   };

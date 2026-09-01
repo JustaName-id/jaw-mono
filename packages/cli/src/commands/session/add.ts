@@ -14,7 +14,6 @@ import {
 } from '../../lib/session-config.js';
 import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
 import { parsePermissionsConfig } from '../../lib/validation.js';
-import { extractGrantedSpend } from '../../x402/policy.js';
 import { buildX402Permissions, DEFAULT_X402_LIMIT } from '../../x402/grant-preset.js';
 import { whyGrantExceedsCeiling } from '../../x402/grant-ceiling.js';
 import { whyOwnerCannotFundSession, whySpenderCannotPay } from '../../x402/funded-owner.js';
@@ -237,11 +236,6 @@ export default class SessionAdd extends BaseCommand {
       // from, and adding a capability must not hand the session cap a clean
       // slate.
       createdAt: session.createdAt,
-      grantedSpend: extractGrantedSpend(
-        permissions.spends,
-        session.chainId,
-        permission ? new Date(permission.start * 1000) : undefined
-      ),
       ...(permission ? { permission } : {}),
       orphanedPermissions: [{ id: session.permissionId, chainId: session.chainId, expiry: session.expiry }, ...orphans],
     };

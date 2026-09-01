@@ -1,6 +1,7 @@
 import { currentPeriodWindow, type PeriodWindow } from './period.js';
 import { sumSpentSince, sumToppedUpSince } from './ledger.js';
 import { readCurrentPeriod, type ReadDeps } from './permission-onchain.js';
+import { USDC_BY_NETWORK } from './asset-registry.js';
 import type { X402Policy } from './policy.js';
 import type { SessionConfig } from '../lib/session-config.js';
 
@@ -97,18 +98,18 @@ export async function currentPeriodSpendOnChain(
   const local = currentPeriodSpend(policy, payerAddress, session, now);
   if (!local || !session) return local;
 
-  // The limit the policy was seeded from. A permission can carry more than one
-  // limit for the same token, each with its own counter on chain, and this is
-  // the one `extractGrantedSpend` picked.
-  const token = session.grantedSpend?.token;
-  if (!token) return local;
+  // The same token the policy was seeded from, resolved the same way: from the
+  // registry, by the session's chain. Reading it off a stored summary is what
+  // let this and the policy describe different budgets.
+  const asset = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === session.chainId);
+  if (!asset) return local;
 
   const onChain = await readCurrentPeriod(
     {
       chainId: session.chainId,
       permissionId: session.permissionId,
       permission: session.permission,
-      token,
+      token: asset.address,
     },
     deps
   );

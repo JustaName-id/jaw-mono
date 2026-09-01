@@ -203,10 +203,9 @@ describe('jaw session setup', () => {
   it('stores the permission struct the grant returned', async () => {
     await runSetup(['--x402', '--chain', '84532', '--quiet']);
     expect(h.saved?.permission).toMatchObject({ salt: '0xabc', start: 1_756_000_000 });
-    // Anchored at the permission's own start rather than the local clock.
-    expect((h.saved?.grantedSpend as { periodAnchor?: string })?.periodAnchor).toBe(
-      new Date(1_756_000_000 * 1000).toISOString()
-    );
+    // And nothing else describing the same grant: the policy is derived from
+    // this struct on read, so there is no second copy to fall out of step.
+    expect(h.saved).not.toHaveProperty('grantedSpend');
   });
 
   /**

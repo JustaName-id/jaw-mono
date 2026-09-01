@@ -52,14 +52,6 @@ const SESSION = {
   expiry: Math.floor(NOW.getTime() / 1000) + 6 * 86400,
   createdAt: ANCHOR.toISOString(),
   mode: 'eip7702' as const,
-  grantedSpend: {
-    token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-    allowance: '5000000',
-    network: 'eip155:84532',
-    unit: 'day' as const,
-    multiplier: 1,
-    periodAnchor: ANCHOR.toISOString(),
-  },
 } satisfies SessionConfig;
 
 const PAYER = '0x1111111111111111111111111111111111111111';
@@ -140,9 +132,9 @@ describe('currentPeriodSpendOnChain', () => {
     expect(period).toMatchObject({ toppedUp: 2_000_000n, source: 'ledger' });
   });
 
-  it('does not read the chain for a session with no granted spend to meter', async () => {
-    const withoutGrant = { ...SESSION, grantedSpend: undefined };
-    const period = await currentPeriodSpendOnChain(POLICY, PAYER, withoutGrant, NOW);
+  it('does not read the chain on a chain with no registry asset to meter', async () => {
+    const elsewhere = { ...SESSION, chainId: 1 };
+    const period = await currentPeriodSpendOnChain(POLICY, PAYER, elsewhere, NOW);
     expect(period?.source).toBe('ledger');
     expect(h.reads).toBe(0);
   });

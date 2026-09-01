@@ -1,7 +1,6 @@
 import * as fs from 'node:fs';
 import { PATHS } from './paths.js';
 import { ensureDir } from './config.js';
-import type { PeriodUnit } from '../x402/period.js';
 
 /**
  * How the session account address is derived, as it appears on disk.
@@ -17,39 +16,6 @@ import type { PeriodUnit } from '../x402/period.js';
  * `SessionBridge` has to recognise them; `SessionSetup` never writes it.
  */
 export type SessionMode = 'counterfactual' | 'eip7702';
-
-/**
- * The USDC spend limit captured from the on-chain permission at setup, so the
- * local x402 policy can be seeded from what the user actually granted instead of
- * being configured separately and drifting from it. `allowance` is one period's
- * worth in base units (decimal string); `network` is the session chain's CAIP-2
- * id. Absent when the granted permission carries no registry-USDC spend.
- */
-export interface GrantedSpend {
-  token: string;
-  allowance: string;
-  network: string;
-  /**
-   * The period the allowance resets over, and how many of those units make one
-   * period. Without these the allowance is dimensionless, and a per-period
-   * number reads as a per-session one: a 5-USDC/day grant over a 7-day expiry
-   * would cap the whole session at 5 instead of allowing 5 each day.
-   *
-   * Optional because configs written before this existed have no period
-   * recorded. Consumers fall back to treating the allowance as session-wide,
-   * which is what those configs already meant.
-   */
-  unit?: PeriodUnit;
-  multiplier?: number;
-  /**
-   * ISO timestamp the periods are anchored at. The contract anchors at the
-   * permission's `start`, which the grant response does not return, so this is
-   * the local time the session was created. Anchoring early only makes a window
-   * close sooner than the chain's, which refuses ahead of the chain rather than
-   * behind it.
-   */
-  periodAnchor?: string;
-}
 
 /**
  * The granted permission as `JustaPermissionManager` stores it.
@@ -71,8 +37,8 @@ export interface GrantedPermission {
   spender: string;
   /**
    * Unix seconds the permission starts at. Also the anchor the contract steps
-   * its period windows from, which is the number `GrantedSpend.periodAnchor`
-   * was approximating with the local clock.
+   * its period windows from, and what the local policy anchors on. A summary
+   * field used to hold an approximation of it taken from the local clock.
    */
   start: number;
   /** Unix seconds the permission ends at. */
@@ -191,7 +157,6 @@ export interface SessionConfig {
   expiry: number;
   createdAt: string;
   mode?: SessionMode;
-  grantedSpend?: GrantedSpend;
   /** The struct the on-chain reads need. Absent on older sessions; see the type. */
   permission?: GrantedPermission;
   /** Permissions this key still holds that the session no longer names. */

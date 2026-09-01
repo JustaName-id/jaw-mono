@@ -2,7 +2,7 @@ import { USDC_BY_NETWORK } from './asset-registry.js';
 import { parseBigInt, parseNonNegativeBigInt } from './amount.js';
 import { bindingSpendLimit, describePeriod, normalizePeriod, type PeriodUnit } from './period.js';
 import type { X402PaymentRequirement } from './types.js';
-import type { GrantedSpend } from '../lib/session-config.js';
+import type { GrantedPermission } from '../lib/session-config.js';
 
 /** The period a granted allowance resets over, carried into the policy. */
 export interface GrantedPeriod {
@@ -69,96 +69,61 @@ export const DEFAULT_X402_POLICY: X402Policy = {
 };
 
 /**
- * Pull the USDC spend limit out of a granted permission's `spends` so the policy
- * can be seeded from it. Matches the granted entry against the registry USDC for
- * the session chain (case-insensitive); the allowance is a hex string on the wire,
- * returned as base-units decimal. Returns undefined when the permission grants no
- * registry-USDC spend (nothing to seed, defaults hold). Stores the registry's
- * canonical address, not the permission's literal token string: they match
- * case-insensitively and the allowlist this seeds compares addresses that way too.
+ * The x402 policy a granted permission implies.
+ *
+ * Derived on read rather than stored beside the permission. The session used to
+ * carry both: the struct, and a `grantedSpend` summary of one USDC limit
+ * written at grant time. Two shapes for one fact, at different fidelities, and
+ * every consumer had to know which one it was reading. Each of the bugs in this
+ * area was a version of the two disagreeing, and the reconciliation between
+ * them was itself a source of them. A value that cannot be stored out of date
+ * cannot go out of date.
+ *
+ * The reduction is still lossy and now says so in one place: the contract
+ * charges every spend limit matching a token, and `maxPerPeriod` is a single
+ * number, so `bindingSpendLimit` decides which one it stands for.
  */
-export function extractGrantedSpend(
-  spends: ReadonlyArray<{ token: string; allowance: string; unit?: string; multiplier?: number }> | undefined,
-  chainId: number,
-  anchor: Date = new Date()
-): GrantedSpend | undefined {
-  const usdc = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === chainId);
-  if (!usdc) return undefined;
-  // The limit that binds, not the first one in the document. A permission can
-  // carry several for one token and the contract charges every one of them, so
-  // seeding from whichever happens to come first reported a cap the chain does
-  // not enforce.
-  const spend = bindingSpendLimit((spends ?? []).filter((s) => s.token.toLowerCase() === usdc.address.toLowerCase()));
-  if (!spend) return undefined;
+export function policyFromPermission(permission: GrantedPermission | undefined, chainId: number): X402Policy {
+  if (!permission) return {};
+  const usdc = Object.values(USDC_BY_NETWORK).find((asset) => asset.chainId === chainId);
+  if (!usdc) return {};
+
+  const forToken = permission.spends.filter((spend) => spend.token.toLowerCase() === usdc.address.toLowerCase());
+  const binding = bindingSpendLimit(forToken);
+  if (!binding) return {};
+
   let allowance: string;
   try {
-    const parsed = BigInt(spend.allowance);
-    // A negative allowance (BigInt('-0x100') parses fine) would seed a negative
-    // cap and make checkPolicy reject or misbehave — treat it as no grant.
-    if (parsed < 0n) return undefined;
+    const parsed = BigInt(binding.allowance);
+    // A negative allowance would seed a cap that refuses everything or worse.
+    if (parsed < 0n) return {};
     allowance = parsed.toString();
   } catch {
-    return undefined; // malformed allowance: fall back to defaults rather than a bad cap
+    return {};
   }
-  // Keep the period alongside the number. An allowance without its unit is
-  // dimensionless, and reading a per-period figure as a per-session one caps a
-  // multi-period grant at a single period's worth for its whole life.
-  // Normalised the way the SDK normalises it before encoding, so `year` lands on
-  // the same month-based window the permission actually enforces. An unrecognised
-  // unit records no period rather than guessing, falling back to session-wide.
-  const period = normalizePeriod(spend.unit, spend.multiplier);
+
+  // Normalised the way the SDK normalises before encoding, so a `year` grant
+  // lands on the same month-based window the permission actually enforces.
+  const period = normalizePeriod(binding.unit, binding.multiplier);
+  if (!period) return {};
+
   return {
-    token: usdc.address,
-    allowance,
-    network: usdc.wireNetwork,
-    ...(period ? { unit: period.unit, multiplier: period.multiplier, periodAnchor: anchor.toISOString() } : {}),
+    // The registry's canonical address, not the permission's literal string:
+    // they match case-insensitively and this seeds an allowlist compared that
+    // way.
+    allowedAssets: [usdc.address],
+    allowedNetworks: [usdc.wireNetwork],
+    maxPerPeriod: allowance,
+    period: {
+      unit: period.unit,
+      multiplier: period.multiplier,
+      // The permission's own start, which is what the contract steps its
+      // windows from. This used to be the local clock at setup.
+      anchor: new Date(permission.start * 1000).toISOString(),
+    },
   };
 }
 
-/**
- * Turn the USDC spend limit the user granted on-chain into policy fields, so the
- * local caps agree with the grant by construction rather than being configured
- * separately. The granted token and network become the allowlists, and the
- * allowance becomes `maxPerPeriod`: a cap that resets every period, matching what
- * the permission actually enforces.
- *
- * It deliberately does not touch `maxTotalPerSession`. That field accumulates
- * over the entire session, so seeding it with one period's allowance stranded
- * multi-period grants: a 5-USDC/day grant with a 7-day expiry permits 35 on
- * chain but capped the session at 5 forever. The two are different dimensions
- * and are now kept apart.
- */
-export function policyFromGrant(grant?: GrantedSpend): X402Policy {
-  if (!grant) return {};
-  return {
-    allowedAssets: [grant.token],
-    allowedNetworks: [grant.network],
-    // Without a recorded period the allowance cannot be placed on a window, so
-    // it stays session-wide, which is what pre-period configs already meant.
-    ...(grant.unit && grant.periodAnchor
-      ? {
-          maxPerPeriod: grant.allowance,
-          period: { unit: grant.unit, multiplier: grant.multiplier ?? 1, anchor: grant.periodAnchor },
-        }
-      : { maxTotalPerSession: grant.allowance }),
-  };
-}
-
-/**
- * Layer the policy: safe defaults < the on-chain grant < the user's config. The
- * grant seeds the allowlists and the per-period cap from what was actually
- * approved; an explicit `jaw config set x402.*` wins per field, so a user can
- * tighten further.
- *
- * Nothing is clamped. An earlier revision pinned `maxTotalPerSession` to the
- * grant, which was only needed because the grant's per-period allowance was
- * being written into that session-wide field: config had to be prevented from
- * raising a cap that was already wrong. Now that the grant lands on
- * `maxPerPeriod` instead, the two caps measure different things and cannot
- * contradict each other, so config is free to set its own session ceiling. The
- * per-period cap keeps mirroring the chain regardless of what config says, and
- * `maxPerPeriod` is not settable from the CLI.
- */
 export function resolveX402Policy(configPolicy?: X402Policy, grantPolicy?: X402Policy): X402Policy {
   const merged: X402Policy = { ...DEFAULT_X402_POLICY, ...(grantPolicy ?? {}), ...(configPolicy ?? {}) };
   // The default session cap is the guardrail for an unconfigured setup that has
@@ -183,9 +148,9 @@ export function resolveX402Policy(configPolicy?: X402Policy, grantPolicy?: X402P
  */
 export function resolveSessionX402Policy(
   configPolicy?: X402Policy,
-  session?: { grantedSpend?: GrantedSpend } | null
+  session?: { chainId: number; permission?: GrantedPermission } | null
 ): X402Policy {
-  return resolveX402Policy(configPolicy, policyFromGrant(session?.grantedSpend));
+  return resolveX402Policy(configPolicy, policyFromPermission(session?.permission, session?.chainId ?? 0));
 }
 
 /**

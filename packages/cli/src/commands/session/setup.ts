@@ -19,7 +19,6 @@ import {
 } from '../../lib/session-config.js';
 import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
 import { parsePermissionsConfig } from '../../lib/validation.js';
-import { extractGrantedSpend } from '../../x402/policy.js';
 import { buildX402Permissions, describeX402Grant, DEFAULT_X402_LIMIT } from '../../x402/grant-preset.js';
 import { whyOwnerCannotFundSession, whySpenderCannotPay } from '../../x402/funded-owner.js';
 import { whyGrantExceedsCeiling } from '../../x402/grant-ceiling.js';
@@ -323,15 +322,6 @@ export default class SessionSetup extends BaseCommand {
         chainId,
         expiry: expiryTimestamp,
         mode,
-        grantedSpend: extractGrantedSpend(
-          permissions.spends,
-          chainId,
-          // The permission's own start, which is what the contract steps its
-          // period windows from. Without it the anchor is the local clock at
-          // setup, deliberately early so the local window closes before the
-          // chain's; with it the two windows are the same window.
-          permission ? new Date(permission.start * 1000) : undefined
-        ),
         ...(permission ? { permission } : {}),
         ...(orphaned.length > 0 ? { orphanedPermissions: orphaned } : {}),
       });

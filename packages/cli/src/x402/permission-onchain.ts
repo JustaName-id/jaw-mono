@@ -267,7 +267,7 @@ export type OnChainPeriod =
  * a permission carrying more than one limit for the same token has more than
  * one counter, and reading the wrong one reads a different budget. Of those,
  * the one used is whichever `bindingSpendLimit` picks, which is the same one
- * `extractGrantedSpend` seeds the policy from: the counter and the cap have to
+ * `policyFromPermission` seeds the cap from: the counter and the cap have to
  * describe the same budget or the report compares two different things.
  */
 export async function readCurrentPeriod(
