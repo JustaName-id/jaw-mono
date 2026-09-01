@@ -71,6 +71,22 @@ export default class SessionSetup extends BaseCommand {
       this.error('--limit only applies to --x402. Re-run with --x402, or set the cap inside --permissions.');
     }
 
+    // The ceiling a human set at a terminal, checked against the resolved
+    // permission rather than the --limit string so a hand-written --permissions
+    // is bounded by the same number.
+    //
+    // First of everything, because it is a local refusal and the block below can
+    // revoke the existing permission on chain. Checked after that, a `--limit`
+    // over the ceiling cost the user the permission they already had and left
+    // them with none: the revoke had happened, the new grant never would.
+    const resolvedPermissions = this.resolvePermissions(flags.permissions, config.permissions, {
+      x402: flags.x402,
+      limit: flags.limit,
+      chainId,
+    });
+    const overCeiling = whyGrantExceedsCeiling(resolvedPermissions, chainId, config.grantCeiling);
+    if (overCeiling) this.error(overCeiling);
+
     // 1. Check existing session
     let reuseKey: string | null = null;
     let oldPermissionRevoked = false;
@@ -208,20 +224,8 @@ export default class SessionSetup extends BaseCommand {
     // on-chain state, surface a recovery hint before re-throwing so the user
     // knows their local session-config now references a revoked permission.
     try {
-      // 2. Resolve permissions
-      const permissions = this.resolvePermissions(flags.permissions, config.permissions, {
-        x402: flags.x402,
-        limit: flags.limit,
-        chainId,
-      });
-
-      // 2.5 A ceiling the human set at a terminal, checked against the resolved
-      //      permission rather than the --limit string so a hand-written
-      //      --permissions is bounded by the same number. Before the browser,
-      //      because the point is to stop a number reaching a screen someone
-      //      clicks through.
-      const overCeiling = whyGrantExceedsCeiling(permissions, chainId, config.grantCeiling);
-      if (overCeiling) this.error(overCeiling);
+      // 2. Resolved above, before anything that mutates on-chain state.
+      const permissions = resolvedPermissions;
 
       // 3. Resolve expiry
       const expiryDays = flags.expiry ?? config.sessionExpiry ?? 7;

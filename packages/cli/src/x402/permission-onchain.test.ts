@@ -165,12 +165,28 @@ describe('readPermissionState', () => {
 describe('readCurrentPeriod', () => {
   const period = { start: 1_756_000_000, end: 1_756_086_400, spend: 5_000_000n };
 
+  const answering = async ({ functionName }: { functionName: string }) =>
+    functionName === 'getHash' ? PERMISSION_ID : period;
+
   it('returns the window and the spend the allowance actually lost', async () => {
+    const result = await readCurrentPeriod({ ...target, token: USDC }, { manager: MANAGER, readContract: answering });
+    expect(result).toEqual({ status: 'ok', ...period });
+  });
+
+  /**
+   * `getCurrentPeriod` does not require the permission to exist. Handed a struct
+   * that hashes to something else it answers about that other hash, as `spend:
+   * 0` over a window built from the on-disk start. Reported as the contract's
+   * figure that drops the "at least" from a number never read for this
+   * permission, and hands the payment path a window that can be later than the
+   * real one, letting a payment the period cap should refuse through.
+   */
+  it('cannot tell when the struct hashes to a different permission', async () => {
     const result = await readCurrentPeriod(
       { ...target, token: USDC },
-      { manager: MANAGER, readContract: async () => period }
+      { manager: MANAGER, readContract: async ({ functionName }) => (functionName === 'getHash' ? '0xother' : period) }
     );
-    expect(result).toEqual({ status: 'ok', ...period });
+    expect(result).toEqual({ status: 'unavailable' });
   });
 
   it('picks the spend limit by token', async () => {
@@ -187,7 +203,8 @@ describe('readCurrentPeriod', () => {
       },
       {
         manager: MANAGER,
-        readContract: async ({ args }) => {
+        readContract: async ({ functionName, args }) => {
+          if (functionName === 'getHash') return PERMISSION_ID;
           seen = args[1];
           return period;
         },

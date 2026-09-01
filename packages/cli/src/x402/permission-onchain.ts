@@ -284,15 +284,29 @@ export async function readCurrentPeriod(
 
   try {
     const address = await managerAddress(deps.manager);
-    const period = (await within(
-      read({
-        address,
-        abi: PERMISSION_MANAGER_ABI,
-        functionName: 'getCurrentPeriod',
-        args: [permission, spendLimit],
-      }),
+    // Hashed alongside the read, not trusted from disk. `getCurrentPeriod` does
+    // not require the permission to exist: handed a struct that hashes to
+    // something else it answers about that other hash, which is a counter for a
+    // permission nobody granted, and it comes back as `spend: 0` over a window
+    // built from the on-disk start. Reported as the contract's metered figure
+    // that would drop the "at least" from a number never read for this
+    // permission, and hand the payment path a window that can be later than the
+    // real one, which lets a payment the period cap should refuse through.
+    const [hash, period] = (await within(
+      Promise.all([
+        read({ address, abi: PERMISSION_MANAGER_ABI, functionName: 'getHash', args: [permission] }),
+        read({
+          address,
+          abi: PERMISSION_MANAGER_ABI,
+          functionName: 'getCurrentPeriod',
+          args: [permission, spendLimit],
+        }),
+      ]),
       deps.timeoutMs
-    )) as { start: number; end: number; spend: bigint } | undefined;
+    )) as [unknown, { start: number; end: number; spend: bigint } | undefined];
+    if (typeof hash !== 'string' || hash.toLowerCase() !== target.permissionId.toLowerCase()) {
+      return { status: 'unavailable' };
+    }
     if (!period) return { status: 'unavailable' };
     return { status: 'ok', start: Number(period.start), end: Number(period.end), spend: BigInt(period.spend) };
   } catch (err) {

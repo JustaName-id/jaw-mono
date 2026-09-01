@@ -194,7 +194,7 @@ jaw session add --permissions '{"calls":[...]}'
 
 The session still holds one permission afterwards: the union is granted as a new permission and the old one is revoked, which is why the browser asks twice. Two live grants would be two independent budgets on chain, so two of 5 a day are 10 a day with nothing representing the total. The session key is kept, so the agent's address, its balance and its delegation all survive.
 
-A spend on a token the session already meters over the same period is replaced rather than added to: `--x402 --limit 10/day` on a session already allowing 5 a day asks for 10, not 15. A different period is a different budget on chain, so it is kept as its own.
+A limit named for a token replaces whatever that token had, whatever period it was on. The contract charges every spend limit matching a token rather than stopping at the first, so limits on one token are ANDed and the tightest wins: leaving an old 1-a-week beside a new 10-a-day would grant nothing while reporting a raise.
 
 It needs a session that carries the permission it was granted. Sessions created before the CLI stored that cannot be merged against, since a permission id says nothing about what it allows; re-run `jaw session setup` once and adding works from then on.
 

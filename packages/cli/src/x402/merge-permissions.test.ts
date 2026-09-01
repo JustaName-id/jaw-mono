@@ -54,7 +54,7 @@ describe('mergePermissions', () => {
    * asking for 10, not 15. Keeping both entries would grant 15 more quietly,
    * since the contract meters each SpendLimit on its own counter.
    */
-  it('replaces the allowance for a token it already meters over the same window', () => {
+  it('replaces the allowance for a token it already meters', () => {
     const existing: GrantedPermission = {
       ...EXISTING,
       calls: [{ target: USDC, selector: TRANSFER }],
@@ -64,12 +64,26 @@ describe('mergePermissions', () => {
     expect(merged.spends).toEqual([{ token: USDC, allowance: '10000000', unit: 'day', multiplier: 1 }]);
   });
 
-  // A different window is a different budget on chain, so it is a new entry
-  // rather than a replacement.
-  it('keeps a limit on the same token over a different window as its own', () => {
+  /**
+   * The contract charges every limit whose token matches and does not stop at
+   * the first, so limits on one token are ANDed and the tightest wins. Appending
+   * a 10-a-day beside an existing 1-a-week would grant nothing while the summary
+   * claimed a raise, so a limit named for a token replaces what that token had.
+   */
+  it('replaces a limit on the same token even when the window differs', () => {
     const existing: GrantedPermission = {
       ...EXISTING,
-      spends: [{ token: USDC, allowance: '5000000', unit: 'week', multiplier: 1 }],
+      spends: [{ token: USDC, allowance: '1000000', unit: 'week', multiplier: 1 }],
+    };
+    const merged = mergePermissions(existing, buildX402Permissions(84532, '10/day'));
+    expect(merged.spends).toEqual([{ token: USDC, allowance: '10000000', unit: 'day', multiplier: 1 }]);
+  });
+
+  it('leaves a limit on a token the addition does not name', () => {
+    const other = '0x7777777777777777777777777777777777777777';
+    const existing: GrantedPermission = {
+      ...EXISTING,
+      spends: [{ token: other, allowance: '1000000', unit: 'week', multiplier: 1 }],
     };
     const merged = mergePermissions(existing, buildX402Permissions(84532, '10/day'));
     expect(merged.spends).toHaveLength(2);
@@ -91,7 +105,7 @@ describe('describeMerge', () => {
     const merged = mergePermissions(EXISTING, buildX402Permissions(84532, '10/day'));
     const lines = describeMerge(EXISTING, merged).join('\n');
     expect(lines).toMatch(/\+ call\s+0x036CbD/);
-    expect(lines).toMatch(/\+ spend\s+10000000/);
+    expect(lines).toMatch(/\+ spend\s+0x036cbd\S* 10000000 per day/);
     expect(lines).not.toMatch(new RegExp(MINT));
   });
 
@@ -102,7 +116,7 @@ describe('describeMerge', () => {
       spends: [{ token: USDC, allowance: '5000000', unit: 'day', multiplier: 1 }],
     };
     const lines = describeMerge(existing, mergePermissions(existing, buildX402Permissions(84532, '10/day'))).join('\n');
-    expect(lines).toMatch(/~ spend .*5000000 to 10000000/);
+    expect(lines).toMatch(/~ spend .*5000000 per day to 10000000 per day/);
   });
 
   // What `session add` checks to decide there is nothing to do.

@@ -24,6 +24,9 @@ const h = vi.hoisted(() => ({
   ownerBlocked: null as string | null,
   liveness: 'active' as string,
   connected: '0x1111111111111111111111111111111111111111',
+  progress: [] as unknown[],
+  onSave: undefined as (() => void) | undefined,
+  onRevoke: undefined as (() => void) | undefined,
 }));
 
 vi.mock('../../lib/config.js', () => ({ loadConfig: () => h.config }));
@@ -33,6 +36,10 @@ vi.mock('../../lib/session-config.js', async (importOriginal) => ({
   loadSessionConfig: () => h.session,
   saveSessionConfig: (config: Record<string, unknown>) => {
     h.saved = config;
+    h.onSave?.();
+  },
+  saveRevokeProgress: (_config: unknown, progress: unknown) => {
+    h.progress.push(progress);
   },
 }));
 // The guards `setup --x402` runs, which `add --x402` skipped. Mocked rather
@@ -48,7 +55,10 @@ vi.mock('../../lib/bridge-singleton.js', () => ({
     request: async (method: string, params: unknown) => {
       h.requests.push({ method, params });
       if (method === 'eth_requestAccounts') return [h.connected];
-      if (method === 'wallet_revokePermissions' && h.failRevoke) throw new Error('user rejected');
+      if (method === 'wallet_revokePermissions') {
+        h.onRevoke?.();
+        if (h.failRevoke) throw new Error('user rejected');
+      }
       if (method === 'wallet_grantPermissions') {
         return {
           account: '0x1111111111111111111111111111111111111111',
@@ -92,6 +102,9 @@ beforeEach(() => {
   h.ownerBlocked = null;
   h.liveness = 'active';
   h.connected = '0x1111111111111111111111111111111111111111';
+  h.progress = [];
+  h.onSave = undefined;
+  h.onRevoke = undefined;
   h.session = {
     ownerAddress: '0x1111111111111111111111111111111111111111',
     sessionAddress: '0x2222222222222222222222222222222222222222',
@@ -153,7 +166,24 @@ describe('jaw session add', () => {
     ]);
     expect((h.requests[2].params as Array<{ id: string }>)[0].id).toBe('0xold');
     expect(h.saved?.permissionId).toBe('0xnew');
-    expect(h.saved?.orphanedPermissions).toBeUndefined();
+    // Recorded as an orphan on the way in and taken back out once the revoke
+    // lands, so nothing between the grant and the cleanup can lose it.
+    expect(h.saved?.orphanedPermissions).toEqual([{ id: '0xold', chainId: 84532, expiry: h.session.expiry }]);
+    expect(h.progress).toEqual([{ orphans: [], ownPermissionRevoked: false }]);
+  });
+
+  /**
+   * The union is on chain by the time the revoke is attempted, and opening the
+   * second bridge can throw. Writing the session first is what keeps a live
+   * permission from being recorded nowhere: unreachable by `session revoke`,
+   * unmetered by status, with the config still naming the old id.
+   */
+  it('records the new permission before it tries to revoke', async () => {
+    const order: string[] = [];
+    h.onSave = () => order.push('saved');
+    h.onRevoke = () => order.push('revoked');
+    await runAdd(['--x402']);
+    expect(order).toEqual(['saved', 'revoked']);
   });
 
   /**
@@ -167,6 +197,8 @@ describe('jaw session add', () => {
 
     expect(h.saved?.permissionId).toBe('0xnew');
     expect(h.saved?.orphanedPermissions).toEqual([{ id: '0xold', chainId: 84532, expiry: h.session.expiry }]);
+    // Left on the list, since it is still live.
+    expect(h.progress).toEqual([]);
     expect(h.stderr.join(' ')).toMatch(/revoking the old one failed/);
   });
 

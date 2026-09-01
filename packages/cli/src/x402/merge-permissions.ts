@@ -44,13 +44,23 @@ function safeSelector(signature: string): string | undefined {
 }
 
 /**
- * Two spend limits collide when they meter the same token over the same window.
- * The contract keys its counter by the hash of the whole `SpendLimit`, so two
- * entries differing only in allowance are two independent budgets, and it
- * rejects two that are identical outright.
+ * A limit is about a token, and adding one for a token replaces whatever that
+ * token had.
+ *
+ * Not per window, which is what this keyed on first. `_checkAndIncrementSpend`
+ * walks every limit whose token matches and charges each one
+ * (`JustaPermissionManager.sol:1062`, "Don't break, continue checking all
+ * limits for this token"), so limits on one token are ANDed and the effective
+ * cap is the tightest of them. Appending a `10/day` beside an existing `1/week`
+ * therefore grants nothing: the session still cannot move more than 1 a week,
+ * while the summary claims a raise and the local policy reads the old figure.
+ *
+ * Replacing is also what the request means. `session add --x402 --limit 10/day`
+ * names the budget for that token, and the browser screen shows the scope that
+ * results before anyone approves it.
  */
-function spendKey(spend: { token: string; unit: string; multiplier?: number }): string {
-  return `${spend.token.toLowerCase()}:${spend.unit}:${spend.multiplier ?? 1}`;
+function tokenKey(spend: { token: string }): string {
+  return spend.token.toLowerCase();
 }
 
 export function mergePermissions(existing: GrantedPermission, addition: PermissionsConfig): PermissionsConfig {
@@ -68,38 +78,26 @@ export function mergePermissions(existing: GrantedPermission, addition: Permissi
     calls.push(call);
   }
 
-  const spends = existing.spends.map((spend) => ({
-    token: spend.token,
-    // Normalised out of the hex the grant response carries, so the merged
-    // document reads the way a hand-written one does.
-    allowance: BigInt(spend.allowance).toString(),
-    unit: spend.unit,
-    multiplier: spend.multiplier,
-  }));
-  const byKey = new Map(spends.map((spend, index) => [spendKey(spend), index]));
-  for (const spend of addition.spends ?? []) {
-    const key = spendKey(spend);
-    const existingIndex = byKey.get(key);
-    if (existingIndex === undefined) {
-      spends.push({
-        token: spend.token,
-        allowance: BigInt(spend.allowance).toString(),
-        unit: spend.unit,
-        multiplier: spend.multiplier ?? 1,
-      });
-      byKey.set(key, spends.length - 1);
-      continue;
-    }
-    // Same token, same window: the limit just named wins rather than being
-    // added to the old one. `session add x402 --limit 10/day` over a session
-    // already allowing 5/day reads as asking for 10, not for 15, and adding
-    // them would raise a budget the user did not name. Leaving both entries in
-    // would do the same thing more quietly, since the contract meters each
-    // `SpendLimit` on its own counter.
-    spends[existingIndex] = {
-      ...spends[existingIndex],
+  // Every token the addition names, so the existing limits on those tokens can
+  // be dropped rather than ANDed with the new one.
+  const replaced = new Set((addition.spends ?? []).map(tokenKey));
+  const spends = existing.spends
+    .filter((spend) => !replaced.has(tokenKey(spend)))
+    .map((spend) => ({
+      token: spend.token,
+      // Normalised out of the hex the grant response carries, so the merged
+      // document reads the way a hand-written one does.
       allowance: BigInt(spend.allowance).toString(),
-    };
+      unit: spend.unit,
+      multiplier: spend.multiplier,
+    }));
+  for (const spend of addition.spends ?? []) {
+    spends.push({
+      token: spend.token,
+      allowance: BigInt(spend.allowance).toString(),
+      unit: spend.unit,
+      multiplier: spend.multiplier ?? 1,
+    });
   }
 
   // Absent rather than empty. The validator rejects a `spends: []` outright,
@@ -121,16 +119,25 @@ export function describeMerge(existing: GrantedPermission, merged: PermissionsCo
     lines.push(`  + call    ${call.target} ${call.selector ?? call.functionSignature ?? ''}`.trimEnd());
   }
 
-  const before = new Map(existing.spends.map((spend) => [spendKey(spend), BigInt(spend.allowance)]));
-  for (const spend of merged.spends ?? []) {
-    const was = before.get(spendKey(spend));
-    const now = BigInt(spend.allowance);
-    if (was === undefined) {
-      lines.push(`  + spend   ${spend.allowance} of ${spend.token} per ${spend.unit}`);
-    } else if (was !== now) {
-      lines.push(`  ~ spend   ${spend.token} per ${spend.unit}: ${was} to ${now}`);
-    }
+  // Reported per token, because that is the unit a limit is replaced in. A
+  // window that goes away has to be shown: dropping a 1-a-week limit while
+  // adding 10 a day is the whole change on chain, and printing only the
+  // addition would read as a raise on top of a cap that is still there.
+  const describeSpend = (spend: { allowance: string; unit: string; multiplier?: number }) =>
+    `${spend.allowance} per ${describe(spend.unit, spend.multiplier ?? 1)}`;
+  for (const token of new Set((merged.spends ?? []).map(tokenKey))) {
+    const was = existing.spends.filter((spend) => tokenKey(spend) === token);
+    const now = (merged.spends ?? []).filter((spend) => tokenKey(spend) === token);
+    const wasText = was.map((s) => describeSpend({ ...s, allowance: BigInt(s.allowance).toString() })).join(', ');
+    const nowText = now.map(describeSpend).join(', ');
+    if (wasText === nowText) continue;
+    lines.push(was.length === 0 ? `  + spend   ${token} ${nowText}` : `  ~ spend   ${token} ${wasText} to ${nowText}`);
   }
 
   return lines;
+}
+
+function describe(unit: string, multiplier: number): string {
+  const n = Math.max(1, Math.floor(multiplier));
+  return n === 1 ? unit : `${n} ${unit}s`;
 }

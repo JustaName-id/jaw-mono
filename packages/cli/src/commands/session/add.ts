@@ -9,6 +9,7 @@ import {
   liveOrphans,
   loadSessionConfig,
   parseGrantedPermission,
+  saveRevokeProgress,
   saveSessionConfig,
 } from '../../lib/session-config.js';
 import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
@@ -187,33 +188,17 @@ export default class SessionAdd extends BaseCommand {
 
     const response = granted as { permissionId: string; account: string };
     const permission = parseGrantedPermission(granted);
-
-    // Granted before the old one is revoked, so the session is never without a
-    // permission: a failure here leaves the agent holding what it had.
-    let revoked = false;
-    const revokeBridge = await getBridge({
-      keysUrl: config.keysUrl,
-      apiKey,
-      chainId: session.chainId,
-      ens: config.ens,
-    });
-    try {
-      await revokeBridge.request('wallet_revokePermissions', [{ id: session.permissionId }]);
-      revoked = true;
-    } catch (err) {
-      // Not fatal, and not silent. The new permission is live and the session
-      // has to record it; the old one stays live until it is revoked, and it is
-      // recorded so `session revoke` can still reach it.
-      this.logToStderr(
-        `Warning: the new permission was granted, but revoking the old one failed: ` +
-          `${err instanceof Error ? err.message : String(err)}. It stays live until it expires, and ` +
-          `\`jaw session revoke\` will revoke it.`
-      );
-    } finally {
-      revokeBridge.close();
-    }
-
     const orphans = liveOrphans(session.orphanedPermissions);
+
+    // Written before the revoke is attempted, not after. The union is on chain
+    // by now, and anything that throws between here and the write would leave a
+    // live permission recorded nowhere: `session revoke` could not reach it,
+    // status would not meter it, and the config would still name the old id.
+    // Opening the second bridge is one of the things that can throw, which is
+    // why it is not enough for the revoke request itself to be guarded.
+    //
+    // The old permission goes in as an orphan for the same reason, and comes
+    // back out below once it is actually revoked.
     saveSessionConfig({
       ownerAddress: response.account,
       sessionAddress: session.sessionAddress,
@@ -231,17 +216,37 @@ export default class SessionAdd extends BaseCommand {
         permission ? new Date(permission.start * 1000) : undefined
       ),
       ...(permission ? { permission } : {}),
-      ...(revoked
-        ? orphans.length > 0
-          ? { orphanedPermissions: orphans }
-          : {}
-        : {
-            orphanedPermissions: [
-              { id: session.permissionId, chainId: session.chainId, expiry: session.expiry },
-              ...orphans,
-            ],
-          }),
+      orphanedPermissions: [{ id: session.permissionId, chainId: session.chainId, expiry: session.expiry }, ...orphans],
     });
+
+    let revoked = false;
+    try {
+      const revokeBridge = await getBridge({
+        keysUrl: config.keysUrl,
+        apiKey,
+        chainId: session.chainId,
+        ens: config.ens,
+      });
+      try {
+        await revokeBridge.request('wallet_revokePermissions', [{ id: session.permissionId }]);
+        revoked = true;
+      } finally {
+        revokeBridge.close();
+      }
+    } catch (err) {
+      // Not fatal, and not silent. The new permission is live and recorded; the
+      // old one stays live until it expires, and it is on the orphan list so
+      // `jaw session revoke` can still reach it.
+      this.logToStderr(
+        `Warning: the new permission was granted, but revoking the old one failed: ` +
+          `${err instanceof Error ? err.message : String(err)}. It stays live until it expires, and ` +
+          `\`jaw session revoke\` will revoke it.`
+      );
+    }
+
+    if (revoked) {
+      saveRevokeProgress(loadSessionConfig(), { orphans, ownPermissionRevoked: false });
+    }
 
     if (flags.x402) {
       const unfunded = await whySpenderCannotPay({
