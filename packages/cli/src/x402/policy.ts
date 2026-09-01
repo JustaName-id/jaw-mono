@@ -121,12 +121,15 @@ export function policyFromPermission(permission: GrantedPermission | undefined, 
   const forToken = permission.spends.filter((spend) => spend.token.toLowerCase() === usdc.address.toLowerCase());
   if (forToken.length === 0) return {};
 
-  // Guarded: `toISOString` throws on a start that is not a real timestamp, and
-  // the session file is JSON that a person can edit. Everything else in this
-  // module degrades on bad input rather than taking the command down.
-  const startMs = permission.start * 1000;
-  if (!Number.isFinite(startMs)) return {};
-  const anchor = new Date(startMs).toISOString();
+  // Guarded on the Date, not on the number. `toISOString` throws for a value
+  // outside the Date range, and `parseGrantedPermission` only checks that the
+  // start is a positive integer: 99999999999999 passes that and is finite, and
+  // still raises. The session file is JSON a person can edit, and everything
+  // else in this module degrades on bad input rather than taking the command
+  // down.
+  const start = new Date(permission.start * 1000);
+  if (Number.isNaN(start.getTime())) return {};
+  const anchor = start.toISOString();
   const perPeriod: GrantedPeriodLimit[] = [];
   for (const spend of forToken) {
     let allowance: string;
@@ -216,7 +219,7 @@ export function resolveSessionX402Policy(
  * the on-chain figures, which are matched by allowance too, were then read off
  * the wrong limit.
  */
-function sameLimit(
+export function sameLimit(
   a: { unit: string; multiplier: number; allowance: string },
   b: { unit: string; multiplier: number; allowance: string }
 ): boolean {

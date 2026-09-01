@@ -94,4 +94,21 @@ describe('jaw x402 status, a limit with no usage', () => {
       { allowance: '5000000', unit: 'day', multiplier: 1, used: null, usedFrom: 'unmeasured', resetsAt: null },
     ]);
   });
+
+  /**
+   * The zero an unmeasured limit carries must not reach `diagnose` as if it
+   * were a reading: comparing it against a full cap says "plenty left" about a
+   * figure nobody read.
+   *
+   * The verdict stays ready. A setup whose usage cannot be read is not a broken
+   * setup, and the chain still enforces; what would be wrong is claiming the
+   * allowance is untouched. The report says the figure is unknown in both
+   * renderings, which is the honest version of not knowing.
+   */
+  it('does not let the unknown figure read as an untouched allowance', async () => {
+    const report = JSON.parse((await runStatus(['--output', 'json'])).join('\n'));
+    expect(report.problems).not.toContain(expect.stringMatching(/allowance/));
+    expect(report.policy.perPeriod[0].used).toBeNull();
+    expect(report.ready).toBe(true);
+  });
 });

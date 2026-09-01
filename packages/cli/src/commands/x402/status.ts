@@ -5,7 +5,7 @@ import { isLegacySession, liveOrphans, tryLoadSessionConfig } from '../../lib/se
 import { sessionPayerAddress } from '../../x402/payer.js';
 import { usdcBalance } from '../../x402/balance.js';
 import { sumSpentSince } from '../../x402/ledger.js';
-import { resolveSessionX402Policy } from '../../x402/policy.js';
+import { resolveSessionX402Policy, sameLimit } from '../../x402/policy.js';
 import { currentLimitUsageOnChain } from '../../x402/spend-window.js';
 import { describePeriod } from '../../x402/period.js';
 import { parseBigInt } from '../../x402/amount.js';
@@ -50,10 +50,6 @@ export default class X402Status extends BaseCommand {
     }
 
     const config = loadConfig();
-    // Seeded from the grant, exactly as the paying paths resolve it. Resolving
-    // from config alone reported the 10-USDC default session cap that a
-    // grant-seeded policy deletes, so status promised budget nothing enforced.
-    const policy = resolveSessionX402Policy(config.x402, session);
     const now = Date.now() / 1000;
     const expired = session.expiry <= now;
 
@@ -93,6 +89,13 @@ export default class X402Status extends BaseCommand {
     const current = recovered ? { ...session, permission: recovered } : session;
     const liveness = await readLiveness(current);
 
+    // Resolved from the recovered session, not the one loaded off disk. Seeded
+    // from the grant exactly as the paying paths do: resolving from config
+    // alone reported the 10-USDC default that a grant-seeded policy deletes.
+    // Resolving before the recovery had the same effect on the run that
+    // performed it, which is the run where it matters most.
+    const policy = resolveSessionX402Policy(config.x402, current);
+
     const spent = sumSpentSince(payer, session.createdAt);
 
     const sessionCap = parseBigInt(policy.maxTotalPerSession);
@@ -111,10 +114,7 @@ export default class X402Status extends BaseCommand {
     // no line, no json entry, and a `ready: true` for a session whose grant is
     // the thing bounding it.
     const limits = (policy.perPeriod ?? []).map((limit) => {
-      const measured = usage.find(
-        (entry) =>
-          entry.unit === limit.unit && entry.multiplier === limit.multiplier && entry.allowance === limit.allowance
-      );
+      const measured = usage.find((entry) => sameLimit(entry, limit));
       return (
         measured ?? {
           ...limit,
@@ -162,7 +162,9 @@ export default class X402Status extends BaseCommand {
       // and the top-up is what draws it down, exactly as `topUpCeiling`
       // measures it. Payments lag by whatever float the payer still holds,
       // which kept this check quiet while the grant was already drained.
-      periodSpent: tightest ? tightest.toppedUp : null,
+      // Null, not the zero an unmeasured limit carries: `diagnose` compares it
+      // against the cap, and a figure nobody read is not a measurement of zero.
+      periodSpent: tightest && tightest.endsAt !== null ? tightest.toppedUp : null,
       periodLabel: tightest ? describePeriod(tightest.unit, tightest.multiplier) : null,
       outdated: isLegacySession(session),
       // Same units as the formatted balances. Exact in a double: the reserve

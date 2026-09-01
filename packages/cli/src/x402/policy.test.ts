@@ -440,4 +440,16 @@ describe('per-period cap', () => {
     expect(result.ok).toBe(false);
     expect(result.reason).toContain('invalid allowance from grant');
   });
+
+  /**
+   * `parseGrantedPermission` only checks that the start is a positive integer,
+   * and a positive integer can still be outside the Date range: 99999999999999
+   * passes that check, is finite, and makes `toISOString` raise. Guarding the
+   * number rather than the Date left the crash the guard was added for.
+   */
+  it('returns an empty policy for a start no Date can represent', () => {
+    const wild = { ...permissionWith([{ allowance: '5000000', unit: 'day' }]), start: 99999999999999 };
+    expect(() => policyFromPermission(wild, BASE)).not.toThrow();
+    expect(policyFromPermission(wild, BASE)).toEqual({});
+  });
 });
