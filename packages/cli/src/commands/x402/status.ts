@@ -7,7 +7,7 @@ import { usdcBalance } from '../../x402/balance.js';
 import { sumSpentSince } from '../../x402/ledger.js';
 import { resolveSessionX402Policy } from '../../x402/policy.js';
 import { currentPeriodSpendOnChain } from '../../x402/spend-window.js';
-import { describePeriod } from '../../x402/period.js';
+import { describePeriod, describeSpendPeriod } from '../../x402/period.js';
 import { parseBigInt } from '../../x402/amount.js';
 import { USDC_BY_NETWORK } from '../../x402/asset-registry.js';
 import { gasReserve } from '../../x402/gas-reserve.js';
@@ -106,6 +106,16 @@ export default class X402Status extends BaseCommand {
     const periodCap = parseBigInt(policy.maxPerPeriod);
     const periodLabel = policy.period ? describePeriod(policy.period.unit, policy.period.multiplier) : null;
 
+    // Every other limit the permission puts on the same token. The cap above is
+    // one of several the contract charges, and reporting it alone is what makes
+    // the number look like the whole answer.
+    const otherLimits = (session.permission?.spends ?? []).filter(
+      (spend) =>
+        asset !== undefined &&
+        spend.token.toLowerCase() === asset.address.toLowerCase() &&
+        !(spend.allowance === policy.maxPerPeriod && spend.unit === policy.period?.unit)
+    );
+
     // One verdict for both renderers. `ready` used to be its own expression and
     // drifted from the warnings: a setup whose owner was empty printed a loud
     // "the cap is not applying" and still reported ready:true to a script.
@@ -143,6 +153,17 @@ export default class X402Status extends BaseCommand {
           payer: { address: payer, usdc: payerBalance },
           policy: {
             maxAmountPerPayment: policy.maxAmountPerPayment,
+            // Named so nobody reads `maxPerPeriod` as the whole story: the
+            // contract charges these too, and the tightest binds.
+            ...(otherLimits.length > 0
+              ? {
+                  otherLimitsOnSameToken: otherLimits.map((s) => ({
+                    allowance: s.allowance,
+                    unit: s.unit,
+                    multiplier: s.multiplier,
+                  })),
+                }
+              : {}),
             maxTotalPerSession: policy.maxTotalPerSession,
             maxPerPeriod: policy.maxPerPeriod,
             period: policy.period,
@@ -186,8 +207,16 @@ export default class X402Status extends BaseCommand {
       );
     }
     this.log(`  caps    ${formatUsdc(policy.maxAmountPerPayment, decimals)} per payment`);
-    // The granted cap first: it is the one the chain enforces, and the one a
-    // refusal will quote back.
+    // The granted cap first: it is the one a refusal will quote back.
+    //
+    // It is not necessarily the one the chain enforces, and the line below says
+    // so when it is not alone. `_checkAndIncrementSpend` charges every limit
+    // whose token matches, so all of them apply and the tightest binds at any
+    // moment. `maxPerPeriod` is one number, and the limit it stands for is the
+    // one with the smallest allowance, which answers "what refuses this
+    // payment" and not "what runs out first": 50 a day next to 100 a month
+    // picks the 50 and overstates the month fifteenfold. Rather than choose
+    // better on the reader's behalf, show them the others.
     //
     // The period figure counts top-ups where the session figure counts
     // payments, because the two caps meter different things: `maxPerPeriod`
@@ -206,6 +235,12 @@ export default class X402Status extends BaseCommand {
       const floor = periodSpend?.source === 'chain' ? '' : 'at least ';
       this.log(
         `          ${floor}${formatUsdc(usedThisPeriod.toString(), decimals)} of ${formatUsdc(policy.maxPerPeriod, decimals)} used this ${periodLabel}${resets}`
+      );
+    }
+    for (const other of otherLimits) {
+      this.log(
+        `          and ${formatUsdc(other.allowance, decimals)} per ${describeSpendPeriod(other.unit, other.multiplier)} ` +
+          'on the same token, which also applies'
       );
     }
     this.log(

@@ -95,7 +95,14 @@ beforeAll(async () => {
   oclifConfig = await Config.load({ root: packageRoot });
 });
 
+const ONE_LIMIT = [
+  { token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', allowance: '5000000', unit: 'day', multiplier: 1 },
+];
+
 beforeEach(() => {
+  // The fixture is shared and hoisted, so a test that widens the permission
+  // must not leak into the next one.
+  h.session.permission.spends = ONE_LIMIT.map((s) => ({ ...s }));
   // The base flags read these, and an inherited value would override the argv
   // the tests pass.
   delete process.env.JAW_OUTPUT;
@@ -148,5 +155,34 @@ describe('jaw x402 status', () => {
     const output = (await runStatus([])).join('\n');
     expect(output).toContain('at least 5 USDC of 5 USDC used this day');
     expect(output).toContain('at least 0.1 USDC of unlimited spent this session');
+  });
+
+  /**
+   * The contract charges every limit whose token matches, so the cap on screen
+   * is one of several and the tightest binds. The number that stands for it is
+   * the smallest allowance, which answers "what refuses this payment" rather
+   * than "what runs out first": 50 a day beside 100 a month picks the 50 and
+   * overstates the month fifteenfold. Showing the others is cheaper than
+   * choosing better on the reader's behalf.
+   */
+  it('names the other limits on the same token instead of reporting one as the answer', async () => {
+    h.session.permission.spends = [
+      { token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', allowance: '5000000', unit: 'day', multiplier: 1 },
+      { token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', allowance: '100000000', unit: 'month', multiplier: 1 },
+    ];
+
+    const lines = (await runStatus([])).join('\n');
+    expect(lines).toMatch(/of 5 USDC used this day/);
+    expect(lines).toMatch(/and 100 USDC per month on the same token, which also applies/);
+
+    const report = JSON.parse((await runStatus(['--output', 'json'])).join('\n'));
+    expect(report.policy.otherLimitsOnSameToken).toEqual([{ allowance: '100000000', unit: 'month', multiplier: 1 }]);
+  });
+
+  it('says nothing extra when the token has a single limit', async () => {
+    const lines = (await runStatus([])).join('\n');
+    expect(lines).not.toMatch(/also applies/);
+    const report = JSON.parse((await runStatus(['--output', 'json'])).join('\n'));
+    expect(report.policy).not.toHaveProperty('otherLimitsOnSameToken');
   });
 });
