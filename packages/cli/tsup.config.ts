@@ -27,7 +27,11 @@ export default defineConfig({
     'commands/config/write': 'src/commands/config/write.ts',
     'commands/mcp/index': 'src/commands/mcp/index.ts',
     'commands/rpc/call': 'src/commands/rpc/call.ts',
+    // Commands are the one thing that needs an entry each: oclif loads them
+    // from dist by path at runtime, so a command missing here compiles, tests
+    // green, and does not exist in a published build.
     'commands/session/setup': 'src/commands/session/setup.ts',
+    'commands/session/add': 'src/commands/session/add.ts',
     'commands/session/status': 'src/commands/session/status.ts',
     'commands/session/revoke': 'src/commands/session/revoke.ts',
     'commands/x402/status': 'src/commands/x402/status.ts',
