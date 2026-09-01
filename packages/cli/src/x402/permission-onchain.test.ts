@@ -234,7 +234,8 @@ describe('readCurrentPeriod', () => {
       { ...target, token: USDC },
       {
         manager: MANAGER,
-        readContract: async () => {
+        readContract: async ({ functionName }) => {
+          if (functionName === 'getHash') return PERMISSION_ID;
           throw reverted;
         },
       }
@@ -247,8 +248,39 @@ describe('readCurrentPeriod', () => {
       { ...target, token: USDC },
       {
         manager: MANAGER,
-        readContract: async () => {
+        readContract: async ({ functionName }) => {
+          if (functionName === 'getHash') return PERMISSION_ID;
           throw new Error('fetch failed');
+        },
+      }
+    );
+    expect(result).toEqual({ status: 'unavailable' });
+  });
+
+  /**
+   * `outside-window` names which permission ran out of time, and making that
+   * claim from a struct that identifies no permission is the same mistake as
+   * trusting its spend figure. The hash is checked even when the period read
+   * reverted.
+   */
+  it('does not claim a window for a struct that hashes to a different permission', async () => {
+    const errorAbi = parseAbi(['error JustaPermissionManager_AfterPermissionEnd(uint48 currentTimestamp, uint48 end)']);
+    const reverted = new ContractFunctionRevertedError({
+      abi: errorAbi,
+      data: encodeErrorResult({
+        abi: errorAbi,
+        errorName: 'JustaPermissionManager_AfterPermissionEnd',
+        args: [1_756_700_000, 1_756_604_800],
+      }),
+      functionName: 'getCurrentPeriod',
+    });
+    const result = await readCurrentPeriod(
+      { ...target, token: USDC },
+      {
+        manager: MANAGER,
+        readContract: async ({ functionName }) => {
+          if (functionName === 'getHash') return '0xother';
+          throw reverted;
         },
       }
     );

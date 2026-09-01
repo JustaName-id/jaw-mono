@@ -1,5 +1,6 @@
 import { parseUnits } from 'viem';
 import { parseLimit, type LimitPeriod } from './grant-preset.js';
+import { periodLengthSeconds } from './period.js';
 import { USDC_BY_NETWORK } from './asset-registry.js';
 import { formatUsdc } from './status-report.js';
 import type { PermissionsConfig } from '../lib/types.js';
@@ -23,29 +24,6 @@ import type { PermissionsConfig } from '../lib/types.js';
  *
  * Unset means no ceiling, which is what every install has today.
  */
-
-/** Shortest a period can be, used for the grant's own period. */
-const MIN_SECONDS: Record<LimitPeriod, number> = {
-  minute: 60,
-  hour: 3600,
-  day: 86400,
-  week: 604800,
-  month: 28 * 86400,
-  year: 365 * 86400,
-  forever: Number.POSITIVE_INFINITY,
-};
-
-/** Longest a period can be, used for the ceiling's period. */
-const MAX_SECONDS: Record<LimitPeriod, number> = {
-  ...MIN_SECONDS,
-  month: 31 * 86400,
-  year: 366 * 86400,
-};
-
-function periodSeconds(table: Record<LimitPeriod, number>, unit: string, multiplier: number): number | null {
-  if (!Object.hasOwn(table, unit)) return null;
-  return table[unit as LimitPeriod] * Math.max(1, Math.floor(multiplier));
-}
 
 /**
  * Why the grant is more than the ceiling allows, or null when it is not.
@@ -90,7 +68,7 @@ export function whyGrantExceedsCeiling(
   }
 
   const maxAllowance = parseUnits(parsed.amount, usdc.decimals);
-  const ceilingSeconds = periodSeconds(MAX_SECONDS, parsed.period, 1);
+  const ceilingSeconds = periodLengthSeconds(parsed.period, 1, 'max');
   if (ceilingSeconds === null) return null;
 
   for (const spend of permissions.spends ?? []) {
@@ -112,7 +90,7 @@ export function whyGrantExceedsCeiling(
       return `This grant asks for ${formatUsdc(allowance.toString(), usdc.decimals)} per period, over the ${ceiling} ceiling set on this machine. Lower it, or raise the ceiling with \`jaw config set grantCeiling <amount>/<period>\`.`;
     }
 
-    const grantSeconds = periodSeconds(MIN_SECONDS, spend.unit, spend.multiplier ?? 1);
+    const grantSeconds = periodLengthSeconds(spend.unit, spend.multiplier ?? 1, 'min');
     if (grantSeconds === null) {
       return `This permission uses a spend period this CLI does not recognise: ${spend.unit}.`;
     }
@@ -125,14 +103,15 @@ export function whyGrantExceedsCeiling(
     // same unit runs at least as long as it.
     const sameUnit = spend.unit === parsed.period;
     if (!sameUnit && grantSeconds < ceilingSeconds) {
-      return `This grant resets its allowance every ${describe(spend.unit, spend.multiplier ?? 1)}, which is more often than the ${ceiling} ceiling set on this machine allows. A shorter period is more money over the same time, even at the same allowance.`;
+      return `This grant resets its allowance every ${describeSpendPeriod(spend.unit, spend.multiplier ?? 1)}, which is more often than the ${ceiling} ceiling set on this machine allows. A shorter period is more money over the same time, even at the same allowance.`;
     }
   }
 
   return null;
 }
 
-function describe(unit: string, multiplier: number): string {
+/** `describePeriod` takes the contract's units; a grant may also say `year`. */
+function describeSpendPeriod(unit: string, multiplier: number): string {
   const n = Math.max(1, Math.floor(multiplier));
   return n === 1 ? unit : `${n} ${unit}s`;
 }

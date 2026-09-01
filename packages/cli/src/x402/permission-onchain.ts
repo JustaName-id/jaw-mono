@@ -292,8 +292,8 @@ export async function readCurrentPeriod(
     // that would drop the "at least" from a number never read for this
     // permission, and hand the payment path a window that can be later than the
     // real one, which lets a payment the period cap should refuse through.
-    const [hash, period] = (await within(
-      Promise.all([
+    const [hashed, read2] = (await within(
+      Promise.allSettled([
         read({ address, abi: PERMISSION_MANAGER_ABI, functionName: 'getHash', args: [permission] }),
         read({
           address,
@@ -303,10 +303,20 @@ export async function readCurrentPeriod(
         }),
       ]),
       deps.timeoutMs
-    )) as [unknown, { start: number; end: number; spend: bigint } | undefined];
+    )) as [PromiseSettledResult<unknown>, PromiseSettledResult<unknown>];
+
+    // Settled rather than raced, so the hash is checked even when the period
+    // read reverted. `outside-window` is a positive claim about which permission
+    // ran out of time, and making it from a struct that identifies no permission
+    // is the same mistake as trusting its spend figure.
+    const hash = hashed.status === 'fulfilled' ? hashed.value : null;
     if (typeof hash !== 'string' || hash.toLowerCase() !== target.permissionId.toLowerCase()) {
       return { status: 'unavailable' };
     }
+    if (read2.status === 'rejected') {
+      return isTimeBoundRevert(read2.reason) ? { status: 'outside-window' } : { status: 'unavailable' };
+    }
+    const period = read2.value as { start: number; end: number; spend: bigint } | undefined;
     if (!period) return { status: 'unavailable' };
     return { status: 'ok', start: Number(period.start), end: Number(period.end), spend: BigInt(period.spend) };
   } catch (err) {

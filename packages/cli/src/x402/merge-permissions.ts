@@ -1,4 +1,5 @@
 import { toFunctionSelector } from 'viem';
+import { periodLengthSeconds } from './period.js';
 import type { GrantedPermission } from '../lib/session-config.js';
 import type { PermissionsConfig } from '../lib/types.js';
 
@@ -44,23 +45,35 @@ function safeSelector(signature: string): string | undefined {
 }
 
 /**
- * A limit is about a token, and adding one for a token replaces whatever that
- * token had.
+ * A limit is superseded by one that meters the same token over the same window,
+ * and only by that.
  *
- * Not per window, which is what this keyed on first. `_checkAndIncrementSpend`
- * walks every limit whose token matches and charges each one
- * (`JustaPermissionManager.sol:1062`, "Don't break, continue checking all
- * limits for this token"), so limits on one token are ANDed and the effective
- * cap is the tightest of them. Appending a `10/day` beside an existing `1/week`
- * therefore grants nothing: the session still cannot move more than 1 a week,
- * while the summary claims a raise and the local policy reads the old figure.
+ * Keying on the token alone was worse in the other direction: a session holding
+ * a monthly budget and a daily one, taking `add --x402` with no `--limit`,
+ * dropped both for the preset's default. A command whose whole promise is to
+ * add without taking away removed a cap the request never mentioned, and the
+ * ceiling cannot catch it, since it compares one entry at a time.
  *
- * Replacing is also what the request means. `session add --x402 --limit 10/day`
- * names the budget for that token, and the browser screen shows the scope that
- * results before anyone approves it.
+ * What the remaining windows do to each other is real but not this function's
+ * to resolve, and `describeMerge` says it out loud:
+ * `_checkAndIncrementSpend` charges every limit whose token matches rather than
+ * stopping at the first (`JustaPermissionManager.sol:1069`, "Don't break,
+ * continue checking all limits for this token"), so limits on one token are
+ * ANDed and the tightest binds.
  */
+function spendKey(spend: { token: string; unit: string; multiplier?: number }): string {
+  return `${spend.token.toLowerCase()}:${spend.unit}:${spend.multiplier ?? 1}`;
+}
+
 function tokenKey(spend: { token: string }): string {
   return spend.token.toLowerCase();
+}
+
+/** Base units per second, or null when the period has no finite length to divide by. */
+function rate(spend: { allowance: string; unit: string; multiplier?: number }): number | null {
+  const seconds = periodLengthSeconds(spend.unit, spend.multiplier ?? 1, 'min');
+  if (seconds === null || seconds === Number.POSITIVE_INFINITY) return null;
+  return Number(BigInt(spend.allowance)) / seconds;
 }
 
 export function mergePermissions(existing: GrantedPermission, addition: PermissionsConfig): PermissionsConfig {
@@ -78,11 +91,9 @@ export function mergePermissions(existing: GrantedPermission, addition: Permissi
     calls.push(call);
   }
 
-  // Every token the addition names, so the existing limits on those tokens can
-  // be dropped rather than ANDed with the new one.
-  const replaced = new Set((addition.spends ?? []).map(tokenKey));
+  const superseded = new Set((addition.spends ?? []).map(spendKey));
   const spends = existing.spends
-    .filter((spend) => !replaced.has(tokenKey(spend)))
+    .filter((spend) => !superseded.has(spendKey(spend)))
     .map((spend) => ({
       token: spend.token,
       // Normalised out of the hex the grant response carries, so the merged
@@ -119,25 +130,44 @@ export function describeMerge(existing: GrantedPermission, merged: PermissionsCo
     lines.push(`  + call    ${call.target} ${call.selector ?? call.functionSignature ?? ''}`.trimEnd());
   }
 
-  // Reported per token, because that is the unit a limit is replaced in. A
-  // window that goes away has to be shown: dropping a 1-a-week limit while
-  // adding 10 a day is the whole change on chain, and printing only the
-  // addition would read as a raise on top of a cap that is still there.
-  const describeSpend = (spend: { allowance: string; unit: string; multiplier?: number }) =>
-    `${spend.allowance} per ${describe(spend.unit, spend.multiplier ?? 1)}`;
-  for (const token of new Set((merged.spends ?? []).map(tokenKey))) {
-    const was = existing.spends.filter((spend) => tokenKey(spend) === token);
-    const now = (merged.spends ?? []).filter((spend) => tokenKey(spend) === token);
-    const wasText = was.map((s) => describeSpend({ ...s, allowance: BigInt(s.allowance).toString() })).join(', ');
-    const nowText = now.map(describeSpend).join(', ');
-    if (wasText === nowText) continue;
-    lines.push(was.length === 0 ? `  + spend   ${token} ${nowText}` : `  ~ spend   ${token} ${wasText} to ${nowText}`);
+  const had = new Map(existing.spends.map((spend) => [spendKey(spend), BigInt(spend.allowance)]));
+  const changed: Array<{ token: string; allowance: string; unit: string; multiplier?: number }> = [];
+  for (const spend of merged.spends ?? []) {
+    const was = had.get(spendKey(spend));
+    const now = BigInt(spend.allowance);
+    if (was === undefined) {
+      lines.push(`  + spend   ${spend.allowance} of ${spend.token} per ${label(spend)}`);
+      changed.push(spend);
+    } else if (was !== now) {
+      lines.push(`  ~ spend   ${spend.token} per ${label(spend)}: ${was} to ${now}`);
+      changed.push(spend);
+    }
+  }
+
+  // The limit that will actually bind, when it is not the one being asked for.
+  // Every limit on a token is charged, so a new 10-a-day beside an untouched
+  // 1-a-week leaves the session unable to move more than 1 a week, and a
+  // summary listing only the addition would read as a raise that is not going
+  // to happen.
+  for (const spend of changed) {
+    const asked = rate(spend);
+    if (asked === null) continue;
+    for (const other of merged.spends ?? []) {
+      if (other === spend || tokenKey(other) !== tokenKey(spend)) continue;
+      const kept = rate(other);
+      if (kept !== null && kept < asked) {
+        lines.push(
+          `  ! note    ${other.allowance} per ${label(other)} on the same token still applies and is ` +
+            'tighter, so that is the one that will bind'
+        );
+      }
+    }
   }
 
   return lines;
 }
 
-function describe(unit: string, multiplier: number): string {
-  const n = Math.max(1, Math.floor(multiplier));
-  return n === 1 ? unit : `${n} ${unit}s`;
+function label(spend: { unit: string; multiplier?: number }): string {
+  const n = Math.max(1, Math.floor(spend.multiplier ?? 1));
+  return n === 1 ? spend.unit : `${n} ${spend.unit}s`;
 }

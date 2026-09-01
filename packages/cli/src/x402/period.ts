@@ -134,3 +134,30 @@ export function describePeriod(unit: PeriodUnit, multiplier?: number): string {
   if (unit === 'forever') return 'the whole permission';
   return n === 1 ? unit : `${n} ${unit}s`;
 }
+
+/**
+ * How long one period lasts in seconds, at its shortest or its longest.
+ *
+ * Two bounds because a calendar month is 28 to 31 days and a year 365 or 366,
+ * and which end to take depends on which side of a comparison the period is on:
+ * measuring a grant at its shortest and a ceiling at its longest keeps the
+ * rounding from opening either one up. `year` is here even though the contract
+ * has no such unit, because a grant may be written with it and the SDK rewrites
+ * it to months before encoding.
+ *
+ * Returns null for a unit with no meaning, which callers treat as "cannot be
+ * compared" rather than guessing a length.
+ */
+export function periodLengthSeconds(unit: string, multiplier: number, bound: 'min' | 'max'): number | null {
+  const lengths: Record<string, number> = {
+    minute: 60,
+    hour: 3600,
+    day: 86400,
+    week: 604800,
+    month: (bound === 'min' ? 28 : 31) * 86400,
+    year: (bound === 'min' ? 365 : 366) * 86400,
+    forever: Number.POSITIVE_INFINITY,
+  };
+  if (!Object.hasOwn(lengths, unit)) return null;
+  return lengths[unit] * Math.max(1, Math.floor(multiplier));
+}

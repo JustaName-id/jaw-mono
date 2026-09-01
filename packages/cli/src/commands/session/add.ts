@@ -199,13 +199,13 @@ export default class SessionAdd extends BaseCommand {
     //
     // The old permission goes in as an orphan for the same reason, and comes
     // back out below once it is actually revoked.
-    saveSessionConfig({
+    const updated = {
       ownerAddress: response.account,
       sessionAddress: session.sessionAddress,
       permissionId: response.permissionId,
       chainId: session.chainId,
       expiry: session.expiry,
-      mode: 'eip7702',
+      mode: 'eip7702' as const,
       // Kept, not restamped: it is what the session spend total is counted
       // from, and adding a capability must not hand the session cap a clean
       // slate.
@@ -217,7 +217,8 @@ export default class SessionAdd extends BaseCommand {
       ),
       ...(permission ? { permission } : {}),
       orphanedPermissions: [{ id: session.permissionId, chainId: session.chainId, expiry: session.expiry }, ...orphans],
-    });
+    };
+    saveSessionConfig(updated);
 
     let revoked = false;
     try {
@@ -245,7 +246,11 @@ export default class SessionAdd extends BaseCommand {
     }
 
     if (revoked) {
-      saveRevokeProgress(loadSessionConfig(), { orphans, ownPermissionRevoked: false });
+      // The object just written, not a re-read of the file. Reading it back
+      // would throw here if another terminal had removed the session in
+      // between, after both the grant and the revoke had already succeeded, and
+      // would clobber whatever that process wrote.
+      saveRevokeProgress({ ...updated, createdAt: session.createdAt }, { orphans, ownPermissionRevoked: false });
     }
 
     if (flags.x402) {

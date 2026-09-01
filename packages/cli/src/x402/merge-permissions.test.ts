@@ -65,18 +65,21 @@ describe('mergePermissions', () => {
   });
 
   /**
-   * The contract charges every limit whose token matches and does not stop at
-   * the first, so limits on one token are ANDed and the tightest wins. Appending
-   * a 10-a-day beside an existing 1-a-week would grant nothing while the summary
-   * claimed a raise, so a limit named for a token replaces what that token had.
+   * Only the same window is superseded. Keying on the token alone dropped caps
+   * the request never mentioned: a session holding a monthly budget and a daily
+   * one, taking `add --x402` with no `--limit`, lost both to the preset's
+   * default, from a command whose promise is to add without taking away.
    */
-  it('replaces a limit on the same token even when the window differs', () => {
+  it('keeps a limit on the same token over a different window', () => {
     const existing: GrantedPermission = {
       ...EXISTING,
       spends: [{ token: USDC, allowance: '1000000', unit: 'week', multiplier: 1 }],
     };
     const merged = mergePermissions(existing, buildX402Permissions(84532, '10/day'));
-    expect(merged.spends).toEqual([{ token: USDC, allowance: '10000000', unit: 'day', multiplier: 1 }]);
+    expect(merged.spends).toEqual([
+      { token: USDC, allowance: '1000000', unit: 'week', multiplier: 1 },
+      { token: USDC, allowance: '10000000', unit: 'day', multiplier: 1 },
+    ]);
   });
 
   it('leaves a limit on a token the addition does not name', () => {
@@ -105,7 +108,7 @@ describe('describeMerge', () => {
     const merged = mergePermissions(EXISTING, buildX402Permissions(84532, '10/day'));
     const lines = describeMerge(EXISTING, merged).join('\n');
     expect(lines).toMatch(/\+ call\s+0x036CbD/);
-    expect(lines).toMatch(/\+ spend\s+0x036cbd\S* 10000000 per day/);
+    expect(lines).toMatch(/\+ spend\s+10000000 of 0x036CbD/);
     expect(lines).not.toMatch(new RegExp(MINT));
   });
 
@@ -116,7 +119,7 @@ describe('describeMerge', () => {
       spends: [{ token: USDC, allowance: '5000000', unit: 'day', multiplier: 1 }],
     };
     const lines = describeMerge(existing, mergePermissions(existing, buildX402Permissions(84532, '10/day'))).join('\n');
-    expect(lines).toMatch(/~ spend .*5000000 per day to 10000000 per day/);
+    expect(lines).toMatch(/~ spend .*per day: 5000000 to 10000000/);
   });
 
   // What `session add` checks to decide there is nothing to do.
@@ -151,5 +154,30 @@ describe('describeMerge', () => {
     const merged = mergePermissions(EXISTING, { calls: [{ target: NFT, selector: '0xdeadbeef' }] });
     expect(merged.spends).toBeUndefined();
     expect(merged.calls).toHaveLength(2);
+  });
+
+  /**
+   * Every limit on a token is charged, so a new 10-a-day beside an untouched
+   * 1-a-week leaves the session unable to move more than 1 a week. A summary
+   * that listed only the addition would read as a raise that is not going to
+   * happen.
+   */
+  it('says which limit will actually bind when the one kept is tighter', () => {
+    const existing: GrantedPermission = {
+      ...EXISTING,
+      spends: [{ token: USDC, allowance: '1000000', unit: 'week', multiplier: 1 }],
+    };
+    const lines = describeMerge(existing, mergePermissions(existing, buildX402Permissions(84532, '10/day'))).join('\n');
+    expect(lines).toMatch(/\+ spend\s+10000000/);
+    expect(lines).toMatch(/! note\s+1000000 per week on the same token still applies and is tighter/);
+  });
+
+  it('stays quiet when the limit being added is the one that binds', () => {
+    const existing: GrantedPermission = {
+      ...EXISTING,
+      spends: [{ token: USDC, allowance: '100000000', unit: 'month', multiplier: 1 }],
+    };
+    const lines = describeMerge(existing, mergePermissions(existing, buildX402Permissions(84532, '1/day'))).join('\n');
+    expect(lines).not.toMatch(/! note/);
   });
 });
