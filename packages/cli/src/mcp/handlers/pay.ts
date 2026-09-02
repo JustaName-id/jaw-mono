@@ -222,17 +222,30 @@ export function registerPayTool(server: McpServer): void {
     },
     async (params: { network?: string }) => {
       try {
-        const config = loadConfig();
+        // Before the network, so an install with no key at all gets the
+        // clearer of the two refusals rather than one about a missing network.
+        const payer = sessionPayerAddress();
         const session = tryLoadSessionConfig();
         // The payer's float lives where the session does: a top-up refuses to
         // run on any other chain, so a default read off config answered for
         // Base mainnet on a Base Sepolia session and reported a funded payer as
-        // empty. Config is the fallback for a session key with no session file
-        // beside it.
-        const network =
-          params.network ??
-          (session ? `eip155:${session.chainId}` : (config.x402?.allowedNetworks?.[0] ?? 'eip155:8453'));
-        const payer = sessionPayerAddress();
+        // empty.
+        //
+        // With no session there is nothing to default to, and this tool's own
+        // description says it needs one. The fallback that used to sit here
+        // walked `allowedNetworks` and then Base, which reads a payment
+        // allowlist as if it named a home chain, and that reading is what
+        // produced the Base answer in the first place. So it refuses and says
+        // which two ways forward exist. An explicit `network` still answers,
+        // which is what a key still holding a balance after its session went
+        // away needs.
+        const network = params.network ?? (session ? `eip155:${session.chainId}` : undefined);
+        if (!network) {
+          throw new Error(
+            'No session, so there is no network to read the balance on. Run `jaw session setup`, ' +
+              'or pass `network` to read a leftover balance on a specific chain.'
+          );
+        }
         return mcpResult({ payer, ...(await usdcBalance(network, payer)) });
       } catch (err) {
         return mcpError(err);

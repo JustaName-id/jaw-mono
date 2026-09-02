@@ -371,6 +371,36 @@ describe('jaw_x402_balance', () => {
     expect(usdcBalanceMock.mock.calls[0][0]).toBe('eip155:84532');
   });
 
+  // The tool's description says it needs a session, and it used to answer
+  // anyway: no session file fell through to config's `allowedNetworks` and then
+  // to Base, so an agent got a confident balance for a chain nobody named.
+  it('refuses to guess a network when there is no session', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    saveKeystore('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d', '0xSessionAddr');
+    saveConfig({ x402: { allowedNetworks: ['eip155:8453'] } });
+    usdcBalanceMock.mockReset();
+
+    const client = await connectClient();
+    const result = await client.callTool({ name: 'jaw_x402_balance', arguments: {} });
+
+    expect(usdcBalanceMock).not.toHaveBeenCalled();
+    expect(toolText(result)).toContain('jaw session setup');
+  });
+
+  // The recovery case the removed fallback was there for: a key still holding a
+  // balance after its session went away is readable by naming the chain.
+  it('reads an explicit network with no session at all', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    saveKeystore('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d', '0xSessionAddr');
+    usdcBalanceMock.mockReset();
+    usdcBalanceMock.mockResolvedValue({ raw: '0', formatted: '0' });
+
+    const client = await connectClient();
+    await client.callTool({ name: 'jaw_x402_balance', arguments: { network: 'eip155:84532' } });
+
+    expect(usdcBalanceMock.mock.calls[0][0]).toBe('eip155:84532');
+  });
+
   it('still takes an explicit network over the session one', async () => {
     const { saveKeystore } = await import('../lib/keystore.js');
     const { saveSessionConfig } = await import('../lib/session-config.js');
