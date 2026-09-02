@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { payAndFetch } from './http.js';
+import { settledAmountOf, payAndFetch } from './http.js';
+import { buildUptoPayment } from './scheme-upto-evm.js';
+import { X402_UPTO_PROXY_ADDRESS } from './permit2.js';
 import type { Payer } from './payer.js';
 import type { X402PaymentPayload, X402PaymentRequirement } from './types.js';
 
@@ -298,6 +300,28 @@ describe('payAndFetch', () => {
 
     expect(result.paid).toBe(true);
     expect(result.topUp).toEqual({ amount: '750000', batchId: '0xbatch1' });
+  });
+
+  /**
+   * The Permit2 approval is a userOp charged to the payer's USDC and it can run
+   * with no top-up beside it, when the balance already covered the price. Gated
+   * on `skipped` it reached neither the result nor the ledger, so a payment the
+   * user paid gas for left no trace at all.
+   */
+  it('surfaces a Permit2 approval that ran even when no principal had to move', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+      .mockResolvedValueOnce(
+        mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receiptHeader }, body: JSON.stringify({ data: 'ok' }) })
+      );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, {
+      ensureFunds: async () => ({ ok: true, skipped: true, approvalBatchId: '0xapproval1' }),
+    });
+
+    expect(result.paid).toBe(true);
+    expect(result.topUp).toBeUndefined();
+    expect(result.permit2Approval).toEqual({ batchId: '0xapproval1' });
   });
 
   it('surfaces a signing failure after a top-up as a structured refusal carrying the top-up trace', async () => {
@@ -725,5 +749,312 @@ describe('payAndFetch, when the response to a signed payment never arrives', () 
     // The nonce is the only way to reconcile an authorization the facilitator
     // may still have broadcast.
     expect(result.attemptedPayment).toBeDefined();
+  });
+});
+
+/**
+ * The ceiling and the charge are the same number under `exact` and different
+ * ones under `upto`, so the result carries both. What a cap counts then depends
+ * on which of the two, and on whether the payment settled.
+ */
+describe('payAndFetch spend figures', () => {
+  it('records the ceiling it authorized alongside what it paid', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+      .mockResolvedValueOnce(
+        mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receiptHeader }, body: JSON.stringify({ data: 'ok' }) })
+      );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    expect(result.payment?.authorized).toBe('1000');
+    // Recoverable from the ledger later: an ambiguous settlement is reconciled
+    // by proving the nonce went unused before this passed.
+    expect(result.payment?.deadline).toBeTruthy();
+  });
+
+  it('ignores a receipt that claims a smaller charge than the exact scheme signed', async () => {
+    // The authorization moved 1000 whatever the server says afterwards. Reading
+    // this figure would let it talk our own spend caps down for free.
+    const lyingReceipt = b64({ success: true, transaction: RECEIPT_TX, amount: '1' });
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+      .mockResolvedValueOnce(
+        mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': lyingReceipt }, body: JSON.stringify({ data: 'ok' }) })
+      );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    expect(result.payment?.amount).toBe('1000');
+    expect(result.payment?.authorized).toBe('1000');
+  });
+
+  it('carries the ceiling on an attempt whose settlement failed', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+      .mockResolvedValueOnce(mockRes({ status: 500, headers: {}, body: '{}' }));
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    expect(result.paid).toBe(false);
+    expect(result.attemptedPayment?.authorized).toBe('1000');
+  });
+
+  it('reports no nonce or deadline on a dry run, since nothing was signed', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' })
+    );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, { dryRun: true });
+
+    expect(result.wouldPay).toMatchObject({ amount: '1000', authorized: '1000' });
+    expect(result.wouldPay).not.toHaveProperty('nonce');
+    expect(result.wouldPay).not.toHaveProperty('deadline');
+  });
+});
+
+/**
+ * What a server may and may not do to the figure the caps count.
+ *
+ * The dangerous shape is a 200 with `success: true` and a charge of nothing: no
+ * proxy call, no settlement, and the cumulative caps never move while the
+ * authorization stays live and spendable until its deadline. Repeat that and the
+ * only bound left is the per-payment cap, applied an unlimited number of times.
+ */
+describe('settledAmountOf', () => {
+  const TX = ('0x' + 'ab'.repeat(32)) as `0x${string}`;
+  const ceiling = '5000000';
+
+  it('reads the settled figure from a receipt that claims a settlement', () => {
+    expect(settledAmountOf({ success: true, transaction: TX, amount: '40' }, 'upto', ceiling)).toBe('40');
+  });
+
+  /**
+   * Locked in as a known limit, not as a guarantee. The hash is shape-checked
+   * and never looked up, so a server that fabricates 64 hex characters can
+   * report one base unit against the ceiling and keep a live authorization for
+   * the rest until the deadline. What bounds that is the on-chain permission,
+   * not this function; closing it needs the amount checked against the
+   * transaction the receipt names.
+   */
+  it('cannot tell a real transaction from 64 hex characters', () => {
+    const invented = ('0x' + 'f'.repeat(64)) as `0x${string}`;
+    expect(settledAmountOf({ success: true, transaction: invented, amount: '1' }, 'upto', ceiling)).toBe('1');
+  });
+
+  it('refuses to come down for a receipt that names no transaction', () => {
+    expect(settledAmountOf({ success: true, amount: '0' }, 'upto', ceiling)).toBe(ceiling);
+  });
+
+  it('refuses to come down for a receipt that does not claim success', () => {
+    expect(settledAmountOf({ success: false, transaction: TX, amount: '0' }, 'upto', ceiling)).toBe(ceiling);
+  });
+
+  it('refuses to come down for a malformed transaction hash', () => {
+    expect(
+      settledAmountOf({ success: true, transaction: '0xnope' as `0x${string}`, amount: '0' }, 'upto', ceiling)
+    ).toBe(ceiling);
+  });
+
+  it('falls back to the ceiling when the receipt omits the amount', () => {
+    expect(settledAmountOf({ success: true, transaction: TX }, 'upto', ceiling)).toBe(ceiling);
+  });
+
+  it('clamps a receipt claiming more than was authorized', () => {
+    expect(settledAmountOf({ success: true, transaction: TX, amount: '9999999' }, 'upto', ceiling)).toBe(ceiling);
+  });
+
+  it('never reads the receipt at all under exact, where the amount was fixed', () => {
+    expect(settledAmountOf({ success: true, transaction: TX, amount: '1' }, 'exact', '1000')).toBe('1000');
+  });
+
+  it('falls back to the ceiling when there is no receipt', () => {
+    expect(settledAmountOf(null, 'upto', ceiling)).toBe(ceiling);
+  });
+});
+
+/**
+ * A server may offer both schemes at once. What the client minimises then is not
+ * what it expects to pay, it is what it authorizes: an agent cannot predict its
+ * own consumption, and a signature is worth its ceiling to anyone holding it.
+ */
+describe('choosing between schemes', () => {
+  // Carries the facilitator every payable upto challenge has; checkPolicy
+  // skips the option without one, exactly so the signer never sees it.
+  const upto = (amount: string) => ({
+    ...REQUIREMENT,
+    scheme: 'upto',
+    amount,
+    extra: { facilitatorAddress: '0x1111111111111111111111111111111111111111' },
+  });
+  const exact = (amount: string) => ({ ...REQUIREMENT, scheme: 'exact', amount });
+  const challengeOf = (...accepts: unknown[]) => b64({ x402Version: 2, resource: { url: URL_UNDER_TEST }, accepts });
+
+  const chosen = async (...accepts: unknown[]) => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeOf(...accepts) }, body: '{}' })
+    );
+    const result = await payAndFetch(URL_UNDER_TEST, payer, { dryRun: true });
+    return result.wouldPay;
+  };
+
+  /**
+   * Every other refusal over this number says "up to" for an `upto` option. The
+   * `--max-amount` one used to print the ceiling bare, which is the one
+   * confusion the scheme has to avoid: a ceiling read as a price makes a five
+   * dollar authorization on a service charging a fraction of a cent look like a
+   * five dollar charge.
+   */
+  it('names a refused ceiling as a ceiling, --max-amount included', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeOf(upto('5000000')) }, body: '{}' })
+    );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, { maxAmount: '1000000' });
+
+    expect(result.refusedReason).toContain('amount up to 5000000 exceeds maxAmount');
+  });
+
+  it('takes the smaller figure whichever scheme carries it', async () => {
+    expect(await chosen(exact('900'), upto('400'))).toMatchObject({ amount: '400' });
+    expect(await chosen(upto('900'), exact('400'))).toMatchObject({ amount: '400' });
+  });
+
+  /** What the payer was actually asked to sign, which is where the scheme shows. */
+  const signed = async (...accepts: unknown[]) => {
+    const seen: X402PaymentRequirement[] = [];
+    const spy: Payer = {
+      address: payer.address,
+      pay: async (requirement) => {
+        seen.push(requirement);
+        return payer.pay(requirement);
+      },
+    };
+    fetchMock
+      .mockResolvedValueOnce(
+        mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeOf(...accepts) }, body: '{}' })
+      )
+      .mockResolvedValueOnce(mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receiptHeader }, body: '{}' }));
+    await payAndFetch(URL_UNDER_TEST, spy);
+    return seen[0];
+  };
+
+  it('breaks a tie toward the fixed price, whatever order they arrive in', async () => {
+    // Equal figures mean different things: one is what will be charged, the
+    // other only a bound on it. A server must not be able to dangle a matching
+    // ceiling to move us onto the larger authorization.
+    expect((await signed(upto('1000'), exact('1000'))).scheme).toBe('exact');
+    expect((await signed(exact('1000'), upto('1000'))).scheme).toBe('exact');
+  });
+
+  it('does sign the upto option when it is the only one', async () => {
+    expect((await signed(upto('1000'))).scheme).toBe('upto');
+  });
+
+  it('still refuses a scheme it cannot sign', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({
+        status: 402,
+        headers: { 'PAYMENT-REQUIRED': challengeOf({ ...REQUIREMENT, scheme: 'permit2-batch' }) },
+        body: '{}',
+      })
+    );
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+    expect(result.paid).toBe(false);
+    expect(result.refusedReason).toContain('unsupported scheme');
+  });
+});
+
+/**
+ * The whole `upto` loop on the client side, in the shape a live settlement
+ * actually took on Base Sepolia: a ceiling quoted, a permit signed for it, and
+ * a receipt reporting a charge far below it.
+ *
+ * The payer here is the real builder rather than the stub the other tests use,
+ * so what the server receives is the payload that settled on chain.
+ */
+describe('payAndFetch against an upto endpoint', () => {
+  const CEILING = '100000';
+  const SETTLED = '1234';
+  const FACILITATOR = '0x1111111111111111111111111111111111111111';
+  const SEPOLIA_USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+
+  const uptoRequirement: X402PaymentRequirement = {
+    scheme: 'upto',
+    network: 'eip155:84532',
+    amount: CEILING,
+    asset: SEPOLIA_USDC,
+    payTo: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+    maxTimeoutSeconds: 120,
+    extra: { name: 'USDC', version: '2', facilitatorAddress: FACILITATOR },
+  };
+
+  const uptoPayer: Payer = {
+    address: '0x0000000000000000000000000000000000000001',
+    pay: (requirement) =>
+      buildUptoPayment(requirement, '0x0000000000000000000000000000000000000001', async () => '0xsig', {
+        now: 1_000_000,
+        nonce: ('0x' + '11'.repeat(32)) as `0x${string}`,
+      }),
+  };
+
+  it('signs the ceiling, is charged less, and reports both', async () => {
+    const challenge = b64({ x402Version: 2, resource: { url: URL_UNDER_TEST }, accepts: [uptoRequirement] });
+    const receipt = b64({
+      success: true,
+      transaction: RECEIPT_TX,
+      network: 'eip155:84532',
+      amount: SETTLED,
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challenge }, body: '{}' }))
+      .mockResolvedValueOnce(
+        mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receipt }, body: JSON.stringify({ data: 'ok' }) })
+      );
+
+    let fundedFor: string | undefined;
+    const result = await payAndFetch(URL_UNDER_TEST, uptoPayer, {
+      ensureFunds: async (req) => {
+        // The funder sizes against the ceiling, since that is what settlement
+        // may take, not against a charge nobody knows yet.
+        fundedFor = req.amount;
+        return { ok: true, skipped: true };
+      },
+    });
+
+    expect(fundedFor).toBe(CEILING);
+    expect(result.paid).toBe(true);
+    expect(result.body).toEqual({ data: 'ok' });
+    // What the caps count, and what the ledger will reconcile against.
+    expect(result.payment?.amount).toBe(SETTLED);
+    expect(result.payment?.authorized).toBe(CEILING);
+    expect(result.payment?.txHash).toBe(RECEIPT_TX);
+    // The server asked for 120s; the floor holds it open for ten minutes, since
+    // settlement has to be mined and not merely submitted.
+    expect(result.payment?.deadline).toBe(String(1_000_000 + 600));
+
+    // The proof the server received is a Permit2 authorization for the ceiling,
+    // pointed at the pinned proxy and nowhere else.
+    const retry = fetchMock.mock.calls[1][1] as { headers: Record<string, string> };
+    const sent = JSON.parse(Buffer.from(retry.headers['PAYMENT-SIGNATURE'], 'base64').toString());
+    expect(sent.payload.permit2Authorization.permitted.amount).toBe(CEILING);
+    expect(sent.payload.permit2Authorization.spender).toBe(X402_UPTO_PROXY_ADDRESS);
+    expect(sent.payload.permit2Authorization.witness.facilitator).toBe(FACILITATOR);
+  });
+
+  it('holds the ceiling when the server never says it settled', async () => {
+    const challenge = b64({ x402Version: 2, resource: { url: URL_UNDER_TEST }, accepts: [uptoRequirement] });
+    // Success with no transaction: nothing evidences a settlement, so the
+    // charge cannot come down and the server spends its own budget.
+    const hollow = b64({ success: true, amount: '0' });
+
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challenge }, body: '{}' }))
+      .mockResolvedValueOnce(mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': hollow }, body: '{}' }));
+
+    const result = await payAndFetch(URL_UNDER_TEST, uptoPayer);
+
+    expect(result.payment?.amount).toBe(CEILING);
   });
 });

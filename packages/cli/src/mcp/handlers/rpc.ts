@@ -51,10 +51,11 @@ export function registerRpcTool(server: McpServer): void {
     recentSends.push(now);
   }
 
-  // Through an explicit signature, like `jaw_config_set` and `jaw_discover`.
-  // The SDK's registerTool inference over this schema is deep enough that
-  // adding anything to this file tips it over, and it surfaces as a type error
-  // on the schema rather than anywhere near the code that caused it.
+  // Same explicit signature the other tools use. This one carried a
+  // `@ts-expect-error` on the handler instead, which stopped covering anything
+  // once the error moved to the schema argument: the directive then reports
+  // itself as unused, which is the failure mode that made the cast the house
+  // pattern in the first place.
   type RegisterRpc = (
     name: string,
     config: { description: string; inputSchema: typeof rpcMethodSchema },

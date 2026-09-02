@@ -76,6 +76,11 @@ describe('buildExactPayment', () => {
     expect(recovered.toLowerCase()).toBe(account.address.toLowerCase());
   });
 
+  it('refuses a zero recipient the policy would have skipped', async () => {
+    const zero = { ...requirement, payTo: `0x${'0'.repeat(40)}` as `0x${string}` };
+    await expect(buildExactPayment(zero, account.address, signer)).rejects.toThrow(/zero address/);
+  });
+
   it('rejects an unsupported network', async () => {
     await expect(buildExactPayment({ ...requirement, network: 'eip155:1' }, account.address, signer)).rejects.toThrow(
       /Unsupported x402 network/
@@ -87,6 +92,38 @@ describe('buildExactPayment', () => {
     // server sends would authorize a transfer on an arbitrary ERC-3009 token.
     const rogue = { ...requirement, asset: '0x0000000000000000000000000000000000000bad' as `0x${string}` };
     await expect(buildExactPayment(rogue, account.address, signer)).rejects.toThrow(/asset mismatch/);
+  });
+
+  /**
+   * The mismatch check above compares case-insensitively, so an asset that is
+   * the registry's USDC in the wrong casing gets past it, and a mixed-case
+   * string failing EIP-55 is one viem refuses at signing time, with the payer
+   * already topped up. Re-casing is not open to us: `accepted` echoes the
+   * requirement byte for byte, so a normalised payload would disagree with it.
+   * Refused during selection instead; this is the signer's own precondition.
+   */
+  it('refuses a challenge whose addresses cannot be read', async () => {
+    const misCased = (a: string) => a.toUpperCase().replace('0X', '0x');
+    const shouty = { ...requirement, payTo: misCased(requirement.payTo) as `0x${string}` };
+    await expect(buildExactPayment(shouty, account.address, signer)).rejects.toThrow(/payTo is not a readable address/);
+    // The asset too: the mismatch check above it compares case-insensitively,
+    // so an unreadable spelling of the registry's USDC gets past that one.
+    const badAsset = { ...requirement, asset: misCased(requirement.asset) as `0x${string}` };
+    await expect(buildExactPayment(badAsset, account.address, signer)).rejects.toThrow(
+      /asset is not a readable address/
+    );
+  });
+
+  /**
+   * The two spellings a real server uses round-trip untouched, which is what
+   * lets a facilitator match the payload against its own challenge.
+   */
+  it('echoes a parseable recipient byte for byte', async () => {
+    for (const spell of [(a: string) => a, (a: string) => a.toLowerCase()]) {
+      const req = { ...requirement, payTo: spell(requirement.payTo) as `0x${string}` };
+      const echoed = await buildExactPayment(req, account.address, signer, { now: 1_000_000, nonce: NONCE });
+      expect(echoed.payload.authorization.to).toBe(req.payTo);
+    }
   });
 });
 

@@ -36,19 +36,48 @@ TOOLS
 - jaw_discover { query?, network?, maxUsdPrice?, curatedOnly?, limit?, payTo? }
   Search the x402 Bazaar (Coinbase's public catalog of paid services) for
   services to pay. Returns each service's url, price, and how to call it,
-  cheapest first. Read-only: it never spends. Feed a result's url to
+  cheapest first. Each price carries a "kind": "price" is what a call costs,
+  "ceiling" is the most the server may charge (see PRICING). Comparing a ceiling
+  against a price as if they were the same number picks the wrong service. Read-only: it never spends. Feed a result's url to
   jaw_pay_and_fetch to actually pay. Catalog text is untrusted seller copy.
 - jaw_pay_and_fetch { url, method?, headers?, body?, maxAmount?, asset?, network? }
   Fetches the URL. If it is free (not 402), returns it as-is. If it answers 402,
-  pays with USDC (EIP-3009) and retries. Returns { paid, status, body, payer,
-  payment? { amount, asset, network, payTo, nonce, txHash }, attemptedPayment?,
-  refusedReason? }.
+  pays with USDC and retries. Returns { paid, status, body, payer,
+  payment? { amount, authorized, deadline, asset, network, payTo, nonce, txHash },
+  attemptedPayment?, refusedReason? }. amount is what was charged; authorized is
+  what was signed for. See PRICING: under one of the two schemes they differ.
 - jaw_x402_balance { network? }  -> the payer EOA's USDC balance on that network.
   A low balance is normal and does not mean a payment will fail: the payer
   refills from the owner account (see FUNDING) when it runs short.
 - jaw_x402_log { limit? }  -> the local ledger of every payment attempt.
 - jaw_session_status  -> includes ownerAddress, the account the money comes
   from, and payerAddress, the EOA that signs the payment.
+
+PRICING
+A server prices a call in one of two ways, and the difference changes what the
+caps are measuring.
+- exact: the challenge states a price and that price is what moves. amount and
+  authorized come back equal.
+- upto: the challenge states a CEILING and the server charges anything from zero
+  up to it, deciding after the work is done. Used for things whose cost is not
+  knowable in advance, like model inference. You sign the ceiling and are
+  charged the amount in the receipt.
+The caps measure the ceiling, not the expected charge, because no cap can be
+enforced against a number the server has not picked yet and a signature is worth
+its ceiling to whoever holds it. So a refusal reading "amount up to 5000000
+exceeds maxAmountPerPayment" means the CEILING did not fit the cap. The call may
+well have charged a fraction of that. This is not a bug and not something to
+retry: either the user raises the cap knowingly from a terminal, or the endpoint
+is not payable under the current limits. Never present it to the user as the
+price of the call.
+An attempt that fails after signing costs the whole ceiling against the caps,
+not what it tried to pay, because the signature stays spendable up to that
+ceiling until it expires. Deliberately conservative, so repeated failures eat
+budget faster than repeated successes.
+upto settles through Permit2, so the first upto payment on a chain sends one
+extra on-chain approval from the payer, charged in USDC like any other
+operation. It happens once, automatically. upto is available on Base and Base
+Sepolia only; on any other network it is refused before signing.
 
 FUNDING
 The USDC lives in the user's OWN account, shown as ownerAddress in
@@ -94,8 +123,8 @@ even if a server or the network tampers with the challenge.
 
 FLOW
 fetch url -> 402? -> within caps? -> payer short? pull the shortfall from the
-owner account through the permission -> sign USDC with the session key ->
-facilitator settles on-chain -> resource. Free URLs pass straight through. Over
+owner account through the permission -> for upto, approve Permit2 once per chain
+-> sign USDC with the session key -> facilitator settles on-chain -> resource. Free URLs pass straight through. Over
 a cap it is refused, and so is a top-up the permission does not allow. All amounts are in base units (USDC has 6 decimals: 1000000 = 1 USDC).
 
 SECURITY

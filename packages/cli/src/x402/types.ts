@@ -2,9 +2,25 @@
 // backend's `apps/ens/src/external/payment/x402-types.ts` so the buyer and
 // seller sides stay wire-compatible. v2 only (no v1 `X-PAYMENT` / `maxAmountRequired`).
 
+/**
+ * The settlement schemes this client can produce a payment for.
+ *
+ * One list, because more than one place has to answer the same question about
+ * an untrusted string off the wire: the policy refuses what it cannot bound,
+ * the challenge selector refuses what it cannot sign, and discovery must not
+ * advertise a price the payment path would then decline to pay.
+ */
+export const X402_SCHEMES = ['exact', 'upto'] as const;
+
+export type X402Scheme = (typeof X402_SCHEMES)[number];
+
+export function isX402Scheme(value: unknown): value is X402Scheme {
+  return typeof value === 'string' && (X402_SCHEMES as readonly string[]).includes(value);
+}
+
 /** One acceptable payment option from the server's `accepts` list. */
 export interface X402PaymentRequirement {
-  scheme: 'exact';
+  scheme: X402Scheme;
   /** CAIP-2 network id, e.g. `eip155:8453`. */
   network: string;
   /** Base units, decimal string. */
@@ -56,6 +72,27 @@ export interface X402ExactPayload {
 }
 
 /**
+ * Permit2 `permitWitnessTransferFrom` authorization, the payload of the `upto`
+ * scheme on EVM. `permitted.amount` is the ceiling; the facilitator settles for
+ * the amount actually consumed, which the proxy refuses above the ceiling. The
+ * witness binds the recipient and the only address allowed to settle.
+ */
+export interface X402Permit2Authorization {
+  permitted: { token: `0x${string}`; amount: string };
+  from: `0x${string}`;
+  spender: `0x${string}`;
+  nonce: `0x${string}`;
+  deadline: string;
+  witness: { to: `0x${string}`; facilitator: `0x${string}`; validAfter: string };
+}
+
+/** Signed message + signature — the payload of the `upto` scheme on EVM. */
+export interface X402UptoPayload {
+  signature: `0x${string}`;
+  permit2Authorization: X402Permit2Authorization;
+}
+
+/**
  * What the client sends back base64-encoded in `PAYMENT-SIGNATURE`. `accepted`
  * (singular) echoes the chosen requirement so the server verifies against what
  * it advertised.
@@ -63,7 +100,7 @@ export interface X402ExactPayload {
 export interface X402PaymentPayload {
   x402Version: 2;
   accepted: X402PaymentRequirement;
-  payload: X402ExactPayload;
+  payload: X402ExactPayload | X402UptoPayload;
   extensions?: Record<string, unknown>;
 }
 

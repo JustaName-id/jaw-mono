@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { decodeFunctionData, erc20Abi } from 'viem';
 
 // Mock keystore
 vi.mock('./keystore.js', () => ({
@@ -355,5 +356,43 @@ describe('SessionBridge paymaster token', () => {
     });
     const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 84532 });
     expect(optionsOf(bridge).paymasterContext).toEqual({ mode: 'SPONSORED' });
+  });
+});
+
+/**
+ * The approval is the one call the session sends outside its permission, so the
+ * shape of what it can send is the whole security question. It takes a token
+ * and nothing else: the spender and the amount are not reachable by a caller,
+ * and the token has to be the registry USDC for the session's chain.
+ */
+describe('approvePermit2', () => {
+  const PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
+  const BASE_SEPOLIA_USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+
+  it('approves Permit2 for the maximum, outside the permission', async () => {
+    const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
+
+    const id = await bridge.approvePermit2(BASE_SEPOLIA_USDC);
+
+    expect(id).toBe('0xBatchId');
+    const [calls, options] = mockSendCalls.mock.calls.at(-1) as [Array<{ to: string; data: `0x${string}` }>, unknown];
+    // No permissionId: routed through the manager it would revert, since the
+    // grant permits `transfer` and the manager checks every selector.
+    expect(options).toBeUndefined();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].to).toBe(BASE_SEPOLIA_USDC);
+
+    const decoded = decodeFunctionData({ abi: erc20Abi, data: calls[0].data });
+    expect(decoded.functionName).toBe('approve');
+    expect(decoded.args?.[0]).toBe(PERMIT2);
+    expect(decoded.args?.[1]).toBe(2n ** 256n - 1n);
+  });
+
+  it('refuses a token that is not the registry USDC for this chain', async () => {
+    const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
+
+    await expect(bridge.approvePermit2('0x1234567890123456789012345678901234567890')).rejects.toThrow(
+      /only the registry USDC/i
+    );
   });
 });

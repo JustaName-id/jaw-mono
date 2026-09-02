@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { payAndFetchSchema, x402LogSchema, x402BalanceSchema } from '../tools.js';
 import { mcpError, mcpResult, mcpPaymentResult } from '../helpers.js';
-import { parseBigInt, parseNonNegativeBigInt } from '../../x402/amount.js';
+import { parseNonNegativeBigInt } from '../../x402/amount.js';
 import { loadConfig } from '../../lib/config.js';
 import { Eip3009EoaPayer, sessionPayerAddress } from '../../x402/payer.js';
 import { payAndFetch } from '../../x402/http.js';
@@ -89,7 +89,7 @@ export function registerPayTool(server: McpServer): void {
             // safe while one process did all the paying; with the lock admitting
             // other processes, a memoised total would miss what they spent and
             // wave through a payment the cap should have stopped.
-            let sessionSpent = sumSpentSince(payer.address, session?.createdAt);
+            const sessionSpent = sumSpentSince(payer.address, session?.createdAt);
 
             // Locate the grant period containing now, and count spend inside it.
             // Recomputed per payment because the window moves on its own, and
@@ -134,14 +134,11 @@ export function registerPayTool(server: McpServer): void {
               network: params.network,
             });
 
-            // A failed settlement counts too: the signed authorization went out,
-            // so the transfer may have been broadcast regardless of what the
-            // server answered. Mirrors the 'failed' accounting in sumSpentSince.
-            const spentDetails = result.paid ? result.payment : result.attemptedPayment;
-            if (spentDetails) {
-              const amount = parseBigInt(spentDetails.amount);
-              if (amount !== null) sessionSpent += amount;
-            }
+            // What this payment costs the cap is not accumulated here. It used
+            // to be, and nothing read it: `sessionSpent` is re-read from the
+            // ledger at the top of every call, which is what makes the cap
+            // survive a restart. Keeping a second running total in memory only
+            // invited it to disagree with the one that enforces.
 
             // Record payment attempts (not free passthroughs) to the audit ledger.
             const settled = result.payment ?? result.attemptedPayment;
@@ -154,6 +151,8 @@ export function registerPayTool(server: McpServer): void {
                 payer: result.payer,
                 status: result.paid ? 'paid' : result.attemptedPayment ? 'failed' : 'refused',
                 amount: settled?.amount,
+                authorized: settled?.authorized,
+                deadline: settled?.deadline,
                 asset: settled?.asset,
                 network: settled?.network,
                 payTo: settled?.payTo,
@@ -161,6 +160,7 @@ export function registerPayTool(server: McpServer): void {
                 txHash: result.payment?.txHash,
                 topUpAmount: result.topUp?.amount,
                 topUpBatchId: result.topUp?.batchId,
+                approvalBatchId: result.permit2Approval?.batchId,
                 reason: result.refusedReason,
               });
             }
@@ -175,14 +175,21 @@ export function registerPayTool(server: McpServer): void {
       )
   );
 
-  // Same explicit signature as the other handlers, for the same reason: the
-  // SDK's inference over these schemas tips over when the file grows.
-  type RegisterLog = (
+  // Explicit signature rather than the SDK's inference, for the reason
+  // `jaw_config_set` documents: registerTool's generics walk the result type,
+  // and this file's results now carry a scheme union that tips the checker over
+  // its instantiation limit on some installs. A `@ts-expect-error` is no help,
+  // since it reports "unused" wherever the error does not fire.
+  type RegisterX402Log = (
     name: string,
-    config: { description: string; inputSchema: typeof x402LogSchema; annotations: { readOnlyHint: boolean } },
+    config: {
+      description: string;
+      inputSchema: typeof x402LogSchema;
+      annotations: { readOnlyHint: boolean };
+    },
     handler: (params: { limit?: number }) => Promise<unknown>
   ) => void;
-  (server.registerTool as unknown as RegisterLog)(
+  (server.registerTool as unknown as RegisterX402Log)(
     'jaw_x402_log',
     {
       description:

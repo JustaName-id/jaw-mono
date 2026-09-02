@@ -186,3 +186,24 @@ describe('hostOf', () => {
     expect(hostOf('not a url')).toBe('not a url');
   });
 });
+
+/**
+ * `jaw x402 log` and the caps have to report the same number. A failed attempt
+ * holds the ceiling it authorized, so a log that showed the charge would tell a
+ * user they had spent four cents while five dollars of their budget was gone.
+ */
+describe('log view against the enforced spend rule', () => {
+  const failedUpto = entry({ status: 'failed', amount: '40', authorized: '5000000' });
+
+  it('shows what a failed attempt reserved, not what it tried to pay', () => {
+    expect(renderEntry(failedUpto)).toContain('5 USDC');
+  });
+
+  it('totals the reserved figure in the summary', () => {
+    expect(renderSummary([failedUpto])).toContain('5 USDC out');
+  });
+
+  it('leaves a settled payment reporting what settled', () => {
+    expect(renderEntry(entry({ status: 'paid', amount: '40', authorized: '5000000' }))).toContain('0.00004 USDC');
+  });
+});

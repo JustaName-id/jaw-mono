@@ -3,7 +3,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { recoverTypedDataAddress, recoverAddress, sliceHex } from 'viem';
 import type { X402PaymentRequirement } from './types.js';
 import { TRANSFER_WITH_AUTHORIZATION_TYPES } from './scheme-exact-evm.js';
-import { erc7739Digest } from './erc7739.js';
+import { hashTypedData as erc7739HashTypedData } from 'viem/experimental/erc7739';
 
 // Well-known Hardhat test key #1 — never used for real funds.
 const PK = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
@@ -89,28 +89,26 @@ describe('Eip3009EoaPayer delegation awareness', () => {
       expect.objectContaining({ address: account.address, functionName: 'eip712Domain' })
     );
     // The inner 65-byte signature recovers to the EOA over the envelope digest.
-    const { digest } = erc7739Digest(
-      {
-        domain: { name: 'USDC', version: '2', chainId: 84532, verifyingContract: requirement.asset },
-        types: TRANSFER_WITH_AUTHORIZATION_TYPES,
-        primaryType: 'TransferWithAuthorization',
-        message: {
-          from: account.address,
-          to: requirement.payTo,
-          value: 1000n,
-          validAfter: 0n,
-          validBefore: BigInt(1_000_000 + 600),
-          nonce: ('0x' + '11'.repeat(32)) as `0x${string}`,
-        },
+    const digest = erc7739HashTypedData({
+      domain: { name: 'USDC', version: '2', chainId: 84532, verifyingContract: requirement.asset },
+      types: TRANSFER_WITH_AUTHORIZATION_TYPES,
+      primaryType: 'TransferWithAuthorization',
+      message: {
+        from: account.address,
+        to: requirement.payTo,
+        value: 1000n,
+        validAfter: 0n,
+        validBefore: BigInt(1_000_000 + 600),
+        nonce: ('0x' + '11'.repeat(32)) as `0x${string}`,
       },
-      {
+      verifierDomain: {
         name: 'JustanAccount',
         version: '1',
         chainId: 84532n,
         verifyingContract: account.address,
         salt: ('0x' + '00'.repeat(32)) as `0x${string}`,
-      }
-    );
+      },
+    } as never);
     const recovered = await recoverAddress({ hash: digest, signature: sliceHex(sig, 0, 65) });
     expect(recovered.toLowerCase()).toBe(account.address.toLowerCase());
   });
@@ -149,5 +147,85 @@ describe('Eip3009EoaPayer delegation awareness', () => {
     const payer = Eip3009EoaPayer.fromSessionKey();
 
     await expect(payer.pay(requirement)).rejects.toThrow(/rpc down/);
+  });
+});
+
+/**
+ * An `upto` payment moves tokens through Permit2's allowance. A payer that never
+ * approved it signs an authorization the proxy cannot execute, the settlement
+ * fails, and by the ledger's rule the failed attempt reserves its whole ceiling
+ * against the cap. So the allowance is read before signing, for the same reason
+ * the delegation check is: refusing costs a retry, guessing costs the budget.
+ */
+describe('Eip3009EoaPayer paying upto', () => {
+  const uptoRequirement = {
+    ...requirement,
+    scheme: 'upto' as const,
+    amount: '5000000',
+    extra: { facilitatorAddress: '0x1111111111111111111111111111111111111111' },
+  };
+
+  it('refuses before signing when Permit2 was never approved', async () => {
+    getCodeMock.mockResolvedValue('0x');
+    readContractMock.mockResolvedValue(0n);
+    const payer = Eip3009EoaPayer.fromSessionKey();
+
+    await expect(payer.pay(uptoRequirement)).rejects.toThrow(/approved Permit2/);
+  });
+
+  it('refuses when the allowance is smaller than the ceiling it would authorize', async () => {
+    getCodeMock.mockResolvedValue('0x');
+    readContractMock.mockResolvedValue(4_999_999n);
+    const payer = Eip3009EoaPayer.fromSessionKey();
+
+    await expect(payer.pay(uptoRequirement)).rejects.toThrow(/approved Permit2/);
+  });
+
+  /**
+   * The funder reads this allowance to decide whether to grant one, on the same
+   * contract through the same client, moments earlier. Asking again inside the
+   * same payment is the same question twice.
+   */
+  it('takes the allowance the funder already read instead of asking the chain again', async () => {
+    getCodeMock.mockResolvedValue('0x');
+    readContractMock.mockRejectedValue(new Error('the chain must not be asked'));
+    const payer = Eip3009EoaPayer.fromSessionKey();
+
+    const payload = await payer.pay(uptoRequirement, {
+      permit2Allowance: 2n ** 256n - 1n,
+      now: 1_000_000,
+      nonce: ('0x' + '11'.repeat(32)) as `0x${string}`,
+    });
+
+    expect(payload.payload).toHaveProperty('permit2Authorization');
+  });
+
+  /** A figure short of the ceiling is not an answer, so the chain still decides. */
+  it('still reads the chain when the figure it was handed does not cover the ceiling', async () => {
+    getCodeMock.mockResolvedValue('0x');
+    readContractMock.mockResolvedValue(2n ** 256n - 1n);
+    const payer = Eip3009EoaPayer.fromSessionKey();
+
+    await payer.pay(uptoRequirement, {
+      permit2Allowance: 4_999_999n,
+      now: 1_000_000,
+      nonce: ('0x' + '11'.repeat(32)) as `0x${string}`,
+    });
+
+    expect(readContractMock).toHaveBeenCalled();
+  });
+
+  it('signs a Permit2 authorization once the allowance covers it', async () => {
+    getCodeMock.mockResolvedValue('0x');
+    readContractMock.mockResolvedValue(2n ** 256n - 1n);
+    const payer = Eip3009EoaPayer.fromSessionKey();
+
+    const payload = await payer.pay(uptoRequirement, {
+      now: 1_000_000,
+      nonce: ('0x' + '11'.repeat(32)) as `0x${string}`,
+    });
+
+    expect(payload.payload).toHaveProperty('permit2Authorization');
+    expect(payload.payload).not.toHaveProperty('authorization');
   });
 });

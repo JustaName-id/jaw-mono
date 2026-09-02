@@ -111,3 +111,56 @@ describe('sumToppedUpSince', () => {
     expect(sumToppedUpSince(PAYER)).toBe(0n);
   });
 });
+
+/**
+ * Under `upto` the ceiling and the charge are different numbers, and which one
+ * a cap must count depends on whether the payment settled. A settled one costs
+ * what settled. A failed one leaves a signature that is still spendable up to
+ * the ceiling, so it costs all of it.
+ */
+describe('sumSpentSince with a ceiling that differs from the charge', () => {
+  it('counts what settled when the payment settled', () => {
+    entry({ status: 'paid', amount: '40', authorized: '5000000' });
+    expect(sumSpentSince(PAYER)).toBe(40n);
+  });
+
+  it('counts the whole ceiling when settlement failed', () => {
+    entry({ status: 'failed', amount: '40', authorized: '5000000' });
+    expect(sumSpentSince(PAYER)).toBe(5_000_000n);
+  });
+
+  it('still counts nothing for an attempt that was never signed', () => {
+    entry({ status: 'refused', amount: '40', authorized: '5000000' });
+    expect(sumSpentSince(PAYER)).toBe(0n);
+  });
+
+  it('leaves the exact scheme untouched, where both figures are the same', () => {
+    entry({ status: 'failed', amount: '1000', authorized: '1000' });
+    expect(sumSpentSince(PAYER)).toBe(1000n);
+  });
+
+  it('reads an entry written before the ceiling was recorded', () => {
+    entry({ status: 'failed', amount: '1000' });
+    expect(sumSpentSince(PAYER)).toBe(1000n);
+  });
+
+  // The row still counts what it can be read for. An unparseable ceiling
+  // reading as zero would have let one corrupt field, or a torn write, shrink
+  // an enforced cap, which is the opposite of what a conservative rule does.
+  it('falls back to the charge when the ceiling is unreadable', () => {
+    entry({ status: 'failed', amount: '1000', authorized: 'not-a-number' });
+    entry({ status: 'paid', amount: '25' });
+    expect(sumSpentSince(PAYER)).toBe(1025n);
+  });
+
+  it('takes the larger of the two, so neither field alone can shrink the cap', () => {
+    entry({ status: 'failed', amount: '9000', authorized: '40' });
+    expect(sumSpentSince(PAYER)).toBe(9000n);
+  });
+
+  it('ignores a negative figure instead of subtracting it', () => {
+    entry({ status: 'paid', amount: '-5000' });
+    entry({ status: 'paid', amount: '25' });
+    expect(sumSpentSince(PAYER)).toBe(25n);
+  });
+});

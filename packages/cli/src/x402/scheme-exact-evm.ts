@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { isPayableAddress, isZeroAddress } from './address.js';
 import { usdcForNetwork } from './asset-registry.js';
 import type { X402EIP3009Authorization, X402PaymentPayload, X402PaymentRequirement } from './types.js';
 
@@ -55,6 +56,12 @@ export async function buildExactPayment(
   sign: ExactSigner,
   opts: BuildExactOptions = {}
 ): Promise<X402PaymentPayload> {
+  // Signing an `upto` ceiling as a fixed EIP-3009 transfer would move the whole
+  // ceiling and call it a price. The two builders each refuse the other's work.
+  if (requirement.scheme !== 'exact') {
+    throw new Error(`Not an exact requirement: ${requirement.scheme}`);
+  }
+
   const asset = usdcForNetwork(requirement.network);
   if (!asset) throw new Error(`Unsupported x402 network: ${requirement.network}`);
   // `requirement.asset` is server-controlled; signing with it as the
@@ -65,6 +72,30 @@ export async function buildExactPayment(
       `x402 asset mismatch on ${requirement.network}: server asked for ${requirement.asset}, known USDC is ${asset.address}`
     );
   }
+
+  // `checkPolicy` refuses both of these during selection, before anything is
+  // funded; the signer keeps its own preconditions, as it does for the asset
+  // above. The mismatch check is case-insensitive on purpose, so it is these
+  // that keep an unreadable address from reaching viem, which would throw at
+  // signing time with the payer already topped up. See address.ts.
+  // `asset` as well as `payTo`: the mismatch check above is case-insensitive, so
+  // an unreadable spelling of the registry's USDC passes it, and while the
+  // domain uses the registry value, `accepted` carries the advertised one out.
+  for (const [field, value] of [
+    ['asset', requirement.asset],
+    ['payTo', requirement.payTo],
+  ] as const) {
+    if (!isPayableAddress(value)) {
+      throw new Error(`x402 ${field} is not a readable address on ${requirement.network}: ${value}`);
+    }
+  }
+  if (isZeroAddress(requirement.payTo)) {
+    throw new Error(`x402 payTo is the zero address on ${requirement.network}`);
+  }
+
+  // The registry's own spelling, for the reason the mismatch check exists: it
+  // is the source of truth, and the two are now known to be the same address.
+  const verifyingContract = asset.address;
 
   // Prefer the server-advertised EIP-712 domain name/version (extra), else the
   // registry's known values for this USDC deployment.
@@ -95,7 +126,7 @@ export async function buildExactPayment(
   };
 
   const signature = await sign({
-    domain: { name, version, chainId: asset.chainId, verifyingContract: requirement.asset },
+    domain: { name, version, chainId: asset.chainId, verifyingContract },
     types: TRANSFER_WITH_AUTHORIZATION_TYPES,
     primaryType: 'TransferWithAuthorization',
     message: {

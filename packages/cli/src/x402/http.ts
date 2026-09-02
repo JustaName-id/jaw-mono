@@ -4,10 +4,13 @@ import { errorMessage } from '../lib/errors.js';
 import { parseBigInt } from './amount.js';
 import { encodePaymentPayload } from './scheme-exact-evm.js';
 import type { LimitUsage } from './policy.js';
-import { checkPolicy, type PolicyContext, type X402Policy } from './policy.js';
+import { asks, checkPolicy, type PolicyContext, type X402Policy } from './policy.js';
 import type { Payer } from './payer.js';
 import {
   X402_HEADERS,
+  isX402Scheme,
+  type X402PaymentPayload,
+  type X402Scheme,
   type X402PaymentRequired,
   type X402PaymentRequirement,
   type X402SettleResponse,
@@ -43,12 +46,35 @@ export interface PayAndFetchOptions {
   ensureFunds?: (
     requirement: X402PaymentRequirement,
     payerAddress: `0x${string}`
-  ) => Promise<{ ok: boolean; reason?: string; amount?: string; batchId?: string; skipped?: boolean }>;
+  ) => Promise<{
+    ok: boolean;
+    reason?: string;
+    amount?: string;
+    batchId?: string;
+    approvalBatchId?: string;
+    /** The payer's Permit2 allowance as the hook last saw it, so the signer need not re-read it. */
+    permit2Allowance?: bigint;
+    skipped?: boolean;
+  }>;
 }
 
 /** A payment as built/signed — the fields needed to audit or reconcile it. */
 export interface PaymentDetails {
+  /**
+   * Which scheme produced this. Carried because the two figures below mean
+   * different things depending on it, and every surface that shows them has to
+   * say which it is showing.
+   */
+  scheme: X402Scheme;
+  /**
+   * What actually left the payer, once the receipt says. Equal to `authorized`
+   * under `exact`, and until settlement reports otherwise under `upto`.
+   */
   amount: string;
+  /** The ceiling the signature authorized. What a failed attempt still costs. */
+  authorized: string;
+  /** When the authorization expires, for reconciling an ambiguous settlement. */
+  deadline?: string;
   asset: string;
   network: string;
   payTo: string;
@@ -78,15 +104,23 @@ export interface PayAndFetchResult {
    * on-chain permission before this payment. User funds moved: always surfaced.
    */
   topUp?: { amount?: string; batchId?: string };
+  /**
+   * Present when the payer granted Permit2 its allowance as part of this
+   * payment. No principal moves, but it is a userOp charged to the payer's
+   * USDC, so it is surfaced and logged rather than left invisible: without it
+   * an approval that ran with no top-up beside it reached neither the CLI
+   * output nor the ledger.
+   */
+  permit2Approval?: { batchId: string };
   /** Set when a `402` could not (or should not) be paid. */
   refusedReason?: string;
   /**
    * On a `dryRun`, the requirement that would have been paid. Absent when the
-   * resource was free or the policy refused (see `refusedReason`). Carries no
-   * nonce, deliberately: a nonce only exists once an authorization is signed,
-   * and a dry run never signs one.
+   * resource was free or the policy refused (see `refusedReason`). Carries
+   * neither nonce nor deadline, deliberately: both only exist once an
+   * authorization is signed, and a dry run never signs one.
    */
-  wouldPay?: Omit<PaymentDetails, 'nonce'>;
+  wouldPay?: Omit<PaymentDetails, 'nonce' | 'deadline'>;
 }
 
 const b64json = <T>(header: string | null): T | null => {
@@ -97,6 +131,68 @@ const b64json = <T>(header: string | null): T | null => {
     return null;
   }
 };
+
+/**
+ * The nonce that identifies this attempt on chain, whichever scheme produced it:
+ * EIP-3009 carries its own, Permit2 carries the one its bitmap consumes. Both
+ * are what an ambiguous settlement is reconciled by, so the ledger records
+ * either without caring which scheme it came from.
+ */
+function paymentNonceOf(payload: X402PaymentPayload): `0x${string}` {
+  const inner = payload.payload;
+  return 'authorization' in inner ? inner.authorization.nonce : inner.permit2Authorization.nonce;
+}
+
+/** When the signed authorization stops being spendable, whichever scheme it is. */
+function paymentDeadlineOf(payload: X402PaymentPayload): string {
+  const inner = payload.payload;
+  return 'authorization' in inner ? inner.authorization.validBefore : inner.permit2Authorization.deadline;
+}
+
+/**
+ * What actually settled.
+ *
+ * Under `exact` the receipt is a confirmation and never a source. The
+ * authorization was for one fixed value and that is the value that moved, so a
+ * server reporting something smaller there would be talking our own spend caps
+ * down for free.
+ *
+ * Under `upto` the server does choose the figure, anywhere from zero to the
+ * ceiling, and the receipt is the only place it exists, so it is read. A receipt
+ * that omits it, or claims more than was authorized, falls back to the whole
+ * ceiling: the one direction a server must not be able to move this number is
+ * downward without having settled.
+ *
+ * Exported for its own tests, and covered by them directly because this rule
+ * decides how much of a user's budget a server can spend without paying for
+ * it. It is the live path: `upto` passes both the policy and the selection, and
+ * a full payment runs through here.
+ */
+export function settledAmountOf(receipt: X402SettleResponse | null, scheme: string, authorized: string): string {
+  if (scheme !== 'upto') return authorized;
+  // A 200 is not a settlement. Without this a server answers success with
+  // `amount: 0`, never calls the proxy, and the cumulative caps never move
+  // while it accumulates live authorizations worth the ceiling each, every one
+  // of them settleable until its deadline. So the figure may only come down on
+  // a receipt that claims success and names something shaped like a
+  // transaction; anything else is read as the whole ceiling.
+  //
+  // Shaped like one is all it is. The hash is never looked up, so this raises
+  // the price of under-reporting to fabricating 64 hex characters and does not
+  // prove a settlement happened. A server willing to do that reports one base
+  // unit against a thousand-unit ceiling, leaves the Permit2 nonce unconsumed,
+  // and holds a live authorization for the full ceiling until the deadline
+  // while the caps counted one. What still bounds that is the on-chain
+  // permission's per-period allowance, which is where the payer's funds come
+  // from; what is defeated is this local accounting. Closing it means checking
+  // the amount against the transaction the receipt names, which is what the
+  // nonce and hash on every ledger row are stored for.
+  if (receipt?.success !== true || !settledTxHash(receipt)) return authorized;
+  const reported = parseBigInt(receipt.amount ?? '');
+  if (reported === null || reported < 0n) return authorized;
+  const ceiling = parseBigInt(authorized);
+  return ceiling !== null && reported > ceiling ? authorized : reported.toString();
+}
 
 /**
  * The settle receipt's tx hash, or nothing when the server sent something that
@@ -272,6 +368,14 @@ interface Selection {
  * Pick the CHEAPEST `accepts` entry that satisfies the caller constraints +
  * policy. Choosing the lowest amount (rather than the first that passes) means a
  * multi-option server can't steer the agent onto a pricier option.
+ *
+ * Across schemes the comparison is on the same field, which is a price under
+ * `exact` and a ceiling under `upto`. That deliberately minimises what gets
+ * authorized rather than what is expected to be paid: an agent cannot predict
+ * its own consumption, and the number a signature is worth if it is misused is
+ * the ceiling. Equal figures break toward `exact` for the same reason, so a
+ * server cannot dangle a matching ceiling to move us onto the larger
+ * authorization.
  */
 function selectRequirement(accepts: unknown[], opts: PayAndFetchOptions, ctx: PolicyContext): Selection {
   const policy = opts.policy ?? {};
@@ -287,8 +391,8 @@ function selectRequirement(accepts: unknown[], opts: PayAndFetchOptions, ctx: Po
       continue;
     }
     const req = parsed.data as X402PaymentRequirement;
-    if (req.scheme !== 'exact') {
-      reason = `unsupported scheme: ${req.scheme}`;
+    if (!isX402Scheme(req.scheme)) {
+      reason = `unsupported scheme: ${String(req.scheme)}`;
       continue;
     }
     if (opts.network && req.network !== opts.network) {
@@ -312,7 +416,7 @@ function selectRequirement(accepts: unknown[], opts: PayAndFetchOptions, ctx: Po
         continue;
       }
       if (amount > cap) {
-        reason = `amount ${req.amount} exceeds maxAmount ${opts.maxAmount}`;
+        reason = `amount ${asks(req)} exceeds maxAmount ${opts.maxAmount}`;
         continue;
       }
     }
@@ -323,7 +427,9 @@ function selectRequirement(accepts: unknown[], opts: PayAndFetchOptions, ctx: Po
       continue;
     }
 
-    if (!best || amount < bestAmount) {
+    const cheaper = !best || amount < bestAmount;
+    const fixedPriceTie = !!best && amount === bestAmount && best.scheme === 'upto' && req.scheme === 'exact';
+    if (cheaper || fixedPriceTie) {
       best = req;
       bestAmount = amount;
     }
@@ -408,7 +514,9 @@ export async function payAndFetch(
       paid: false,
       payer: payer.address,
       wouldPay: {
+        scheme: requirement.scheme,
         amount: requirement.amount,
+        authorized: requirement.amount,
         asset: requirement.asset,
         network: requirement.network,
         payTo: requirement.payTo,
@@ -420,6 +528,8 @@ export async function payAndFetch(
   //     price, topping it up through the on-chain permission when it can't.
   //     A refusal here is a policy-shaped outcome, not an error.
   let topUp: { amount?: string; batchId?: string } | undefined;
+  let permit2Approval: { batchId: string } | undefined;
+  let permit2Allowance: bigint | undefined;
   if (opts.ensureFunds) {
     // Wrapped for the same reason `payer.pay` is below: this hook is what moves
     // the funds, so a throw escaping here skips both front ends' audit log for
@@ -437,8 +547,15 @@ export async function payAndFetch(
       // on either field: the no-call-id path has an amount and no id.
       return refusal(funded.reason ?? 'payer funding failed', {
         ...(funded.amount || funded.batchId ? { topUp: { amount: funded.amount, batchId: funded.batchId } } : {}),
+        ...(funded.approvalBatchId ? { permit2Approval: { batchId: funded.approvalBatchId } } : {}),
       });
     }
+    // Independent of `skipped`: the approval runs whether or not principal had
+    // to move, and it is money out of the payer either way.
+    if (funded.approvalBatchId) {
+      permit2Approval = { batchId: funded.approvalBatchId };
+    }
+    permit2Allowance = funded.permit2Allowance;
     if (!funded.skipped) {
       topUp = { amount: funded.amount, batchId: funded.batchId };
     }
@@ -452,16 +569,21 @@ export async function payAndFetch(
   //    caller records the moved funds in the audit ledger.
   let payload;
   try {
-    payload = await payer.pay(requirement);
+    payload = await payer.pay(requirement, { permit2Allowance });
   } catch (err) {
-    return refusal(`payment signing failed: ${errorMessage(err)}`, { topUp });
+    return refusal(`payment signing failed: ${errorMessage(err)}`, { topUp, permit2Approval });
   }
   const details = {
+    scheme: requirement.scheme,
+    // The ceiling until a receipt says otherwise, which is the conservative
+    // reading for `upto` and the exact figure for `exact`.
     amount: requirement.amount,
+    authorized: requirement.amount,
+    deadline: paymentDeadlineOf(payload),
     asset: requirement.asset,
     network: requirement.network,
     payTo: requirement.payTo,
-    nonce: payload.payload.authorization.nonce,
+    nonce: paymentNonceOf(payload),
   };
   const proof = encodePaymentPayload(payload);
 
@@ -493,6 +615,7 @@ export async function payAndFetch(
       body: '',
       attemptedPayment: details,
       topUp,
+      permit2Approval,
     });
   }
 
@@ -507,6 +630,7 @@ export async function payAndFetch(
       payer: payer.address,
       attemptedPayment: details,
       topUp,
+      permit2Approval,
       refusedReason: `settlement endpoint attempted a redirect (${paid.status}); not following it with the signed proof`,
     };
   }
@@ -528,6 +652,7 @@ export async function payAndFetch(
       // (facilitator may have broadcast) can be reconciled by nonce.
       attemptedPayment: details,
       topUp,
+      permit2Approval,
       refusedReason: receipt?.errorReason ?? reChallenge?.error ?? `settlement failed with status ${paid.status}`,
     };
   }
@@ -537,7 +662,12 @@ export async function payAndFetch(
     body,
     paid: true,
     topUp,
+    permit2Approval,
     payer: payer.address,
-    payment: { ...details, txHash: settledTxHash(receipt) },
+    payment: {
+      ...details,
+      amount: settledAmountOf(receipt, requirement.scheme, details.authorized),
+      txHash: settledTxHash(receipt),
+    },
   };
 }

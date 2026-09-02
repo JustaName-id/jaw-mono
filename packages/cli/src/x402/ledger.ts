@@ -16,7 +16,25 @@ export interface X402LogEntry {
   payer: string;
   /** paid = settled; failed = signed+sent but settlement failed; refused = never signed. */
   status: 'paid' | 'failed' | 'refused';
+  /**
+   * What actually left the payer. Under `exact` that is the amount signed for.
+   * Under `upto` the server chooses it at settlement, anywhere from zero up to
+   * `authorized`, and the receipt is the only place it exists.
+   */
   amount?: string;
+  /**
+   * The ceiling the signature authorized, which is what a live authorization is
+   * worth to whoever holds it. Equal to `amount` under `exact`. Absent on
+   * entries written before the field existed, where `amount` was both.
+   */
+  authorized?: string;
+  /**
+   * When the authorization expires. Recorded but not yet read: reconciling a
+   * failed payment means proving its nonce was never consumed and its deadline
+   * has passed, and that check cannot be written against entries that never
+   * stored the deadline.
+   */
+  deadline?: string;
   asset?: string;
   network?: string;
   payTo?: string;
@@ -26,6 +44,13 @@ export interface X402LogEntry {
   topUpAmount?: string;
   /** wallet_sendCalls id of that top-up, for on-chain reconciliation. */
   topUpBatchId?: string;
+  /**
+   * wallet_sendCalls id of the Permit2 approval, when this payment granted one.
+   * Never summed with `topUpAmount`: it moves no principal, only the gas the
+   * payer was charged for it. Recorded so a userOp the user paid for is not
+   * missing from the audit trail.
+   */
+  approvalBatchId?: string;
   /** Reason for a refused/failed attempt. */
   reason?: string;
 }
@@ -78,29 +103,57 @@ export function readX402Log(limit?: number): X402LogEntry[] {
 }
 
 /**
+ * What one row contributes to a spend cap.
+ *
+ * The single definition of the rule, exported because more than one place needs
+ * it and the three copies that existed before this had already drifted apart by
+ * hand. `jaw x402 log` reports against it, and the caps enforce against it, so
+ * the number a user reads and the number that refuses their next payment are
+ * the same number.
+ *
+ * A settled payment costs what settled. A failed one costs the ceiling it
+ * authorized, because an authorization that was signed and sent stays spendable
+ * up to that ceiling until its nonce is consumed or its deadline passes, and
+ * nothing yet proves either. Under `exact` the two figures are equal and this
+ * is the rule that has always applied.
+ *
+ * Every parse failure reads as zero and the failed case takes the larger of the
+ * two, so one unparseable field cannot shrink an enforced cap: a torn write or a
+ * hand edit can only ever leave the cap where it was or higher. Negatives clamp
+ * for the same reason, since `BigInt('-5')` parses fine and would otherwise
+ * subtract.
+ */
+export function spendFigureOf(entry: X402LogEntry): bigint {
+  if (entry.status !== 'paid' && entry.status !== 'failed') return 0n;
+  const parse = (value?: string): bigint => {
+    if (!value) return 0n;
+    try {
+      const parsed = BigInt(value);
+      return parsed > 0n ? parsed : 0n;
+    } catch {
+      return 0n;
+    }
+  };
+  if (entry.status === 'paid') return parse(entry.amount);
+  const ceiling = parse(entry.authorized);
+  const charge = parse(entry.amount);
+  return ceiling > charge ? ceiling : charge;
+}
+
+/**
  * Sum a payer's settled and attempted payments since an ISO instant (its whole
  * history when `since` is omitted).
  *
- * The single definition of what counts against a spend cap. Reading it from the
- * ledger rather than an in-memory counter is what makes a cap survive a process
- * restart, which an agent could otherwise relaunch its way past. Every caller
- * that enforces or reports a cap must go through here: three copies of this rule
- * had already drifted apart from each other by hand.
+ * Reading it from the ledger rather than an in-memory counter is what makes a
+ * cap survive a process restart, which an agent could otherwise relaunch its way
+ * past. What each row costs is `spendFigureOf`.
  */
 export function sumSpentSince(payerAddress: string, since?: string): bigint {
   const payer = payerAddress.toLowerCase();
   return readX402Log().reduce((total, entry) => {
-    // 'failed' counts too: the authorization was signed and sent, so in pull
-    // mode the facilitator may have broadcast the transfer anyway. Counting it
-    // can only under-spend the cap, never breach it.
-    if ((entry.status !== 'paid' && entry.status !== 'failed') || !entry.amount) return total;
     if (entry.payer?.toLowerCase() !== payer) return total;
     if (since && entry.at < since) return total;
-    try {
-      return total + BigInt(entry.amount);
-    } catch {
-      return total; // a hand-edited amount must not take the cap down
-    }
+    return total + spendFigureOf(entry);
   }, 0n);
 }
 

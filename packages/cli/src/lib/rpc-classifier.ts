@@ -36,7 +36,8 @@ export function requiresBrowser(method: string): boolean {
  * Being delegated does not help. USDC routes a delegated account through
  * EIP-1271, and ERC-7739 rejects a raw signature over the plain digest, but the
  * envelope is ordinary typed data and the wrapping suffix is public (see
- * `x402/erc7739.ts`), so asking for the envelope gets the same result.
+ * `wrappedSigner` in `x402/payer.ts`), so asking for the envelope gets the same
+ * result.
  *
  * Nothing here needs it: the payer signs through its own injected signer and
  * top-ups go through `wallet_sendCalls`. A caller that wants a signature can

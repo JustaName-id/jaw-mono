@@ -74,6 +74,7 @@ describe('discoverServices — search mode', () => {
     expect(svc.tags).toEqual(['ens', 'identity']);
     expect(svc.price).toEqual({
       amount: '1000',
+      kind: 'price',
       asset: USDC_BASE,
       network: 'eip155:8453',
       payTo: '0xabc',
@@ -274,5 +275,137 @@ describe('discoverServices — errors and hostile shapes', () => {
 
     await expect(discoverServices({ query: 'x' })).rejects.toThrow('size cap');
     expect(cancel).toHaveBeenCalled();
+  });
+});
+
+/**
+ * A catalog is read to compare numbers, and under `upto` the number is a
+ * ceiling. An agent that reads it as a price picks the wrong service and
+ * authorizes far more than it meant to.
+ */
+describe('discoverServices — a ceiling is not a price', () => {
+  const service = (accepts: unknown[]) => ({
+    resources: [{ resource: 'https://api.example.com/x', accepts }],
+  });
+  const option = (o: Record<string, unknown>) => ({
+    scheme: 'exact',
+    network: 'eip155:8453',
+    amount: '1000',
+    asset: USDC_BASE,
+    payTo: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+    ...o,
+  });
+
+  it('marks an upto option as a ceiling', async () => {
+    fetchMock.mockResolvedValueOnce(mockJson(service([option({ scheme: 'upto', amount: '5000000' })])));
+
+    const { services } = await discoverServices({ query: 'x' });
+
+    expect(services[0].price?.kind).toBe('ceiling');
+    expect(services[0].price?.scheme).toBe('upto');
+  });
+
+  it('breaks a tie toward the option that cannot grow', async () => {
+    fetchMock.mockResolvedValueOnce(mockJson(service([option({ scheme: 'upto' }), option({ scheme: 'exact' })])));
+
+    const { services } = await discoverServices({ query: 'x' });
+
+    expect(services[0].price?.kind).toBe('price');
+  });
+
+  it('still takes the smaller figure whichever kind carries it', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockJson(service([option({ amount: '9000' }), option({ scheme: 'upto', amount: '400' })]))
+    );
+
+    const { services } = await discoverServices({ query: 'x' });
+
+    expect(services[0].price?.amount).toBe('400');
+    expect(services[0].price?.kind).toBe('ceiling');
+  });
+});
+
+/**
+ * Discovery decides which service an agent points its budget at, so what it
+ * refuses to list matters as much as what it ranks first.
+ */
+describe('discoverServices — what it declines to advertise', () => {
+  const service = (accepts: unknown[]) => ({
+    resources: [{ resource: 'https://api.example.com/x', accepts }],
+  });
+  const option = (o: Record<string, unknown>) => ({
+    scheme: 'exact',
+    network: 'eip155:8453',
+    amount: '1000',
+    asset: USDC_BASE,
+    payTo: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+    ...o,
+  });
+
+  // Listed, it would be the cheap option an agent chooses the service for, and
+  // then the payment path would refuse it and pay the other one instead.
+  it('skips an option in a scheme the payment path cannot sign', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockJson(service([option({ scheme: 'exact-evm', amount: '100' }), option({ scheme: 'upto', amount: '5000000' })]))
+    );
+
+    const { services } = await discoverServices({ query: 'x' });
+
+    expect(services[0].price?.amount).toBe('5000000');
+    expect(services[0].price?.kind).toBe('ceiling');
+  });
+
+  it('reports no price when every option is unpayable', async () => {
+    fetchMock.mockResolvedValueOnce(mockJson(service([option({ scheme: 'permit2-batch' })])));
+
+    const { services } = await discoverServices({ query: 'x' });
+
+    expect(services[0].price).toBeNull();
+  });
+
+  // The Bazaar filters on whichever option matched its query; we go on to pick
+  // a different one, so the cap has to be applied to what we selected.
+  it('drops a service whose selected option is over the cap', async () => {
+    fetchMock.mockResolvedValueOnce(mockJson(service([option({ scheme: 'upto', amount: '5000000' })])));
+
+    const { services } = await discoverServices({ query: 'x', maxUsdPrice: '0.01' });
+
+    expect(services).toHaveLength(0);
+  });
+
+  it('keeps one it cannot value, rather than hiding the unfamiliar', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockJson(service([option({ asset: '0x1234567890123456789012345678901234567890' })]))
+    );
+
+    const { services } = await discoverServices({ query: 'x', maxUsdPrice: '0.000001' });
+
+    expect(services).toHaveLength(1);
+    expect(services[0].price?.approxUsd).toBeNull();
+  });
+});
+
+/**
+ * The cap arrives as free text a model wrote, and both ways of getting it wrong
+ * used to fail quietly in opposite directions: an empty string filtered
+ * everything away, a currency symbol disabled the filter while the caller
+ * believed one was applied.
+ */
+describe('discoverServices — the price cap is a number or an error', () => {
+  it('refuses an empty cap instead of reading it as zero', async () => {
+    await expect(discoverServices({ query: 'x', maxUsdPrice: '' })).rejects.toThrow(/non-negative number/);
+  });
+
+  it('refuses a cap with a currency symbol instead of ignoring it', async () => {
+    await expect(discoverServices({ query: 'x', maxUsdPrice: '$0.01' })).rejects.toThrow(/non-negative number/);
+  });
+
+  it('refuses a negative cap', async () => {
+    await expect(discoverServices({ query: 'x', maxUsdPrice: '-1' })).rejects.toThrow(/non-negative number/);
+  });
+
+  it('takes a plain number', async () => {
+    fetchMock.mockResolvedValueOnce(mockJson({ resources: [] }));
+    await expect(discoverServices({ query: 'x', maxUsdPrice: '0.01' })).resolves.toBeTruthy();
   });
 });

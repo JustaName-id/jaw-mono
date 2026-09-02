@@ -1,7 +1,9 @@
-import { USDC_BY_NETWORK } from './asset-registry.js';
+import { USDC_BY_NETWORK, usdcForNetwork } from './asset-registry.js';
 import { parseBigInt, parseNonNegativeBigInt } from './amount.js';
 import { describePeriod, normalizePeriod, type PeriodUnit } from './period.js';
-import type { X402PaymentRequirement } from './types.js';
+import { isHexShaped, isPayableAddress, isZeroAddress } from './address.js';
+import { UPTO_VERIFIED_CHAIN_IDS } from './permit2.js';
+import { isX402Scheme, type X402PaymentRequirement } from './types.js';
 import type { GrantedPermission } from '../lib/session-config.js';
 
 /**
@@ -284,17 +286,97 @@ const has = (list: string[] | undefined): list is string[] => Array.isArray(list
 const eqAddr = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /**
+ * How much of the user's budget a requirement asks for.
+ *
+ * Under `exact` that is the price. Under `upto` it is a ceiling the server may
+ * charge anything below, and the caps still measure it, because a signature is
+ * worth its ceiling to whoever holds it and no cap can be enforced against a
+ * number nobody knows yet. Saying so in the refusal is the difference between a
+ * user understanding why a five dollar ceiling was refused on a service that
+ * charges a fraction of a cent, and thinking the cap is broken.
+ *
+ * Exported because the caps are not the only thing that refuses over this
+ * number: `--max-amount` does too, from the selection loop, and a refusal that
+ * spelled it differently there would teach the reader the ceiling is a price.
+ */
+export const asks = (requirement: X402PaymentRequirement): string =>
+  requirement.scheme === 'upto' ? `up to ${requirement.amount}` : requirement.amount;
+
+/**
  * Decide whether a chosen payment requirement is allowed to be paid. Returns the
  * first failing reason so the caller can refuse clearly instead of overpaying.
- * Only the `exact` scheme is supported.
  */
 export function checkPolicy(
   requirement: X402PaymentRequirement,
   policy: X402Policy,
   ctx: PolicyContext = {}
 ): PolicyResult {
-  if (requirement.scheme !== 'exact') {
-    return { ok: false, reason: `unsupported scheme: ${requirement.scheme}` };
+  // The wire value is untrusted: it arrives as a plain string and is only cast
+  // to the union, so this is a runtime check and not a redundant one.
+  if (!isX402Scheme(requirement.scheme)) {
+    return { ok: false, reason: `unsupported scheme: ${String(requirement.scheme)}` };
+  }
+
+  // The settlement proxy is deployed on fewer chains than the asset registry
+  // knows, and a permit naming a spender with no code can never settle. The
+  // check belongs here rather than in the signer: this runs during selection,
+  // so an `upto` option on an unverified chain is skipped instead of shadowing
+  // a payable `exact` option on the same challenge, a dry run reports the
+  // refusal a real run would make, and nothing has been funded yet when it does.
+  if (requirement.scheme === 'upto') {
+    const asset = usdcForNetwork(requirement.network);
+    if (!asset) {
+      return { ok: false, reason: `unsupported x402 network: ${requirement.network}` };
+    }
+    if (!UPTO_VERIFIED_CHAIN_IDS.includes(asset.chainId)) {
+      return {
+        ok: false,
+        reason:
+          `x402 upto is not available on ${requirement.network}: the settlement proxy is only verified on ` +
+          `chain ids ${UPTO_VERIFIED_CHAIN_IDS.join(', ')}`,
+      };
+    }
+    // The witness names the only address the proxy accepts as the settling
+    // caller, so a challenge without one can never be paid. The signer refuses
+    // it too, but by then the payer has been topped up for a payment that was
+    // never going to happen; refused here, the option is skipped during
+    // selection like the unverified chain above, and an `exact` option on the
+    // same challenge still pays.
+    const facilitator = requirement.extra?.['facilitatorAddress'];
+    if (!isHexShaped(facilitator) || isZeroAddress(facilitator)) {
+      return {
+        ok: false,
+        reason:
+          `x402 upto needs a settling facilitator in extra.facilitatorAddress on ${requirement.network}, ` +
+          `got ${JSON.stringify(facilitator)}`,
+      };
+    }
+    // Present and the right shape, but unreadable: a different problem from an
+    // absent one, and it sends whoever reads this somewhere else.
+    if (!isPayableAddress(facilitator)) {
+      return {
+        ok: false,
+        reason: `extra.facilitatorAddress is not a readable address on ${requirement.network}: ${facilitator}`,
+      };
+    }
+  }
+
+  // Ahead of every allowlist, because these hold whether or not one is
+  // configured and because a challenge nobody can act on should say so rather
+  // than report whichever allowlist it also happened to miss. Here rather than
+  // in a signer so nothing has been funded when they refuse: a settlement that
+  // cannot succeed still reserves its whole figure against the caps, on the
+  // rule that a failed attempt may have been broadcast. See address.ts.
+  for (const [field, value] of [
+    ['asset', requirement.asset],
+    ['payTo', requirement.payTo],
+  ] as const) {
+    if (!isPayableAddress(value)) {
+      return { ok: false, reason: `${field} is not a readable address on ${requirement.network}: ${value}` };
+    }
+  }
+  if (isZeroAddress(requirement.payTo)) {
+    return { ok: false, reason: `payTo is the zero address on ${requirement.network}` };
   }
 
   if (has(policy.allowedNetworks) && !policy.allowedNetworks.includes(requirement.network)) {
@@ -329,7 +411,7 @@ export function checkPolicy(
     if (amount > cap) {
       return {
         ok: false,
-        reason: `amount ${requirement.amount} exceeds maxAmountPerPayment ${policy.maxAmountPerPayment}`,
+        reason: `amount ${asks(requirement)} exceeds maxAmountPerPayment ${policy.maxAmountPerPayment}`,
       };
     }
   }
@@ -367,7 +449,7 @@ export function checkPolicy(
     return {
       ok: false,
       reason:
-        `payment ${requirement.amount} would exceed the granted ${latest.limit.allowance} per ${window}${resets}` +
+        `payment ${asks(requirement)} would exceed the granted ${latest.limit.allowance} per ${window}${resets}` +
         (others > 0 ? ` (${others} other limit${others === 1 ? '' : 's'} also applies)` : ''),
     };
   }
@@ -382,7 +464,7 @@ export function checkPolicy(
       return {
         ok: false,
         reason:
-          `payment ${requirement.amount} would exceed maxTotalPerSession ${policy.maxTotalPerSession} ` +
+          `payment ${asks(requirement)} would exceed maxTotalPerSession ${policy.maxTotalPerSession} ` +
           `(already spent ${spent} since the session was created; raise it with ` +
           `\`jaw config set x402.maxTotalPerSession <base units>\`)`,
       };

@@ -138,6 +138,8 @@ export default class X402Pay extends BaseCommand {
             payer: outcome.payer,
             status: outcome.paid ? 'paid' : outcome.attemptedPayment ? 'failed' : 'refused',
             amount: settled?.amount,
+            authorized: settled?.authorized,
+            deadline: settled?.deadline,
             asset: settled?.asset,
             network: settled?.network,
             payTo: settled?.payTo,
@@ -145,6 +147,7 @@ export default class X402Pay extends BaseCommand {
             txHash: outcome.payment?.txHash,
             topUpAmount: outcome.topUp?.amount,
             topUpBatchId: outcome.topUp?.batchId,
+            approvalBatchId: outcome.permit2Approval?.batchId,
             reason: outcome.refusedReason,
           });
         }
@@ -190,16 +193,40 @@ export default class X402Pay extends BaseCommand {
         const where = result.topUp.batchId ? ` (${result.topUp.batchId})` : ' (no call id returned to confirm it)';
         this.log(`\n  A top-up of ${formatUsdc(result.topUp.amount, topUpDecimals)} was sent first${where}.`);
       }
+      if (result.permit2Approval) {
+        // Same rule as the top-up: a userOp the user was charged for went out
+        // before the refusal, so it is said out loud rather than inferred.
+        this.log(`\n  A Permit2 approval was sent first (${result.permit2Approval.batchId}).`);
+      }
+      // A signed authorization went out and settlement did not confirm, which
+      // is true of both schemes: the facilitator may have broadcast it anyway,
+      // so the ledger counts it and the caps drop by it. Under `upto` the
+      // figure is the whole ceiling rather than what was being paid. Either
+      // way it belongs on screen, because it is the budget the next payment
+      // will find missing and nothing else says so.
+      const held = result.attemptedPayment;
+      if (held) {
+        const figure = formatUsdc(held.authorized, priceDecimals(held.network));
+        this.log(`\n  ${figure} stays authorized until it expires, and your caps count it as spent until then.`);
+      }
       this.exit(1);
     }
 
     if (result.wouldPay) {
       this.log('Would pay.\n');
+      // `upto` states a ceiling, not a price, and the server picks the charge
+      // afterwards. Printing "price" over that number would tell the user the
+      // one thing the scheme guarantees is not true.
+      const label = result.wouldPay.scheme === 'upto' ? 'up to  ' : 'price  ';
       this.log(
-        `  price    ${formatUsdc(result.wouldPay.amount, priceDecimals(result.wouldPay.network))} on ${sanitizeLine(result.wouldPay.network, 64)}`
+        `  ${label}  ${formatUsdc(result.wouldPay.amount, priceDecimals(result.wouldPay.network))} on ${sanitizeLine(result.wouldPay.network, 64)}`
       );
       this.log(`  payTo    ${result.wouldPay.payTo}`);
       this.log(`  from     ${payer.address}`);
+      if (result.wouldPay.scheme === 'upto') {
+        this.log('\n  The server charges anything up to that and decides after the work is done.');
+        this.log('  Your caps are measured against the ceiling, since the charge is not knowable yet.');
+      }
       this.log('\nNothing was signed or spent. Re-run with --pay to go through with it.');
       return;
     }
@@ -214,9 +241,19 @@ export default class X402Pay extends BaseCommand {
     this.log(
       `  amount   ${formatUsdc(result.payment?.amount, priceDecimals(result.payment?.network))} on ${sanitizeLine(result.payment?.network, 64)}`
     );
+    // Only under `upto`, and only when the two figures really differ. Compared
+    // as numbers: an advertised amount is validated as digits, not normalised,
+    // so `01000` and `1000` are the same money spelled two ways and would
+    // otherwise print a line claiming a gap that does not exist.
+    if (result.payment?.scheme === 'upto' && BigInt(result.payment.authorized) !== BigInt(result.payment.amount)) {
+      this.log(`  of up to ${formatUsdc(result.payment.authorized, priceDecimals(result.payment.network))} authorized`);
+    }
     this.log(`  payTo    ${result.payment?.payTo}`);
     if (result.topUp) {
       this.log(`  top-up   ${formatUsdc(result.topUp.amount, topUpDecimals)} pulled from the owner account`);
+    }
+    if (result.permit2Approval) {
+      this.log(`  approval ${result.permit2Approval.batchId} granted Permit2 the allowance upto settles through`);
     }
     if (result.payment?.txHash) {
       this.log(`  tx       ${result.payment.txHash}`);

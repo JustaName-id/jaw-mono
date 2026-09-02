@@ -17,6 +17,13 @@ import type { UsdcAsset } from './asset-registry.js';
  * It costs the granted allowance 0.10 once per session and not once per refill:
  * a refill fills the payer to price plus reserve, the payment takes the price,
  * and the reserve stays for the next one.
+ *
+ * An `upto` session asks for a second one on the payment that grants the
+ * Permit2 allowance. That approval is an operation the payer pays for out of
+ * its own balance, and a payer holding exactly the price cannot, so the bar for
+ * skipping the refill rises by a reserve on top of the one every refill leaves.
+ * The approval spends about a hundredth of it and the rest stays in the payer,
+ * the same as the first.
  */
 export function gasReserve(asset: UsdcAsset): bigint {
   return 10n ** BigInt(asset.decimals) / 10n;

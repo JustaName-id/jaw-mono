@@ -54,6 +54,7 @@ import {
   resolveSessionX402Policy,
   topUpCeiling,
 } from './policy.js';
+import { USDC_BY_NETWORK } from './asset-registry.js';
 import type { X402PaymentRequirement } from './types.js';
 
 const base: X402PaymentRequirement = {
@@ -65,14 +66,138 @@ const base: X402PaymentRequirement = {
   maxTimeoutSeconds: 60,
 };
 
+// What a payable upto option carries on top of `base`: the witness must name
+// the settling caller, and checkPolicy skips the option without one.
+const uptoExtra = { extra: { facilitatorAddress: '0x1111111111111111111111111111111111111111' } };
+
 describe('checkPolicy', () => {
   it('allows a payment under an empty policy', () => {
     expect(checkPolicy(base, {})).toEqual({ ok: true });
   });
 
-  it('rejects a non-exact scheme', () => {
+  it('allows the two schemes this client can produce a payment for', () => {
+    expect(checkPolicy(base, {}).ok).toBe(true);
+    expect(checkPolicy({ ...base, scheme: 'upto', ...uptoExtra }, {}).ok).toBe(true);
+  });
+
+  it('rejects a scheme it cannot sign', () => {
+    // Off the wire the scheme is a plain string, so this is a runtime check.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(checkPolicy({ ...base, scheme: 'upto' as any }, {}).ok).toBe(false);
+    expect(checkPolicy({ ...base, scheme: 'permit2-batch' as any }, {}).ok).toBe(false);
+  });
+
+  /**
+   * Under `upto` the number the caps measure is a ceiling, not a price, and a
+   * refusal that read like a price would look broken to anyone paying a service
+   * that charges a fraction of it.
+   */
+  it('names the ceiling as a ceiling when it refuses one', () => {
+    const verdict = checkPolicy(
+      { ...base, scheme: 'upto', amount: '5000000', ...uptoExtra },
+      { maxAmountPerPayment: '1000000' }
+    );
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reason).toContain('up to 5000000');
+  });
+
+  /**
+   * The settlement proxy is only deployed on two of the four chains the asset
+   * registry carries, and the check used to live in the signer, downstream of
+   * the top-up. Refusing here means the option is skipped during selection: a
+   * dry run tells the truth, and nothing has been spent when it does.
+   */
+  it('refuses an upto option on a chain the settlement proxy was never verified on', () => {
+    const polygon = {
+      ...base,
+      scheme: 'upto' as const,
+      network: 'eip155:137',
+      asset: USDC_BY_NETWORK['eip155:137'].address,
+    };
+    const verdict = checkPolicy(polygon, {});
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reason).toContain('is not available on eip155:137');
+    // The same challenge under `exact` still pays: the refusal is about where
+    // the proxy exists, not about the chain.
+    expect(checkPolicy({ ...polygon, scheme: 'exact' }, {}).ok).toBe(true);
+  });
+
+  /**
+   * Same shape as the chain check above, and for the same money: the signer
+   * refuses a challenge without a facilitator too, but only after the funder
+   * has topped the payer up for it. Refused during selection, nothing has been
+   * spent and a dry run tells the truth.
+   */
+  it('refuses an upto option that names no facilitator to settle it', () => {
+    const verdict = checkPolicy({ ...base, scheme: 'upto' }, {});
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reason).toContain('facilitatorAddress');
+
+    const malformed = checkPolicy({ ...base, scheme: 'upto', extra: { facilitatorAddress: 'not-an-address' } }, {});
+    expect(malformed.ok).toBe(false);
+    expect(malformed.reason).toContain('facilitatorAddress');
+
+    // The same challenge under exact still pays: EIP-3009 has no facilitator
+    // witness to bind.
+    expect(checkPolicy(base, {}).ok).toBe(true);
+  });
+
+  /**
+   * A mixed-case address that fails EIP-55 is one viem and every other client
+   * downstream refuses, and `accepted` echoes the requirement byte for byte, so
+   * re-casing the payload would leave the document disagreeing with itself.
+   * Refused here, during selection, where it costs nothing.
+   */
+  it('refuses an address no counterparty could read', () => {
+    const shouty = (a: string) => a.toUpperCase().replace('0X', '0x');
+
+    for (const field of ['asset', 'payTo'] as const) {
+      const verdict = checkPolicy({ ...base, [field]: shouty(base[field]) as `0x${string}` }, {});
+      expect(verdict.ok).toBe(false);
+      expect(verdict.reason).toContain(`${field} is not a readable address`);
+    }
+
+    // Reported as unreadable rather than as whichever allowlist it also missed,
+    // which is why the check sits ahead of them.
+    const withAllowlist = checkPolicy(
+      { ...base, asset: shouty(base.asset) as `0x${string}` },
+      {
+        allowedAssets: [base.asset],
+      }
+    );
+    expect(withAllowlist.reason).toContain('asset is not a readable address');
+
+    // An unreadable facilitator is not an absent one, and does not say it is.
+    const badFacilitator = checkPolicy(
+      { ...base, scheme: 'upto', extra: { facilitatorAddress: shouty(base.payTo) } },
+      {}
+    );
+    expect(badFacilitator.reason).toContain('facilitatorAddress is not a readable address');
+
+    // Both spellings a real server uses are payable.
+    for (const spell of [(a: string) => a, (a: string) => a.toLowerCase()]) {
+      expect(checkPolicy({ ...base, payTo: spell(base.payTo) as `0x${string}` }, {}).ok).toBe(true);
+    }
+  });
+
+  /**
+   * address(0) has the shape and none of the meaning. The proxy reverts for
+   * every caller when the witness names it, so the permit can never settle, and
+   * a payment to it is destroyed. Both would be funded first and then counted
+   * in full against the caps.
+   */
+  it('refuses the zero address as a facilitator or a recipient', () => {
+    const zero = `0x${'0'.repeat(40)}`;
+
+    const asFacilitator = checkPolicy({ ...base, scheme: 'upto', extra: { facilitatorAddress: zero } }, {});
+    expect(asFacilitator.ok).toBe(false);
+    expect(asFacilitator.reason).toContain('facilitatorAddress');
+
+    // Both schemes, and with no allowlist configured.
+    for (const scheme of ['exact', 'upto'] as const) {
+      const verdict = checkPolicy({ ...base, scheme, ...uptoExtra, payTo: zero as `0x${string}` }, {});
+      expect(verdict.ok).toBe(false);
+      expect(verdict.reason).toContain('zero address');
+    }
   });
 
   it('enforces maxAmountPerPayment', () => {

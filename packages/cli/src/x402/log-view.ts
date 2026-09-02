@@ -1,7 +1,7 @@
 import { formatUsdc } from './status-report.js';
 import { usdcForNetwork } from './asset-registry.js';
 import { sanitizeLine } from '../lib/terminal.js';
-import type { X402LogEntry } from './ledger.js';
+import { spendFigureOf, type X402LogEntry } from './ledger.js';
 
 /**
  * Rendering for `jaw x402 log`, kept apart from the command so the accounting in
@@ -26,7 +26,11 @@ export function renderEntry(entry: X402LogEntry): string {
   // Everything here is read back from a file, so nothing is trusted for being
   // ours originally: a tampered ledger must not be able to paint a row either.
   const when = sanitizeLine(String(entry.at).replace('T', ' ').slice(0, 19), 19);
-  const amount = entry.amount ? formatUsdc(entry.amount, decimalsOf(entry)) : '';
+  // What the caps counted for this row, not what the server charged: on a
+  // failed attempt those differ, and the figure a user needs to see is the one
+  // that will refuse their next payment.
+  const counted = spendFigureOf(entry);
+  const amount = entry.amount || entry.authorized ? formatUsdc(counted.toString(), decimalsOf(entry)) : '';
   const head = `  ${when}  ${sanitizeLine(entry.status, 7).padEnd(7)}  ${amount.padStart(12)}  ${hostOf(entry.url)}`;
 
   const detail: string[] = [];
@@ -35,6 +39,9 @@ export function renderEntry(entry: X402LogEntry): string {
   if (entry.topUpAmount) {
     detail.push(`topped up ${formatUsdc(entry.topUpAmount, decimalsOf(entry))}`);
   }
+  // The Permit2 approval moved no principal, only the gas the payer was charged
+  // for it, so it is named rather than totalled.
+  if (entry.approvalBatchId) detail.push('granted Permit2 its allowance');
   if (entry.txHash) detail.push(sanitizeLine(entry.txHash, 80));
   // A failed settlement may still have been broadcast: the nonce is what makes
   // it reconcilable on chain, so surface it exactly where it is ambiguous.
@@ -66,12 +73,13 @@ export function renderSummary(entries: X402LogEntry[]): string {
     // from both tallies.
     if (Object.hasOwn(counts, entry.status)) counts[entry.status] += 1;
     else unknown += 1;
-    if ((entry.status === 'paid' || entry.status === 'failed') && entry.amount) {
+    const counted = spendFigureOf(entry);
+    if (counted > 0n) {
       try {
         const decimals = decimalsOf(entry);
-        spentByScale.set(decimals, (spentByScale.get(decimals) ?? 0n) + BigInt(entry.amount));
+        spentByScale.set(decimals, (spentByScale.get(decimals) ?? 0n) + counted);
       } catch {
-        /* a hand-edited amount must not break the summary */
+        /* a hand-edited asset must not break the summary */
       }
     }
   }

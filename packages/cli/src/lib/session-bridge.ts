@@ -1,7 +1,9 @@
 import { loadSessionKey } from './keystore.js';
 import { isLegacySession, loadSessionConfig, type SessionConfig } from './session-config.js';
 import { loadConfig } from './config.js';
+import { encodeFunctionData, erc20Abi, maxUint256 } from 'viem';
 import { usdcForNetwork } from '../x402/asset-registry.js';
+import { PERMIT2_ADDRESS } from '../x402/permit2.js';
 
 // JAW's ERC-20 paymaster, mirrored from core's JAW_PAYMASTER_URL. Kept as a
 // local literal rather than an import because `@jaw.id/core` is lazy-loaded in
@@ -182,6 +184,52 @@ export class SessionBridge {
     if (config.expiry <= Date.now() / 1000) {
       const expiryDate = new Date(config.expiry * 1000).toISOString();
       throw new Error(`Session expired on ${expiryDate}. Run \`jaw session setup\` to create a new session.`);
+    }
+  }
+
+  /**
+   * Approve Permit2 to move one of the payer's tokens, and return the batch id.
+   *
+   * The only call this session sends outside its permission, and the only one
+   * that can be: `JustaPermissionManager` checks every call's selector against
+   * the grant, and the x402 grant permits `transfer` alone, so an approval
+   * routed through the permission reverts before anything else happens. Sent by
+   * the session on its own balance it never reaches the manager at all, whose
+   * approval revocation and Permit2 lockdown act on the granting account and
+   * only within their own execution.
+   *
+   * Being outside the permission is exactly why it is not a general send. It
+   * takes a token and nothing else: the spender is Permit2 and the amount is
+   * the maximum, neither reachable by a caller, and the token has to be the
+   * registry's USDC for this session's chain. There is no shape of argument
+   * that turns this into an arbitrary transfer, which matters because an agent
+   * reaches the tools that reach this.
+   */
+  async approvePermit2(token: `0x${string}`): Promise<string> {
+    const { account, config } = await this.getSession();
+    const usdc = usdcForNetwork(`eip155:${config.chainId}`);
+    if (!usdc || token.toLowerCase() !== usdc.address.toLowerCase()) {
+      throw new Error(
+        `Refusing to approve Permit2 for ${token}: only the registry USDC on chain ${config.chainId} is allowed.`
+      );
+    }
+
+    const data = encodeFunctionData({
+      abi: erc20Abi,
+      functionName: 'approve',
+      args: [PERMIT2_ADDRESS, maxUint256],
+    });
+
+    try {
+      // No permissionId: this is the session acting for itself.
+      // Same shape tolerance the funder applies: `{ id, chainId }` from
+      // Account.sendCalls, or a bare id from an older bridge.
+      const sent: unknown = await account.sendCalls([{ to: usdc.address, data }]);
+      const id = typeof sent === 'string' ? sent : (sent as { id?: string } | null)?.id;
+      if (!id) throw new Error('approval submitted but no call id was returned');
+      return id;
+    } catch (err) {
+      throw explainUnchargeableSender(err, config.sessionAddress);
     }
   }
 

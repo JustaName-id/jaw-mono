@@ -8,6 +8,7 @@
 // UNTRUSTED — the MCP layer fences it before handing it to the agent.
 
 import { usdcForNetwork } from './asset-registry.js';
+import { isX402Scheme } from './types.js';
 
 const BAZAAR_BASE = 'https://api.cdp.coinbase.com/platform/v2/x402/discovery';
 // Coinbase's own docs cap search at 20 results per call.
@@ -28,7 +29,18 @@ export interface DiscoverParams {
   query?: string;
   /** CAIP-2 network to prefer when picking the price to show. */
   network?: string;
-  /** Only surface services at or below this USD price per call. */
+  /**
+   * Only surface services at or below this USD price per call, judged on the
+   * option we would actually pay: a `upto` service is measured by its ceiling,
+   * since that is what a payment authorizes and what the spend caps count.
+   *
+   * Asked of the Bazaar and then applied again here, because the two do not
+   * necessarily agree. The catalog filters on whichever of a service's options
+   * matched, and we go on to select a different one, the cheapest on the
+   * preferred network. An entry priced in an asset we cannot value is kept:
+   * there is no figure to compare, and dropping it would hide a service for
+   * being unfamiliar rather than for being expensive.
+   */
   maxUsdPrice?: string;
   /** Only Coinbase-curated (health-probed) services. */
   curatedOnly?: boolean;
@@ -41,6 +53,16 @@ export interface DiscoverParams {
 /** The cheapest payment option for a service, resolved for the caller. */
 export interface ServicePrice {
   amount: string;
+  /**
+   * What `amount` and `approxUsd` are.
+   *
+   * `price` means that is what a call costs. `ceiling` means the server may
+   * charge anything up to it and picks the figure after the work is done, so it
+   * is an upper bound and not an estimate. Spelled out rather than left for the
+   * reader to derive from `scheme`, because a catalog is read to compare
+   * numbers and these two are not the same kind of number.
+   */
+  kind: 'price' | 'ceiling';
   asset: string;
   network: string;
   payTo: string | null;
@@ -115,12 +137,19 @@ function toPrice(entry: Record<string, unknown>): ServicePrice | null {
     approxUsd = Number.isFinite(n) ? n : null;
   }
 
+  const scheme = asString(entry.scheme);
+  // An option we cannot sign is not a price, it is a distraction. Left in, a
+  // catalog entry priced in a scheme this client refuses would be listed as the
+  // cheap one, chosen on that basis, and then paid through whatever other
+  // option the challenge offered, which is usually the expensive one.
+  if (!isX402Scheme(scheme)) return null;
   return {
     amount,
+    kind: scheme === 'upto' ? 'ceiling' : 'price',
     asset,
     network,
     payTo: asString(entry.payTo),
-    scheme: asString(entry.scheme),
+    scheme,
     maxTimeoutSeconds: asNumber(entry.maxTimeoutSeconds),
     approxUsd,
   };
@@ -134,7 +163,14 @@ function selectPrice(accepts: unknown[], preferNetwork: string): ServicePrice | 
   if (prices.length === 0) return null;
   const matching = prices.filter((p) => p.network === preferNetwork);
   const pool = matching.length > 0 ? matching : prices;
-  return pool.reduce((min, p) => (BigInt(p.amount) < BigInt(min.amount) ? p : min));
+  // Smallest figure wins, and a tie goes to the fixed price. The same rule the
+  // payment path applies when a challenge offers both: equal numbers mean
+  // different things, and the one that cannot grow is the safer thing to show.
+  return pool.reduce((min, p) => {
+    const cheaper = BigInt(p.amount) < BigInt(min.amount);
+    const fixedPriceTie = BigInt(p.amount) === BigInt(min.amount) && min.kind === 'ceiling' && p.kind === 'price';
+    return cheaper || fixedPriceTie ? p : min;
+  });
 }
 
 function mapService(raw: unknown, preferNetwork: string): DiscoveredService {
@@ -206,6 +242,42 @@ async function bazaarGet(path: string, search: URLSearchParams): Promise<Record<
 }
 
 /**
+ * Read the caller's price cap, or refuse it.
+ *
+ * It arrives as free text a model wrote, and both ways of getting it wrong fail
+ * quietly in opposite directions. `Number('')` is zero, a finite cap that
+ * filters away everything, and an empty string is also falsy where the query is
+ * built, so the Bazaar never sees it and the caller gets an empty page with no
+ * reason attached. `"$0.01"` is NaN, which disables the filter while the caller
+ * believes a cap is being enforced. Neither is something to guess at, so a cap
+ * that is not a plain non-negative number is an error rather than an
+ * interpretation.
+ */
+function parseUsdCap(maxUsdPrice?: string): number | undefined {
+  if (maxUsdPrice === undefined) return undefined;
+  const cap = Number(maxUsdPrice);
+  if (maxUsdPrice.trim() === '' || !Number.isFinite(cap) || cap < 0) {
+    throw new Error(`maxUsdPrice must be a non-negative number of USD, got ${JSON.stringify(maxUsdPrice)}`);
+  }
+  return cap;
+}
+
+/**
+ * Drop what we would not pay, judged on the option we would actually pay.
+ *
+ * The Bazaar filters on whichever option matched its query, and `selectPrice`
+ * then picks the cheapest on the preferred network, which need not be the same
+ * one. Without this a caller asking for a cent per call can be handed a service
+ * whose selected option authorizes several dollars. Entries with no valuable
+ * asset are kept: there is nothing to compare them against, and hiding them
+ * would be hiding the unfamiliar rather than the expensive.
+ */
+function withinCap(services: DiscoveredService[], cap?: number): DiscoveredService[] {
+  if (cap === undefined) return services;
+  return services.filter((s) => s.price?.approxUsd == null || s.price.approxUsd <= cap);
+}
+
+/**
  * Search the x402 Bazaar (or, with `payTo`, list one seller's services).
  * Returns a compact, mapped view; the raw seller-authored strings inside it are
  * untrusted and must be fenced before reaching the model.
@@ -213,9 +285,16 @@ async function bazaarGet(path: string, search: URLSearchParams): Promise<Record<
 export async function discoverServices(params: DiscoverParams): Promise<DiscoverResult> {
   const network = params.network ?? DEFAULT_NETWORK;
 
+  const cap = parseUsdCap(params.maxUsdPrice);
+
   if (params.payTo) {
     const data = await bazaarGet('merchant', new URLSearchParams({ payTo: params.payTo }));
-    const services = asArray(data.resources).map((r) => mapService(r, network));
+    // The merchant endpoint takes no price filter, so this is the only place it
+    // gets applied for a seller listing.
+    const services = withinCap(
+      asArray(data.resources).map((r) => mapService(r, network)),
+      cap
+    );
     return { mode: 'merchant', count: services.length, partialResults: false, services };
   }
 
@@ -228,7 +307,10 @@ export async function discoverServices(params: DiscoverParams): Promise<Discover
   search.set('limit', String(limit));
 
   const data = await bazaarGet('search', search);
-  const services = asArray(data.resources).map((r) => mapService(r, network));
+  const services = withinCap(
+    asArray(data.resources).map((r) => mapService(r, network)),
+    cap
+  );
   return {
     mode: 'search',
     count: services.length,
