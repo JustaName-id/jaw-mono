@@ -5,6 +5,7 @@ import { FEATS, type Feat, type PhoneAppKey, type Variant } from './features';
 import { FeatRow } from './feature-row';
 import { SiteHeader } from './site-header';
 import { MobileMenu } from './mobile-menu';
+import { MobileTourBar } from './mobile-bar';
 import { MobileIntro } from './mobile-intro';
 import { FundingOverlay } from './funding-overlay';
 import { fundAccount } from '@/lib/funding';
@@ -253,6 +254,23 @@ export function HeroDemoPage() {
     setMenu(false);
     setErr(null);
   };
+  // Mobile only: the intro fronts the tour until the visitor launches it, from
+  // the CTA or by picking a capability out of the menu.
+  const launchMobile = () => {
+    getAnalyticsClient().track('DEMO_LAUNCHED', { surface: 'mobile' });
+    setStarted(true);
+  };
+  // Bar controls. Exit drops back to the intro with the tour rewound; skip
+  // moves to the next capability WITHOUT running its request, so it never
+  // counts as completing the tour.
+  const exitDemo = () => {
+    pick(1);
+    setStarted(false);
+  };
+  const skipNext = () => {
+    const next = FEATS[FEATS.findIndex((f) => f.id === cur.id) + 1];
+    if (next) pick(next.id);
+  };
   const advanceFrom = (fromId: number) => {
     // Advance by list position, not id arithmetic — ids are not guaranteed to
     // stay contiguous with the list.
@@ -364,32 +382,29 @@ export function HeroDemoPage() {
   // The demo itself: the fake app plus every overlay (menu, dialog, finale).
   // Rendered once — inside the device frame on desktop, full-bleed on mobile.
   const demo = (
-    <div className="animate-jd-fade relative h-full" key={`${id}-${v.key}`}>
-      <div className="group/stage h-full" data-pulse={open || fin || menu ? undefined : ''}>
+    <div className="animate-jd-fade relative flex h-full flex-col" key={`${id}-${v.key}`}>
+      {/* Mobile-only app chrome, from the design's .hdm-bar: exit, step
+          counter, the capability on screen, skip ahead, menu. It sits IN the
+          flow (the app takes what's left) rather than floating over the app,
+          and hides by visibility instead of unmounting — dropping it would
+          reflow the app underneath every time a dialog opens. */}
+      <MobileTourBar
+        step={cur.id}
+        total={FEATS.length}
+        title={cur.title}
+        hidden={open || fin}
+        atLast={cur.id === FEATS[FEATS.length - 1]?.id}
+        onExit={exitDemo}
+        onNext={skipNext}
+        onMenu={() => setMenu(true)}
+      />
+
+      <div className="group/stage min-h-0 flex-1" data-pulse={open || fin || menu ? undefined : ''}>
         <Base onCta={onCta} quote={quote} />
       </div>
 
-      {/* Mobile-only "where am I" chip, taken from the design's .hdm-bar live
-          state: step counter + the capability on screen. The design renders a
-          full-width opaque bar with back/next/menu chrome; here it is a single
-          floating pill matching the menu button, so it reads as a quiet hint
-          over the app rather than app chrome. Same visibility rule as that
-          button, so it clears out for dialogs and the finale. */}
-      {!open && !fin && (
-        <div className="absolute left-3.5 top-3.5 z-[35] inline-flex max-w-[calc(100%-4.5rem)] items-center gap-2 rounded-full border border-black/10 bg-white/75 px-3 py-1.5 shadow-[0_2px_10px_rgba(15,23,42,.12)] backdrop-blur-md md:hidden">
-          <span className="text-ink shrink-0 font-mono text-[10px] tracking-[.06em]">
-            {String(cur.id).padStart(2, '0')}
-            <span className="text-ink-4">/{String(FEATS.length).padStart(2, '0')}</span>
-          </span>
-          <span className="bg-line-2 h-[11px] w-px shrink-0" />
-          <span className="text-ink truncate text-[12.5px] font-medium tracking-[-0.01em]">{cur.title}</span>
-        </div>
-      )}
-
       <MobileMenu
-        showButton={!open && !fin}
         open={menu}
-        onOpen={() => setMenu(true)}
         onClose={() => setMenu(false)}
         activeId={id}
         activeVi={vi}
@@ -441,12 +456,25 @@ export function HeroDemoPage() {
           (started ? (
             demo
           ) : (
-            <MobileIntro
-              onLaunch={() => {
-                getAnalyticsClient().track('DEMO_LAUNCHED', { surface: 'mobile' });
-                setStarted(true);
-              }}
-            />
+            <>
+              <MobileIntro onLaunch={launchMobile} onMenu={() => setMenu(true)} />
+              {/* Same sheet the tour uses; picking a capability here launches
+                  the tour on that screen. */}
+              <MobileMenu
+                open={menu}
+                onClose={() => setMenu(false)}
+                activeId={id}
+                activeVi={vi}
+                onPick={(n) => {
+                  launchMobile();
+                  pick(n);
+                }}
+                onPickVariant={(n, i) => {
+                  launchMobile();
+                  pickFeatVariant(n, i);
+                }}
+              />
+            </>
           ))}
       </div>
 

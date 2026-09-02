@@ -67,7 +67,9 @@ function Row({
 export function SplitsApp({ onCta }: { onCta: () => void }) {
   return (
     <div className="relative h-full overflow-hidden font-sans" style={{ background: cream, color: navy }}>
-      <div className="absolute inset-x-0 top-0 px-[18px] pt-[52px] opacity-[.34]">
+      {/* pt clears the frame's drawn status bar; on a phone the tour's own top
+          bar sits there instead, so mobile only needs normal header padding. */}
+      <div className="absolute inset-x-0 top-0 px-[18px] pt-[52px] opacity-[.34] max-md:pt-3.5">
         <div className="flex items-center gap-3 border-b border-[rgba(22,35,63,.18)] pb-3">
           <span
             className="relative grid h-[30px] w-[30px] shrink-0 place-items-center overflow-hidden rounded-full text-[11.5px] font-semibold text-white"

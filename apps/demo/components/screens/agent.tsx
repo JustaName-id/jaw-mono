@@ -15,7 +15,9 @@ const tint = 'rgba(224,248,238,.5)';
 export function AgentApp({ onCta }: { onCta: () => void }) {
   return (
     <div className="flex h-full flex-col overflow-hidden font-sans text-[#EAF7F1]" style={{ background: shell }}>
-      <div className="flex items-center gap-2.5 border-b border-white/10 px-5 pb-3 pt-[70px]">
+      {/* pt clears the frame's drawn status bar; on a phone the tour's own top
+          bar sits there instead, so mobile only needs normal header padding. */}
+      <div className="flex items-center gap-2.5 border-b border-white/10 px-5 pb-3 pt-[70px] max-md:pt-4">
         <span
           className="relative grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full text-[14px] font-bold text-white"
           style={{ background: 'linear-gradient(135deg,#1F6B58,#4FC79F)' }}
@@ -103,7 +105,7 @@ export function AgentApp({ onCta }: { onCta: () => void }) {
             <path d="M22 2 11 13" />
           </svg>
         </div>
-        <div className="h-[34px]" />
+        <div className="h-[34px] max-md:hidden" />
       </div>
     </div>
   );
