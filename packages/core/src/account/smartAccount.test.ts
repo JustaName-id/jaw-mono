@@ -309,6 +309,17 @@ describe('getBundlerClient — paymaster resolution', () => {
         expect(contextSentToPaymaster()).toBeUndefined();
     });
 
+    // The other half of "the url decides for the pair": a context on its own has
+    // no paymaster to belong to, so it is not applied over the configured one.
+    // This is the case a caller reaching the SDK directly can still hit, since
+    // `resolvePaymaster` upstream never emits a context without a url.
+    it('ignores a context override that names no paymaster of its own', () => {
+        getBundlerClient(CHAIN, undefined, { sponsorshipPolicyId: 'sp_1' });
+
+        expect(http).toHaveBeenCalledWith('https://configured.example');
+        expect(contextSentToPaymaster()).toEqual({ token: '0xUSDC' });
+    });
+
     it('reads an empty url override as no paymaster, not as no override', () => {
         getBundlerClient(CHAIN, '');
 
