@@ -30,7 +30,6 @@ import {
 import { store, SDKChain } from '../../store/index.js';
 import { parseAddFundsParams } from '../../rpc/addFundsParams.js';
 import { resolveDestination } from '../../addFunds/destination.js';
-import { visibleChains } from '../../addFunds/chains.js';
 import { standardErrors } from '../../errors/index.js';
 import type { JawTheme } from '../../ui/theme.js';
 
@@ -442,7 +441,6 @@ export class AppSpecificSigner extends JAWSigner {
                         // address the user does not own.
                         address: resolveDestination(this.accounts),
                         chainId,
-                        chains: visibleChains(store.chains.get(), chainId),
                         asset: addFundsParams.asset,
                     },
                 };

@@ -105,7 +105,6 @@ export interface AddFundsUIRequest extends BaseUIRequest {
     data: {
         address: Address;
         chainId: number;
-        chains: number[];
         asset?: string;
     };
     // (undocumented)
@@ -1567,9 +1566,6 @@ export type ViemRPCParams<M extends string> = ExtractParams<WalletRpcSchema, M>;
 //
 // @public
 export type ViemRPCReturnType<M extends string> = ExtractReturnType<WalletRpcSchema, M>;
-
-// @public
-export function visibleChains(configured: readonly Chain[], activeChainId: number): number[];
 
 // @public
 export type WalletConnectCapabilities = {

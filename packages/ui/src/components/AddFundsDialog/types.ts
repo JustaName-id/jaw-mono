@@ -8,8 +8,6 @@ export interface AddFundsDialogProps {
   address: string;
   /** The chain the QR pins via EIP-681. */
   chainId: number;
-  /** Chains the address works on, shown as the informational stack. */
-  chains: number[];
   /** Asset symbol to ask the sender for, e.g. 'USDC'. Display only. */
   asset?: string;
   /** Mainnet RPC for reverse-resolving the destination to an ENS name. */

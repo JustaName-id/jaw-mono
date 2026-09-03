@@ -26,7 +26,6 @@ export const AddFundsDialog = ({
   onOpenChange,
   address,
   chainId,
-  chains,
   asset,
   mainnetRpcUrl,
   apiKey,
@@ -61,7 +60,7 @@ export const AddFundsDialog = ({
               sentence rather than a control the user should operate. */}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <h2 className="text-foreground text-title">Receive on</h2>
-            <ChainStack chains={chains} activeChainId={chainId} apiKey={apiKey} />
+            <ChainStack activeChainId={chainId} apiKey={apiKey} />
           </div>
 
           {/* No chain named in words: the stack above shows where the address

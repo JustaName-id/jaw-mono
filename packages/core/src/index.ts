@@ -201,6 +201,5 @@ export { parseAddFundsParams } from './rpc/addFundsParams.js';
 export type { FundingSource } from './addFunds/types.js';
 export { RECEIVE_SOURCE } from './addFunds/types.js';
 export { resolveDestination } from './addFunds/destination.js';
-export { visibleChains } from './addFunds/chains.js';
 export type { SendCallsVersion } from './rpc/sendCallsParams.js';
 export type { Address } from './provider/interface.js';

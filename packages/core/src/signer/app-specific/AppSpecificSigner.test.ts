@@ -610,9 +610,6 @@ describe('AppSpecificSigner', () => {
             const ACCOUNT = '0x1234567890123456789012345678901234567890';
 
             beforeEach(() => {
-                // `store.chains.get` reads the real store, which the getState
-                // spy above does not cover, so the configured chains are set here.
-                vi.spyOn(store.chains, 'get').mockReturnValue([{ id: 8453 }, { id: 10 }]);
                 (mockUIHandler.request as Mock).mockResolvedValue({ id: 'r', approved: true });
             });
 
@@ -626,7 +623,6 @@ describe('AppSpecificSigner', () => {
                         data: expect.objectContaining({
                             address: ACCOUNT,
                             chainId: 8453,
-                            chains: [8453, 10],
                         }),
                     })
                 );

@@ -1,26 +1,25 @@
 'use client';
 
-import { SUPPORTED_CHAINS } from '@jaw.id/core';
+import { useMemo } from 'react';
+import { MAINNET_CHAINS, SUPPORTED_CHAINS } from '@jaw.id/core';
 import { ChainIcon } from './ChainIcon';
 
 /**
  * Icons shown before the rest collapse into a "+N".
  *
- * High enough to stack every mainnet we support today (15), because a "+10"
- * next to five icons is a count rather than information — the whole point of
- * the stack is showing the set. The cap stays as a guard: it only engages if the
- * supported list grows past what fits, at which point this needs a rethink
- * rather than a wider row.
+ * High enough to stack every mainnet we support today, because a "+10" beside
+ * five icons is a count rather than information, and showing the set is the
+ * whole point. The cap stays as a guard: if the supported list outgrows the row
+ * this needs a rethink, not a wider row.
  */
 const MAX_SHOWN = 16;
 
-/** Overlap step in px. Half an icon reads as a stack; tighter than that reads as a smear. */
+/** Icon size and overlap step in px. Half an icon reads as a stack; tighter reads as a smear. */
+const ICON = 20;
 const STEP = 10;
 
 export interface ChainStackProps {
-  /** Chain ids the address works on, from the request. */
-  chains: number[];
-  /** The chain the QR pins, drawn first and unfaded. */
+  /** The chain the QR pins. Leads the stack, and is included even if it is a testnet. */
   activeChainId: number;
   apiKey?: string;
 }
@@ -32,11 +31,25 @@ export interface ChainStackProps {
  * chain, so this says where the address works rather than offering a choice.
  * Making it a picker would imply the address changes with the selection.
  *
- * The active chain leads, because that is the one the QR encodes and the only
- * one the sender has to get right.
+ * The list is derived here rather than passed in. It is a display decision, not
+ * a fact about the request, so nothing needs to travel through the signer and
+ * the two hosts cannot drift apart — the CrossPlatform popup only ever learns
+ * one chain, so anything plumbed through produced a stack of one there.
  */
-export function ChainStack({ chains, activeChainId, apiKey }: ChainStackProps) {
-  const ordered = [activeChainId, ...chains.filter((id) => id !== activeChainId)].filter((id) => chains.includes(id));
+export function ChainStack({ activeChainId, apiKey }: ChainStackProps) {
+  const ordered = useMemo(() => {
+    const mainnets = MAINNET_CHAINS.map((c) => c.id);
+
+    // Mainnets only: a testnet in the stack means nothing to someone about to
+    // send real funds. The active chain is the exception — the QR points there,
+    // so a stack without it would contradict the code beside it.
+    if (mainnets.includes(activeChainId)) {
+      return [activeChainId, ...mainnets.filter((id) => id !== activeChainId)];
+    }
+    const known = SUPPORTED_CHAINS.some((c) => c.id === activeChainId);
+    return known ? [activeChainId, ...mainnets] : mainnets;
+  }, [activeChainId]);
+
   const shown = ordered.slice(0, MAX_SHOWN);
   const overflow = ordered.length - shown.length;
 
@@ -49,18 +62,18 @@ export function ChainStack({ chains, activeChainId, apiKey }: ChainStackProps) {
       {shown.map((id, i) => (
         <span
           key={id}
-          // Overlap by half an icon. The ring is the surface colour, so each
-          // icon reads as separate from the one behind it in both themes.
+          // The ring is the surface colour, so each icon reads as separate from
+          // the one behind it in both themes.
           className="ring-popover relative inline-flex rounded-full ring-2"
-          style={{ marginLeft: i === 0 ? 0 : -(20 - STEP), zIndex: shown.length - i }}
+          style={{ marginLeft: i === 0 ? 0 : -(ICON - STEP), zIndex: shown.length - i }}
         >
-          <ChainIcon chainId={id} apiKey={apiKey} size={20} />
+          <ChainIcon chainId={id} apiKey={apiKey} size={ICON} />
         </span>
       ))}
       {overflow > 0 && (
         <span
           className="ring-popover bg-secondary text-muted-foreground text-label relative inline-flex h-5 items-center justify-center rounded-full px-1.5 font-mono ring-2"
-          style={{ marginLeft: -(20 - STEP) }}
+          style={{ marginLeft: -(ICON - STEP) }}
         >
           +{overflow}
         </span>

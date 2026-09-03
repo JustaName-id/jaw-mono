@@ -9,7 +9,6 @@ import {
   SUPPORTED_CHAINS,
   parseAddFundsParams,
   resolveDestination,
-  visibleChains,
   type Address,
 } from '@jaw.id/core';
 import { useSessionAccount } from '../../hooks';
@@ -66,11 +65,6 @@ export const AddFundsModal = ({ params, chain, apiKey, origin, appName, appLogoU
 
   const chainId = addFunds.chainId ?? chain?.id ?? SUPPORTED_CHAINS[0]!.id;
 
-  // The popup is told about one chain, so the stack is that chain unless the
-  // dapp asked for another. It stays a list because it is the same shape the
-  // SDK-side path produces, and because a routing address will widen it.
-  const chains = useMemo(() => visibleChains(chain?.id ? [{ id: chain.id }] : [], chainId), [chain?.id, chainId]);
-
   if (!walletAddress) return null;
 
   return (
@@ -78,7 +72,6 @@ export const AddFundsModal = ({ params, chain, apiKey, origin, appName, appLogoU
       open
       address={resolveDestination([walletAddress as Address])}
       chainId={chainId}
-      chains={chains}
       asset={addFunds.asset}
       mainnetRpcUrl={mainnetRpcUrl}
       apiKey={prodApiKey}

@@ -205,9 +205,11 @@ export interface WalletSignUIRequest extends BaseUIRequest {
  * the address works on, an EIP-681 QR, and the address itself.
  *
  * `address` is the destination resolved by the wallet via `resolveDestination`,
- * never anything the dapp supplied. `chains` are the app's configured chains
- * intersected with SUPPORTED_CHAINS, shown as an informational stack, so the
- * dialog never has to ask what the app supports.
+ * never anything the dapp supplied.
+ *
+ * Deliberately carries no chain list. Which chains the stack shows is a display
+ * decision the dialog makes from the active chain, so putting a list here would
+ * mean the two hosts could hand the same screen different answers.
  *
  * Resolves when the user closes: deposits land off-app, so there is no outcome
  * to report and closing is a normal finish rather than a rejection.
@@ -218,8 +220,6 @@ export interface AddFundsUIRequest extends BaseUIRequest {
         address: Address;
         /** Chain the QR pins via EIP-681. */
         chainId: number;
-        /** Chains the address works on, for the informational stack. */
-        chains: number[];
         /** Asset symbol to ask the sender for, e.g. 'USDC'. Display only. */
         asset?: string;
     };
