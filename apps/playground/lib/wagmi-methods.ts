@@ -86,6 +86,7 @@ export type ParameterDefinition = {
 
 // Hook types for wagmi methods
 export type WagmiHookType =
+  | 'useAddFunds'
   | 'jawConnect'
   | 'jawDisconnect'
   | 'useSwitchChain'
@@ -121,6 +122,50 @@ export type WagmiMethod = {
 
 export const WAGMI_METHODS: WagmiMethod[] = [
   // ===== Wallet Methods =====
+  {
+    id: 'useAddFunds',
+    name: 'useAddFunds',
+    method: 'wallet_addFunds',
+    hookType: 'useAddFunds',
+    category: 'wallet',
+    description: 'Show the receive screen: chains, QR, and the account address',
+    // Auto-connects like the signing methods: the screen has no address to show
+    // without an account.
+    requiresConnection: false,
+    parameters: [
+      {
+        name: 'chainId',
+        type: 'select',
+        label: 'Chain',
+        description: 'Chain the QR pins via EIP-681. Defaults to the connected chain.',
+        required: false,
+        defaultValue: 'all',
+        options: CHAIN_FILTER_OPTIONS,
+      },
+      {
+        name: 'asset',
+        type: 'string',
+        label: 'Asset',
+        description: 'Token symbol to ask the sender for, e.g. USDC. Display only.',
+        required: false,
+      },
+    ],
+    getCodeSnippet: (params) => {
+      const args: string[] = [];
+      if (params.chainId && params.chainId !== 'all') args.push(`chainId: ${parseInt(params.chainId, 16)}`);
+      if (params.asset) args.push(`asset: '${params.asset}'`);
+      return `const { mutateAsync: addFunds } = useAddFunds();
+
+// Resolves null when the user closes the screen.
+await addFunds({${args.length ? ` ${args.join(', ')} ` : ''}});`;
+    },
+    buildParams: (params) => {
+      const built: Record<string, unknown> = {};
+      if (params.chainId && params.chainId !== 'all') built.chainId = parseInt(params.chainId, 16);
+      if (params.asset) built.asset = params.asset;
+      return built;
+    },
+  },
   {
     id: 'jaw_connect',
     name: 'useConnect',
