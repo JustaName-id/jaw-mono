@@ -12,6 +12,7 @@ import {
     PermissionUIRequest,
     RevokePermissionUIRequest,
     WalletSignUIRequest,
+    AddFundsUIRequest,
     PersonalSignRequestData,
     TypedDataRequestData,
     PaymasterConfig,
@@ -27,6 +28,9 @@ import {
     normalizeSendTransactionParams,
 } from '../../rpc/index.js';
 import { store, SDKChain } from '../../store/index.js';
+import { parseAddFundsParams } from '../../rpc/addFundsParams.js';
+import { resolveDestination } from '../../addFunds/destination.js';
+import { visibleChains } from '../../addFunds/chains.js';
 import { standardErrors } from '../../errors/index.js';
 import type { JawTheme } from '../../ui/theme.js';
 
@@ -421,6 +425,35 @@ export class AppSpecificSigner extends JAWSigner {
                 }
 
                 return response.data;
+            }
+
+            case 'wallet_addFunds': {
+                const addFundsParams = parseAddFundsParams(request.params);
+                const chainId = addFundsParams.chainId ?? this.chain.id;
+
+                const uiRequest: AddFundsUIRequest = {
+                    id: crypto.randomUUID(),
+                    type: 'wallet_addFunds',
+                    timestamp: Date.now(),
+                    correlationId,
+                    data: {
+                        // From the session, never from the params: a dapp that
+                        // could name the destination could point the QR at an
+                        // address the user does not own.
+                        address: resolveDestination(this.accounts),
+                        chainId,
+                        chains: visibleChains(store.chains.get(), chainId),
+                        asset: addFundsParams.asset,
+                    },
+                };
+
+                // Deposits land off-app, so closing the screen is the normal
+                // finish and there is no outcome to report. Unlike the signing
+                // cases this does not throw on a non-approval: a rejection here
+                // would tell the dapp the user refused something they were never
+                // asked to approve.
+                await this.uiHandler.request(uiRequest);
+                return null;
             }
 
             default:

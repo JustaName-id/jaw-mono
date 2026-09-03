@@ -17,7 +17,8 @@ export interface AddFundsDialogProps {
   apiKey?: string;
   /** The app requesting funds, for the header. */
   appName?: string;
-  appLogoUrl?: string;
+  /** Nullable because the handler config carries an explicit "no logo" as null. */
+  appLogoUrl?: string | null;
   origin?: string;
   /**
    * The user is done. Deposits land off-app, so this is a normal finish rather

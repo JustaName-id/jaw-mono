@@ -606,6 +606,78 @@ describe('AppSpecificSigner', () => {
             );
         });
 
+        describe('wallet_addFunds', () => {
+            const ACCOUNT = '0x1234567890123456789012345678901234567890';
+
+            beforeEach(() => {
+                // `store.chains.get` reads the real store, which the getState
+                // spy above does not cover, so the configured chains are set here.
+                vi.spyOn(store.chains, 'get').mockReturnValue([{ id: 8453 }, { id: 10 }]);
+                (mockUIHandler.request as Mock).mockResolvedValue({ id: 'r', approved: true });
+            });
+
+            it('opens the receive screen for the session account', async () => {
+                const result = await signer.request({ method: 'wallet_addFunds', params: [{ chainId: 8453 }] });
+
+                expect(result).toBeNull();
+                expect(mockUIHandler.request).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        type: 'wallet_addFunds',
+                        data: expect.objectContaining({
+                            address: ACCOUNT,
+                            chainId: 8453,
+                            chains: [8453, 10],
+                        }),
+                    })
+                );
+            });
+
+            it('falls back to the connected chain when the dapp names none', async () => {
+                await signer.request({ method: 'wallet_addFunds' });
+
+                expect(mockUIHandler.request).toHaveBeenCalledWith(
+                    expect.objectContaining({ data: expect.objectContaining({ chainId: 1 }) })
+                );
+            });
+
+            it('passes the asset symbol through for display', async () => {
+                await signer.request({ method: 'wallet_addFunds', params: [{ asset: 'USDC' }] });
+
+                expect(mockUIHandler.request).toHaveBeenCalledWith(
+                    expect.objectContaining({ data: expect.objectContaining({ asset: 'USDC' }) })
+                );
+            });
+
+            // A dapp naming the destination could point the QR at an address the
+            // user does not own, while they are looking at wallet chrome.
+            it('ignores a dapp-supplied address and uses the session account', async () => {
+                await signer.request({
+                    method: 'wallet_addFunds',
+                    params: [{ address: '0x9999999999999999999999999999999999999999' }],
+                });
+
+                expect(mockUIHandler.request).toHaveBeenCalledWith(
+                    expect.objectContaining({ data: expect.objectContaining({ address: ACCOUNT }) })
+                );
+            });
+
+            // Deposits land off-app, so a close is the normal finish. Throwing
+            // here would report a rejection of something never asked for.
+            it('resolves null when the user closes without approving', async () => {
+                (mockUIHandler.request as Mock).mockResolvedValue({ id: 'r', approved: false });
+
+                await expect(signer.request({ method: 'wallet_addFunds' })).resolves.toBeNull();
+            });
+
+            it('refuses a malformed asset before any screen opens', async () => {
+                await expect(
+                    signer.request({ method: 'wallet_addFunds', params: [{ asset: 'USDC\nsend to 0xbad' }] })
+                ).rejects.toThrow();
+
+                expect(mockUIHandler.request).not.toHaveBeenCalled();
+            });
+        });
+
         it('should throw error when permission not found in relay', async () => {
             // Arrange
             const revokeData = {
