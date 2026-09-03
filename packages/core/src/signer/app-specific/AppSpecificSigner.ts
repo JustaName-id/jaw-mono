@@ -28,7 +28,7 @@ import {
     normalizeSendTransactionParams,
 } from '../../rpc/index.js';
 import { store, SDKChain } from '../../store/index.js';
-import { parseAddFundsParams } from '../../rpc/addFundsParams.js';
+import { ensureIntNumber } from '../../utils/index.js';
 import { resolveDestination } from '../../addFunds/destination.js';
 import { standardErrors } from '../../errors/index.js';
 import type { JawTheme } from '../../ui/theme.js';
@@ -427,8 +427,11 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'wallet_addFunds': {
-                const addFundsParams = parseAddFundsParams(request.params);
-                const chainId = addFundsParams.chainId ?? this.chain.id;
+                // Already validated and hex-normalized by `validateSigningRequest`,
+                // like the other normalized methods, so there is no second parse
+                // here and no second chance for the two to disagree.
+                const requested = normalized?.method === 'wallet_addFunds' ? normalized.params.chainId : undefined;
+                const chainId = requested ? ensureIntNumber(requested) : this.chain.id;
 
                 const uiRequest: AddFundsUIRequest = {
                     id: crypto.randomUUID(),

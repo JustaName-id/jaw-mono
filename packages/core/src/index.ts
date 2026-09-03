@@ -196,10 +196,8 @@ export {
 export type { CallPermission, SpendLimit } from './rpc/permissions.js';
 
 /** Add Funds (wallet_addFunds) **/
-export type { AddFundsParams } from './rpc/addFundsParams.js';
-export { parseAddFundsParams } from './rpc/addFundsParams.js';
-export type { FundingSource } from './addFunds/types.js';
-export { RECEIVE_SOURCE } from './addFunds/types.js';
+export type { NormalizedAddFundsParams } from './rpc/addFundsParams.js';
+export { normalizeAddFundsParams } from './rpc/addFundsParams.js';
 export { resolveDestination } from './addFunds/destination.js';
 export type { SendCallsVersion } from './rpc/sendCallsParams.js';
 export type { Address } from './provider/interface.js';

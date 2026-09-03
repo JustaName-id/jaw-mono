@@ -1,28 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { parseAddFundsParams } from './addFundsParams.js';
+import { normalizeAddFundsParams } from './addFundsParams.js';
 import { standardErrorCodes } from '../errors/index.js';
 
 const invalidParams = expect.objectContaining({ code: standardErrorCodes.rpc.invalidParams });
 
-describe('parseAddFundsParams', () => {
+describe('normalizeAddFundsParams', () => {
+    // Unlike the other normalizers, an empty envelope is legal: calling
+    // wallet_addFunds with no arguments is the common case.
     it('treats an absent parameter as an empty request', () => {
-        expect(parseAddFundsParams(undefined)).toEqual({ chainId: undefined });
-        expect(parseAddFundsParams([])).toEqual({ chainId: undefined });
-        expect(parseAddFundsParams([{}])).toEqual({ chainId: undefined });
+        expect(normalizeAddFundsParams(undefined)).toEqual({ chainId: undefined });
+        expect(normalizeAddFundsParams([])).toEqual({ chainId: undefined });
+        expect(normalizeAddFundsParams([{}])).toEqual({ chainId: undefined });
     });
 
-    it('reads a decimal chainId', () => {
-        expect(parseAddFundsParams([{ chainId: 8453 }])).toEqual({ chainId: 8453 });
+    // Hex out, like every other normalized request, whichever shape came in.
+    it('normalizes a decimal chainId to hex', () => {
+        expect(normalizeAddFundsParams([{ chainId: 8453 }])).toEqual({ chainId: '0x2105' });
     });
 
-    it('accepts a hex chainId, since a viem-shaped caller already holds one', () => {
-        expect(parseAddFundsParams([{ chainId: '0x2105' }]).chainId).toBe(8453);
+    it('passes a hex chainId through', () => {
+        expect(normalizeAddFundsParams([{ chainId: '0x2105' }])).toEqual({ chainId: '0x2105' });
     });
 
     // The destination is the connected account. A dapp naming it could point the
     // QR at an address the user does not own, so the key is dropped, not honoured.
     it('ignores a dapp-supplied address', () => {
-        const parsed = parseAddFundsParams([
+        const parsed = normalizeAddFundsParams([
             { address: '0x9999999999999999999999999999999999999999', chainId: 8453 },
         ]) as Record<string, unknown>;
 
@@ -31,18 +34,18 @@ describe('parseAddFundsParams', () => {
     });
 
     it('ignores any other unknown key', () => {
-        expect(parseAddFundsParams([{ fiatAmount: '25', provider: 'coinbase' }])).toEqual({ chainId: undefined });
+        expect(normalizeAddFundsParams([{ fiatAmount: '25', provider: 'coinbase' }])).toEqual({ chainId: undefined });
     });
 
     it('refuses a non-object parameter', () => {
-        expect(() => parseAddFundsParams([42])).toThrowError(invalidParams);
-        expect(() => parseAddFundsParams({ chainId: 8453 })).toThrowError(invalidParams);
+        expect(() => normalizeAddFundsParams([42])).toThrowError(invalidParams);
+        expect(() => normalizeAddFundsParams({ chainId: 8453 })).toThrowError(invalidParams);
     });
 
     it('refuses a chainId that is not a positive integer', () => {
-        expect(() => parseAddFundsParams([{ chainId: 0 }])).toThrowError(invalidParams);
-        expect(() => parseAddFundsParams([{ chainId: -1 }])).toThrowError(invalidParams);
-        expect(() => parseAddFundsParams([{ chainId: 1.5 }])).toThrowError(invalidParams);
-        expect(() => parseAddFundsParams([{ chainId: 'base' }])).toThrowError(invalidParams);
+        expect(() => normalizeAddFundsParams([{ chainId: 0 }])).toThrowError(invalidParams);
+        expect(() => normalizeAddFundsParams([{ chainId: -1 }])).toThrowError(invalidParams);
+        expect(() => normalizeAddFundsParams([{ chainId: 1.5 }])).toThrowError(invalidParams);
+        expect(() => normalizeAddFundsParams([{ chainId: 'base' }])).toThrowError(invalidParams);
     });
 });

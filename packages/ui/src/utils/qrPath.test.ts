@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildQrPath, centerHole } from './qrPath';
+import { buildQrPath } from './qrPath';
 import { eip681Uri } from './eip681';
 
 const ADDRESS = '0x1111111111111111111111111111111111111111';
@@ -46,41 +46,28 @@ describe('buildQrPath', () => {
     expect(optimism.path).not.toBe(base.path);
   });
 
-  it('leaves the reserved centre clear', () => {
-    const { path, count } = buildQrPath(eip681Uri(ADDRESS, 8453), true);
-    const drawn = modules(path);
-    const hole = centerHole(count);
+  // The centre logo is laid over the finished code, never cut out of it: the
+  // ENS avatar resolves after the dialog opens, and a reserved hole meant
+  // re-encoding the code under a camera already pointed at it.
+  it('is complete: the same payload always gives the same code', () => {
+    const value = eip681Uri(ADDRESS, 8453);
+    expect(buildQrPath(value)).toEqual(buildQrPath(value));
+  });
 
-    for (let row = hole.from; row <= hole.to; row++) {
-      for (let col = hole.from; col <= hole.to; col++) {
-        expect(drawn.has(`${col},${row}`)).toBe(false);
+  it('leaves no gap in the middle', () => {
+    const { path, count } = buildQrPath(eip681Uri(ADDRESS, 8453));
+    const drawn = modules(path);
+    const middle = (count - 1) / 2;
+
+    // Not every centre module is dark, but a cleared square would leave a run
+    // of ~9 blank rows through the middle. One dark module in the central band
+    // is enough to show nothing was cut out.
+    let darkInBand = 0;
+    for (let row = middle - 4; row <= middle + 4; row++) {
+      for (let col = middle - 4; col <= middle + 4; col++) {
+        if (drawn.has(`${col},${row}`)) darkInBand++;
       }
     }
-  });
-
-  it('fills the centre when the reservation is off', () => {
-    const value = eip681Uri(ADDRESS, 8453);
-    const reserved = buildQrPath(value, true);
-    const full = buildQrPath(value, false);
-    expect(modules(full.path).size).toBeGreaterThan(modules(reserved.path).size);
-    expect(full.count).toBe(reserved.count);
-  });
-});
-
-describe('centerHole', () => {
-  it('is centred and symmetric, so the hole never sits off-axis', () => {
-    for (const count of [21, 25, 29, 33, 37, 41, 45]) {
-      const { from, to } = centerHole(count);
-      expect(count - 1 - to).toBe(from);
-      expect((to - from + 1) % 2).toBe(1);
-    }
-  });
-
-  it('stays a small fraction of the code, inside the error-correction budget', () => {
-    for (const count of [21, 29, 41]) {
-      const { from, to } = centerHole(count);
-      const area = (to - from + 1) ** 2 / count ** 2;
-      expect(area).toBeLessThan(0.1);
-    }
+    expect(darkInBand).toBeGreaterThan(0);
   });
 });

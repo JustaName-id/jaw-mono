@@ -2,12 +2,14 @@
 
 import { AddFundsDialog } from '@jaw.id/ui';
 import { useMemo } from 'react';
+import { isAddress } from 'viem';
 import {
   type Chain,
-  type AddFundsParams,
+  type NormalizedAddFundsParams,
   JAW_RPC_URL,
-  SUPPORTED_CHAINS,
-  parseAddFundsParams,
+  MAINNET_CHAINS,
+  ensureIntNumber,
+  normalizeAddFundsParams,
   resolveDestination,
   type Address,
 } from '@jaw.id/core';
@@ -31,7 +33,7 @@ export interface AddFundsModalProps {
  * Needs the connected smart-account address to show, but no signature, so it
  * only reads `walletAddress` off the session. Nothing here can be supplied by
  * the dapp: the destination comes from the session through `resolveDestination`,
- * and the chains come from what this popup was told the app supports.
+ * and the chain stack is derived inside the dialog rather than passed in.
  */
 export const AddFundsModal = ({ params, chain, apiKey, origin, appName, appLogoUrl, onDone }: AddFundsModalProps) => {
   const { walletAddress } = useSessionAccount({ origin, chain, apiKey });
@@ -39,9 +41,9 @@ export const AddFundsModal = ({ params, chain, apiKey, origin, appName, appLogoU
   // Validated in the popup as well as in the SDK. The popup is reachable by
   // anything that can post to it, so it cannot assume the params already passed
   // the caller's own validation.
-  const addFunds: AddFundsParams = useMemo(() => {
+  const addFunds: NormalizedAddFundsParams = useMemo(() => {
     try {
-      return parseAddFundsParams(Array.isArray(params) ? params : [params]);
+      return normalizeAddFundsParams(Array.isArray(params) ? params : [params]);
     } catch {
       // A malformed hint is not worth refusing the screen over — the address is
       // still correct and still the thing the user came for.
@@ -63,14 +65,26 @@ export const AddFundsModal = ({ params, chain, apiKey, origin, appName, appLogoU
 
   const mainnetRpcUrl = prodApiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${prodApiKey}` : `${JAW_RPC_URL}?chainId=1`;
 
-  const chainId = addFunds.chainId ?? chain?.id ?? SUPPORTED_CHAINS[0]!.id;
+  // MAINNET_CHAINS[0], not SUPPORTED_CHAINS[0]: the two are the same chain only
+  // because SUPPORTED_CHAINS happens to list mainnets first, so reordering it
+  // would silently make this fall back to a testnet. The stack shows mainnets,
+  // so the code this backstops should name one too.
+  const chainId = addFunds.chainId ? ensureIntNumber(addFunds.chainId) : (chain?.id ?? MAINNET_CHAINS[0]!.id);
 
-  if (!walletAddress) return null;
+  // The session hands back a plain string, so the shape is checked before it
+  // becomes a destination: an unchecked cast would let a truncated or malformed
+  // value through and render a QR code pointing at nothing. `strict: false`
+  // accepts a non-checksummed address, which is a legitimate way to hold one.
+  const sessionAccount = walletAddress && isAddress(walletAddress, { strict: false }) ? walletAddress : null;
+  if (!sessionAccount) return null;
 
   return (
     <AddFundsDialog
       open
-      address={resolveDestination([walletAddress as Address])}
+      // Still through `resolveDestination`, even with one account in hand: it is
+      // the single named place a destination is decided, and phase 3 swaps it
+      // for a routing address.
+      address={resolveDestination([sessionAccount as Address])}
       chainId={chainId}
       mainnetRpcUrl={mainnetRpcUrl}
       apiKey={prodApiKey}

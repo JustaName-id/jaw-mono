@@ -1,7 +1,16 @@
 'use client';
 
 import { useMemo } from 'react';
-import { buildQrPath, centerHole } from '../../utils/qrPath';
+import { buildQrPath } from '../../utils/qrPath';
+
+/**
+ * Edge of the centre overlay, as a fraction of the code's width.
+ *
+ * At 0.26 the overlay covers ~6.8% of the code's area, still far inside what
+ * level 'H' error correction absorbs (~30%). Wide enough that the caller can
+ * spend some of it on padding and still leave a legible image.
+ */
+const CENTER_FRACTION = 0.26;
 
 export interface QrCodeProps {
   /** The payload. For the receive screen this is an EIP-681 URI. */
@@ -9,11 +18,12 @@ export interface QrCodeProps {
   /** Rendered edge length in px. The SVG scales to it, so any size stays crisp. */
   size?: number;
   /**
-   * What sits in the middle, given the reserved square's size in px.
+   * Laid over the middle of the finished code, given the overlay's size in px.
    *
-   * Pass nothing and the code is solid: the modules are only cleared when
-   * something is going to fill the space, so the code never shows a bare hole
-   * that reads as a rendering fault.
+   * An overlay, not a hole: the code is encoded once from `value` alone, so
+   * something arriving late (the ENS avatar resolves after the dialog opens)
+   * appears on top without re-encoding the code under a camera already pointed
+   * at it. Error correction absorbs the occlusion.
    */
   renderCenter?: (sizePx: number) => React.ReactNode;
   /** Accessible name. Describes the code rather than reading the URI aloud. */
@@ -25,22 +35,13 @@ export interface QrCodeProps {
  * matrix (see `utils/qrPath`).
  *
  * Rendering it here rather than using the library's own `createSvgTag` keeps its
- * markup out of the DOM: no `dangerouslySetInnerHTML`, no inline styles of its
- * making, and the modules take `currentColor` so the code inverts with the theme
- * instead of staying black on a dark surface.
+ * markup out of the DOM: no `dangerouslySetInnerHTML`, and no inline styles of
+ * its making.
  */
 export function QrCode({ value, size = 220, renderCenter, label }: QrCodeProps) {
-  const reserveCenter = !!renderCenter;
-  const { path, count } = useMemo(() => buildQrPath(value, reserveCenter), [value, reserveCenter]);
+  const { path, count } = useMemo(() => buildQrPath(value), [value]);
 
-  // The cleared square in px, so what fills it is measured against the modules
-  // actually removed rather than a guess that drifts when the payload's length
-  // pushes the code to a larger version.
-  const holePx = useMemo(() => {
-    if (!reserveCenter) return 0;
-    const { from, to } = centerHole(count);
-    return ((to - from + 1) / count) * size;
-  }, [reserveCenter, count, size]);
+  const overlayPx = Math.round(size * CENTER_FRACTION);
 
   return (
     <div className="relative" style={{ width: size, height: size }}>
@@ -64,18 +65,16 @@ export function QrCode({ value, size = 220, renderCenter, label }: QrCodeProps) 
       </svg>
       {renderCenter && (
         <div
-          className="pointer-events-none absolute left-1/2 top-1/2 flex items-center justify-center"
+          className="pointer-events-none absolute left-1/2 top-1/2"
           style={{
-            width: holePx,
-            height: holePx,
+            width: overlayPx,
+            height: overlayPx,
             // Centred by translate rather than inset-0 so the box is exactly the
-            // cleared square, which is what bounds what goes inside it.
+            // overlay, which is what bounds what goes inside it.
             transform: 'translate(-50%, -50%)',
           }}
         >
-          {/* Inset a little: the icon must not touch the surrounding modules,
-              or a scanner reads the outermost ones as merged. */}
-          {renderCenter(Math.round(holePx * 0.82))}
+          {renderCenter(overlayPx)}
         </div>
       )}
     </div>

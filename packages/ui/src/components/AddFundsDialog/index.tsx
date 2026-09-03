@@ -91,10 +91,21 @@ export const AddFundsDialog = ({
                   safeAvatar
                     ? (px) => (
                         <span
-                          // White plate: an avatar with transparency would
-                          // otherwise show the cleared modules through it.
-                          className="flex items-center justify-center overflow-hidden rounded-full bg-white"
-                          style={{ width: px, height: px }}
+                          // A white plate wider than the avatar, so the padding
+                          // reads as a quiet ring between the image and the
+                          // modules. Without it the avatar sits edge to edge on
+                          // the code and looks pasted on rather than placed.
+                          // The plate is also what hides the modules behind a
+                          // transparent avatar.
+                          //
+                          // Square-ish, not round: the plate sits on a grid of
+                          // squares, so a rounded square belongs to the code's
+                          // own geometry where a circle fights it. `chip`
+                          // outside and `xs` inside is the nested-radius pair —
+                          // the inner curve has to be tighter than the outer or
+                          // the ring looks thicker at the corners.
+                          className="rounded-chip flex items-center justify-center bg-white"
+                          style={{ width: px, height: px, padding: Math.max(3, Math.round(px * 0.12)) }}
                         >
                           <IdentityAvatar
                             src={safeAvatar}
@@ -102,7 +113,7 @@ export const AddFundsDialog = ({
                             // empty rather than showing an identicon that looks
                             // like part of the code.
                             fallback={null}
-                            className="h-full w-full rounded-full object-cover"
+                            className="rounded-xs h-full w-full object-cover"
                           />
                         </span>
                       )
