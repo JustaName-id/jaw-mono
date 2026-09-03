@@ -486,6 +486,29 @@ describe('CrossPlatformSigner', () => {
             expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
         });
 
+        // addFunds signs nothing, so it has no per-method code here: it routes
+        // like the signing methods and keys owns the screen. This pins that,
+        // because a method missing from the routing switch fails as a 4200
+        // unsupportedMethod rather than as a visible bug.
+        it('routes wallet_addFunds to the popup and resolves what the popup returns', async () => {
+            const request: RequestArguments = { method: 'wallet_addFunds', params: [{ chainId: 8453 }] };
+
+            mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue({
+                id: mockMessageId,
+                requestId: mockMessageId,
+                correlationId: mockCorrelationId,
+                sender: 'peer-public-key-hex',
+                content: { encrypted: mockEncryptedData },
+                timestamp: new Date(),
+            } as RPCResponseMessage);
+
+            // Deposits land off-app, so the popup answers null rather than an order.
+            (decryptContent as Mock).mockResolvedValue({ result: { value: null } } as RPCResponse);
+
+            await expect(signer.request(request)).resolves.toBeNull();
+            expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
+        });
+
         it('should make eth_sendTransaction request to popup', async () => {
             // Arrange
             const txRequest: RequestArguments = {
