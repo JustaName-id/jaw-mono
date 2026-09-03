@@ -180,6 +180,26 @@ jaw session status -o json
 
 ---
 
+## jaw session add
+
+Add permissions to the current session, keeping the ones it already has.
+
+```bash
+jaw session add --x402
+jaw session add --x402 --limit 10/day
+jaw session add --permissions '{"calls":[...]}'
+```
+
+`jaw session setup` replaces a session. An agent working under a scoped session that then discovers it needs to pay could only re-run setup, which revokes the grant it is working under, so it loses its other capabilities in the middle of the task. This grants the union instead.
+
+The session still holds one permission afterwards: the union is granted as a new permission and the old one is revoked, which is why the browser asks twice. Two live grants would be two independent budgets on chain, so two of 5 a day are 10 a day with nothing representing the total. The session key is kept, so the agent's address, its balance and its delegation all survive.
+
+A limit is replaced by one that meters the same token over the same period, and only by that: caps the request does not mention are kept. The contract charges every spend limit matching a token rather than stopping at the first, so limits on one token are ANDed and the tightest binds. Adding 10 a day to a session that also holds 1 a week leaves the week limit in place, and the summary says so, because that is the one payments will run into.
+
+It needs a session that carries the permission it was granted. Sessions created before the CLI stored that cannot be merged against, since a permission id says nothing about what it allows; re-run `jaw session setup` once and adding works from then on.
+
+---
+
 ## jaw session revoke
 
 Revoke the on-chain permission and delete local session files. Opens browser for passkey approval (skipped if session is expired).
@@ -187,6 +207,10 @@ Revoke the on-chain permission and delete local session files. Opens browser for
 ```bash
 jaw session revoke
 ```
+
+It revokes the permissions earlier sessions left live on the account as well as the one this session names. `jaw session setup` replaces a session rather than adding to it, and it does not always revoke what it replaces: declining the prompt keeps the old permission, and `--yes` never revokes. Those are recorded on the new session and revoked here, on their own chain if setup moved chains since. Expired ones are skipped, since they authorise nothing.
+
+Each one is attempted on its own, so one that fails does not stop the rest. What could not be revoked is listed and the local session is kept so the command can be run again. One case never succeeds on a retry: a permission already revoked from another device, which the wallet reads from the relay and the relay no longer has. Pass `--force` to delete the local session anyway, and note the ids it prints, because deleting the session is what loses them.
 
 ---
 
@@ -196,6 +220,77 @@ Close the relay session and browser tab. Cleans up the session stored in `~/.jaw
 
 ```bash
 jaw disconnect
+```
+
+---
+
+## jaw x402 pay
+
+Fetch a URL, paying an x402 `402` challenge with the session key. Dry run by default: pass `--pay` to actually spend. See [Paying for APIs](/cli/x402) for funding and limits.
+
+```bash
+jaw x402 pay <url>
+```
+
+### Flags
+
+| Flag           | Description                                               |
+| -------------- | --------------------------------------------------------- |
+| `--pay`        | Actually sign and send the payment                        |
+| `--max-amount` | Ceiling in base units for this call, on top of the policy |
+| `--method`     | HTTP method (default `GET`)                               |
+| `--body`       | Request body                                              |
+
+### Examples
+
+```bash
+jaw x402 pay https://api.example.com/resource
+```
+
+```bash
+jaw x402 pay https://api.example.com/resource --pay
+```
+
+```bash
+jaw x402 pay https://api.example.com/resource --pay --max-amount 50000
+```
+
+---
+
+## jaw x402 status
+
+Show x402 payment readiness: which account holds the funds, the resolved caps, and what has been spent. Reads only, never pays.
+
+```bash
+jaw x402 status
+jaw x402 status --output json
+```
+
+---
+
+## jaw x402 log
+
+Show the local x402 payment ledger: every attempt, paid, failed or refused, with amounts and transactions.
+
+```bash
+jaw x402 log
+```
+
+### Flags
+
+| Flag       | Description                             |
+| ---------- | --------------------------------------- |
+| `--limit`  | Show only the most recent N entries     |
+| `--status` | Filter by `paid`, `failed` or `refused` |
+
+### Examples
+
+```bash
+jaw x402 log --limit 20
+```
+
+```bash
+jaw x402 log --status failed
 ```
 
 ---

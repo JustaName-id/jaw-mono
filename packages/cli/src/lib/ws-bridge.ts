@@ -23,12 +23,15 @@ export interface WSBridgeConfig {
   chainId: number;
   ens?: string;
   paymasterUrl?: string;
+  paymasterContext?: Record<string, unknown>;
 }
 
 export interface WSBridgeOptions {
   relayUrl: string;
   session: string;
   timeout?: number;
+  /** How long to wait for the browser to connect. See DEFAULT_CONNECT_TIMEOUT_MS. */
+  connectTimeout?: number;
   config: WSBridgeConfig;
   /** CLI's ECDH private key (hex). Loaded from relay.json for existing sessions. */
   privateKeyHex: string;
@@ -38,7 +41,38 @@ export interface WSBridgeOptions {
   peerPublicKeyHex: string | null;
 }
 
+/**
+ * The `init` payload the CLI hands the browser once the shared secret exists.
+ *
+ * A function rather than an object literal inside the handshake so what crosses
+ * the bridge can be asserted without standing up a relay and a socket.
+ *
+ * `paymasterContext` travels with its url or not at all. The two name one
+ * paymaster between them, and the browser resolves a url of its own when none
+ * arrives — a context sent alone would be applied to whichever paymaster that
+ * turns out to be, which is the divergence the SDK-side resolution just closed.
+ */
+export function buildInitPayload(config: WSBridgeConfig): Record<string, unknown> {
+  return {
+    type: 'init',
+    apiKey: config.apiKey,
+    chainId: config.chainId,
+    ens: config.ens,
+    paymasterUrl: config.paymasterUrl,
+    ...(config.paymasterUrl && config.paymasterContext ? { paymasterContext: config.paymasterContext } : {}),
+  };
+}
+
 const DEFAULT_TIMEOUT_MS = 120_000;
+/**
+ * How long to wait for the browser to reach the relay, which is a different
+ * wait from `DEFAULT_TIMEOUT_MS`: that one covers approving a request once the
+ * page is there, this one covers the page arriving at all. Thirty seconds fits
+ * a browser this process opened itself and nothing else. A URL carried to a
+ * phone, a first passkey enrolment, or a machine with no browser to open takes
+ * longer than that before anyone has done anything wrong.
+ */
+const DEFAULT_CONNECT_TIMEOUT_MS = 30_000;
 
 /**
  * Maximum outbound message size (5 MB).
@@ -63,6 +97,7 @@ export class WSBridge {
   private readonly relayUrl: string;
   private readonly session: string;
   private readonly timeout: number;
+  private readonly connectTimeout: number;
   private readonly config: WSBridgeConfig;
   private readonly privateKeyHex: string;
   readonly publicKeyHex: string;
@@ -88,6 +123,7 @@ export class WSBridge {
     this.relayUrl = options.relayUrl;
     this.session = options.session;
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
+    this.connectTimeout = options.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS;
     this.config = options.config;
     this.privateKeyHex = options.privateKeyHex;
     this.publicKeyHex = options.publicKeyHex;
@@ -130,18 +166,17 @@ export class WSBridge {
 
       const timer = setTimeout(() => {
         ws.close();
-        reject(new Error('Browser did not connect in time.\n' + 'Run `jaw disconnect` then try again.'));
-      }, 30_000);
+        reject(
+          new Error(
+            `Browser did not connect within ${Math.round(this.connectTimeout / 1000)}s.\n` +
+              'Run `jaw disconnect` then try again, or raise JAW_BRIDGE_TIMEOUT_MS.'
+          )
+        );
+      }, this.connectTimeout);
 
       const sendEncryptedInit = async () => {
         if (!this.sharedSecret) return;
-        const envelope = await encryptMessage(this.sharedSecret, {
-          type: 'init',
-          apiKey: this.config.apiKey,
-          chainId: this.config.chainId,
-          ens: this.config.ens,
-          paymasterUrl: this.config.paymasterUrl,
-        });
+        const envelope = await encryptMessage(this.sharedSecret, buildInitPayload(this.config));
         this.sendRaw(ws, JSON.stringify({ type: 'encrypted', ...envelope }));
       };
 

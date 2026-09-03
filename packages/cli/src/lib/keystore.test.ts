@@ -19,9 +19,8 @@ vi.mock('./paths.js', () => {
   };
 });
 
-const { generateSessionKey, saveKeystore, loadSessionKey, deleteKeystore, keystoreExists } = await import(
-  './keystore.js'
-);
+const { generateSessionKey, saveKeystore, loadSessionKey, deleteKeystore, keystoreExists, tryLoadKeystoreAddress } =
+  await import('./keystore.js');
 const { PATHS } = await import('./paths.js');
 
 beforeEach(() => {
@@ -84,5 +83,20 @@ describe('keystore', () => {
     expect(fs.statSync(PATHS.keystore).mode & 0o777).toBe(0o644);
     saveKeystore(generateSessionKey(), '0xdef456');
     expect(fs.statSync(PATHS.keystore).mode & 0o777).toBe(0o600);
+  });
+
+  it('tryLoadKeystoreAddress returns the stored address', () => {
+    saveKeystore(generateSessionKey(), '0xSessionAddress');
+    expect(tryLoadKeystoreAddress()).toBe('0xSessionAddress');
+  });
+
+  it('tryLoadKeystoreAddress returns null when there is no keystore', () => {
+    deleteKeystore();
+    expect(tryLoadKeystoreAddress()).toBeNull();
+  });
+
+  it('tryLoadKeystoreAddress returns null on a corrupt keystore', () => {
+    fs.writeFileSync(PATHS.keystore, '{ not valid json', { mode: 0o600 });
+    expect(tryLoadKeystoreAddress()).toBeNull();
   });
 });

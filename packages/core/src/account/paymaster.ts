@@ -1,6 +1,32 @@
-import { Client, Hex } from 'viem';
+import { Client, Hex, numberToHex, pad } from 'viem';
 import { getGasPrice } from 'viem/actions';
 import { PaymasterClient, entryPoint08Address } from 'viem/account-abstraction';
+import type { SignedAuthorization } from 'viem';
+
+/**
+ * Serialize a signed EIP-7702 authorization into the bundler wire format
+ * (`eip7702Auth`), mirroring viem's own userOperationRequest formatter. Without
+ * it, estimating the FIRST userOp of a 7702 account simulates against a
+ * codeless sender and mis-estimates or reverts.
+ */
+function formatEip7702Auth(authorization: SignedAuthorization<number>): Record<string, Hex> {
+    return {
+        address: authorization.address,
+        chainId: numberToHex(authorization.chainId),
+        nonce: numberToHex(authorization.nonce),
+        r: authorization.r ? numberToHex(BigInt(authorization.r), { size: 32 }) : pad('0x', { size: 32 }),
+        s: authorization.s ? numberToHex(BigInt(authorization.s), { size: 32 }) : pad('0x', { size: 32 }),
+        // The 32-byte zero for an absent yParity looks odd but mirrors viem's own
+        // formatter byte-for-byte — the estimation payload must match what the
+        // send path produces, quirks included. Absent, not falsy: half of all
+        // signatures have an even y, and reading 0 as "no value" sent those for
+        // estimation as 32 bytes while the send path sent them as `0x00`.
+        yParity:
+            typeof authorization.yParity !== 'undefined'
+                ? numberToHex(authorization.yParity, { size: 1 })
+                : pad('0x', { size: 32 }),
+    };
+}
 
 /**
  * Calls eth_estimateUserOperationGas to get gas estimates for a user operation.
@@ -25,6 +51,7 @@ async function estimateUserOperationGas(
         signature?: Hex;
         factory?: Hex;
         factoryData?: Hex;
+        authorization?: SignedAuthorization<number>;
     },
     entryPointAddress: Hex = entryPoint08Address
 ): Promise<{
@@ -40,7 +67,7 @@ async function estimateUserOperationGas(
 
     // Build the user operation object for the RPC call
     // All fields must be present for valid JSON-RPC request
-    const userOpForRpc: Record<string, string> = {
+    const userOpForRpc: Record<string, string | Record<string, Hex>> = {
         sender: userOperation.sender,
         nonce: `0x${(userOperation.nonce || 0n).toString(16)}`,
         callData: userOperation.callData,
@@ -73,6 +100,12 @@ async function estimateUserOperationGas(
     }
     if (userOperation.factoryData) {
         userOpForRpc.factoryData = userOperation.factoryData;
+    }
+
+    // Add the EIP-7702 authorization if present (first userOp of a 7702
+    // account, before the delegation is live on-chain)
+    if (userOperation.authorization) {
+        userOpForRpc.eip7702Auth = formatEip7702Auth(userOperation.authorization);
     }
 
     // Call eth_estimateUserOperationGas using the paymaster client transport (Pimlico)
@@ -122,6 +155,19 @@ export function createPaymasterFunctions(
     chainId: number,
     context?: Record<string, unknown>
 ) {
+    // `gas` rides along on an ERC-20 paymaster context to size the token
+    // approval; it is not a paymaster field and must never go on the wire.
+    // Stripping it here rather than at each call site is deliberate: this is the
+    // one boundary every path funnels through — the Account send paths, the
+    // gas-estimation paths that pass no override at all and so inherit the
+    // chain's own context, and the provider's chain-clients wiring — so no
+    // caller can reintroduce it by forgetting to strip.
+    const wireContext = ((): Record<string, unknown> | undefined => {
+        if (!context) return undefined;
+        const { gas: _gas, ...rest } = context;
+        return Object.keys(rest).length > 0 ? rest : undefined;
+    })();
+
     return {
         async getPaymasterStubData(userOperation: Parameters<PaymasterClient['getPaymasterStubData']>[0]) {
             // Fetch gas prices if not already present
@@ -140,7 +186,7 @@ export function createPaymasterFunctions(
                 maxPriorityFeePerGas,
                 chainId,
                 entryPointAddress: userOperation.entryPointAddress,
-                ...(context && { context }),
+                ...(wireContext && { context: wireContext }),
             });
 
             // Check if paymaster returned invalid gas limits (e.g., "0x1")
@@ -164,6 +210,10 @@ export function createPaymasterFunctions(
                             paymasterData: stubData.paymasterData,
                             factory: userOperation.factory,
                             factoryData: userOperation.factoryData,
+                            // Present on the first userOp of a 7702 account.
+                            // Dropping it would simulate a codeless sender.
+                            authorization: (userOperation as { authorization?: SignedAuthorization<number> })
+                                .authorization,
                         },
                         userOperation.entryPointAddress
                     );
@@ -203,7 +253,7 @@ export function createPaymasterFunctions(
                 maxPriorityFeePerGas,
                 chainId,
                 entryPointAddress: userOperation.entryPointAddress,
-                ...(context && { context }),
+                ...(wireContext && { context: wireContext }),
             });
 
             // If paymaster returned invalid gas limits, use values from userOperation (from stub data)

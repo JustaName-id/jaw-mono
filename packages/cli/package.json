@@ -55,6 +55,9 @@
       },
       "session": {
         "description": "Manage session keys for autonomous AI agents"
+      },
+      "x402": {
+        "description": "Inspect and test agentic x402 payments"
       }
     }
   },

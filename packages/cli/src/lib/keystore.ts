@@ -59,6 +59,21 @@ export function loadSessionKey(): string {
 }
 
 /**
+ * Load the session address from keystore.json, or null if it cannot be read.
+ * Used to name the key in messages, so a corrupt keystore degrades the message
+ * rather than the command.
+ */
+export function tryLoadKeystoreAddress(): string | null {
+  try {
+    if (!fs.existsSync(PATHS.keystore)) return null;
+    const parsed = JSON.parse(fs.readFileSync(PATHS.keystore, 'utf-8')) as KeystoreFile;
+    return parsed.address ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Delete keystore.json.
  */
 export function deleteKeystore(): void {

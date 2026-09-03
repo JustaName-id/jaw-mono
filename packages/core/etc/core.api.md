@@ -51,7 +51,7 @@ export class Account {
     getSmartAccount(): SmartAccount;
     getSmartAccountFor(address?: Address_2): Promise<SmartAccount>;
     static getStoredAccounts(apiKey?: string, storage?: SyncStorage): PasskeyAccount[];
-    grantPermissions(expiry: number, spender: Address_2, permissions: PermissionsDetail, paymasterUrlOverride?: string, paymasterContextOverride?: Record<string, unknown>, address?: Address_2): Promise<WalletGrantPermissionsResponse>;
+    grantPermissions(expiry: number, spender: Address_2, permissions: PermissionsDetail, paymasterUrlOverride?: string, paymasterContextOverride?: Record<string, unknown>, address?: Address_2, options?: GrantPermissionsOptions): Promise<WalletGrantPermissionsResponse>;
     static import(config: AccountConfig): Promise<Account>;
     static logout(apiKey?: string, storage?: SyncStorage): void;
     static restore(config: AccountConfig, credentialId: string, publicKey: `0x${string}`): Promise<Account>;
@@ -566,6 +566,11 @@ export function getPermissionFromRelay(permissionHash: Hex, apiKey: string): Pro
 export function getSupportedChains(showTestnets?: boolean): readonly Chain_2[];
 
 // @public
+export interface GrantPermissionsOptions {
+    prefundSpender?: boolean;
+}
+
+// @public
 export function handleGetAssetsRequest(request: RequestArguments, apiKey: string, showTestnets?: boolean): Promise<unknown>;
 
 // @public
@@ -1050,6 +1055,7 @@ export interface RequestArguments {
 export type RequestCapabilities = {
     paymasterService?: PaymasterServiceCapability;
     permissions?: PermissionsCapability;
+    prefundSpender?: boolean;
     [key: string]: unknown;
 };
 
