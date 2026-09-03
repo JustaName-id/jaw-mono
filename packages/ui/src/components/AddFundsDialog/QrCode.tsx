@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { buildQrPath } from '../../utils/qrPath';
+import { buildQrPath, centerHole } from '../../utils/qrPath';
 
 export interface QrCodeProps {
   /** The payload. For the receive screen this is an EIP-681 URI. */
@@ -9,15 +9,15 @@ export interface QrCodeProps {
   /** Rendered edge length in px. The SVG scales to it, so any size stays crisp. */
   size?: number;
   /**
-   * Reserved clear square in the middle. Phase 3 puts the chain icon here, so
-   * the space is held from the start rather than re-cut later, which would
-   * change the module layout of a code users may have already scanned.
+   * What sits in the middle, given the reserved square's size in px.
+   *
+   * Pass nothing and the code is solid: the modules are only cleared when
+   * something is going to fill the space, so the code never shows a bare hole
+   * that reads as a rendering fault.
    */
-  reserveCenter?: boolean;
+  renderCenter?: (sizePx: number) => React.ReactNode;
   /** Accessible name. Describes the code rather than reading the URI aloud. */
   label?: string;
-  /** Rendered into the reserved centre. Empty in phase 1. */
-  children?: React.ReactNode;
 }
 
 /**
@@ -29,8 +29,18 @@ export interface QrCodeProps {
  * making, and the modules take `currentColor` so the code inverts with the theme
  * instead of staying black on a dark surface.
  */
-export function QrCode({ value, size = 220, reserveCenter = true, label, children }: QrCodeProps) {
+export function QrCode({ value, size = 220, renderCenter, label }: QrCodeProps) {
+  const reserveCenter = !!renderCenter;
   const { path, count } = useMemo(() => buildQrPath(value, reserveCenter), [value, reserveCenter]);
+
+  // The cleared square in px, so what fills it is measured against the modules
+  // actually removed rather than a guess that drifts when the payload's length
+  // pushes the code to a larger version.
+  const holePx = useMemo(() => {
+    if (!reserveCenter) return 0;
+    const { from, to } = centerHole(count);
+    return ((to - from + 1) / count) * size;
+  }, [reserveCenter, count, size]);
 
   return (
     <div className="relative" style={{ width: size, height: size }}>
@@ -49,10 +59,21 @@ export function QrCode({ value, size = 220, reserveCenter = true, label, childre
       >
         <path d={path} fill="currentColor" />
       </svg>
-      {/* Phase 3's chain icon lands here. Kept mounted and empty so the
-          surrounding layout is already the final one. */}
-      {reserveCenter && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">{children}</div>
+      {renderCenter && (
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/2 flex items-center justify-center"
+          style={{
+            width: holePx,
+            height: holePx,
+            // Centred by translate rather than inset-0 so the box is exactly the
+            // cleared square, which is what bounds what goes inside it.
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          {/* Inset a little: the icon must not touch the surrounding modules,
+              or a scanner reads the outermost ones as merged. */}
+          {renderCenter(Math.round(holePx * 0.82))}
+        </div>
       )}
     </div>
   );

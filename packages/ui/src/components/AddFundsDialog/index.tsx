@@ -7,6 +7,7 @@ import { Button } from '../ui/button';
 import { CopyButton } from '../CopyButton';
 import { QrCode } from './QrCode';
 import { ChainStack } from './ChainStack';
+import { ChainIcon } from './ChainIcon';
 import { useChainIconURI } from '../../hooks';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
 import { eip681Uri } from '../../utils/eip681';
@@ -76,7 +77,23 @@ export const AddFundsDialog = ({
                 contrast, and the modules are drawn in the foreground colour, so
                 the plate is what keeps a dark-mode code readable. */}
             <div className="rounded-card border-border bg-background border p-4">
-              <QrCode value={eip681Uri(address, chainId)} size={196} label={`QR code to receive on ${chainName}`} />
+              <QrCode
+                value={eip681Uri(address, chainId)}
+                size={196}
+                label={`QR code to receive on ${chainName}`}
+                // The chain in the middle of the code it is encoded into. The
+                // payload already carries the chain for scanners; this is the
+                // same fact for the person holding the phone, at the moment
+                // they are deciding whether to scan.
+                renderCenter={(px) => (
+                  <span
+                    className="bg-background flex items-center justify-center rounded-full"
+                    style={{ width: px, height: px }}
+                  >
+                    <ChainIcon chainId={chainId} apiKey={apiKey} size={Math.round(px * 0.88)} />
+                  </span>
+                )}
+              />
             </div>
 
             <div className="flex w-full flex-col items-center gap-1">
