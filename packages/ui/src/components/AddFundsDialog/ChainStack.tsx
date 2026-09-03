@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { MAINNET_CHAINS, SUPPORTED_CHAINS } from '@jaw.id/core';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { ChainIcon } from './ChainIcon';
 
 /**
@@ -66,26 +67,44 @@ export function ChainStack({ activeChainId, apiKey }: ChainStackProps) {
     // rather than a run of unlabelled images.
     <span className="flex items-center" aria-label={`Works on ${ordered.map(chainName).join(', ')}`} role="img">
       {shown.map((id, i) => (
-        <span
-          key={id}
-          // White plate, not a themed one: these logos are brand SVGs with
-          // transparent grounds, drawn for light backgrounds. On the dark dialog
-          // the transparency let the surface through and the marks read as holes.
-          // The ring stays the surface colour so each icon still separates from
-          // the one behind it.
-          className="ring-popover relative inline-flex overflow-hidden rounded-full bg-white ring-2"
-          style={{ marginLeft: i === 0 ? 0 : -(ICON - STEP), zIndex: shown.length - i }}
-        >
-          <ChainIcon chainId={id} apiKey={apiKey} size={ICON} />
-        </span>
+        <Tooltip key={id}>
+          {/* Hover-only, no tabIndex: a focusable trigger opens by itself when
+              the dialog moves focus in on mount. The container's aria-label
+              already names every chain, so nothing is lost for screen readers. */}
+          <TooltipTrigger asChild>
+            <span
+              // White plate, not a themed one: these logos are brand SVGs with
+              // transparent grounds, drawn for light backgrounds. On the dark
+              // dialog the transparency let the surface through and the marks
+              // read as holes. The ring stays the surface colour so each icon
+              // still separates from the one behind it.
+              className="ring-popover relative inline-flex overflow-hidden rounded-full bg-white ring-2"
+              // Descending z-index so each icon overlaps the next, which is what
+              // makes the row read left to right. Hover targets the visible
+              // crescent rather than the whole circle, which is the trade for a
+              // stack: the alternative is no overlap at all.
+              style={{ marginLeft: i === 0 ? 0 : -(ICON - STEP), zIndex: shown.length - i }}
+            >
+              <ChainIcon chainId={id} apiKey={apiKey} size={ICON} />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{chainName(id)}</TooltipContent>
+        </Tooltip>
       ))}
       {overflow > 0 && (
-        <span
-          className="ring-popover bg-secondary text-muted-foreground text-label relative inline-flex h-5 items-center justify-center rounded-full px-1.5 font-mono ring-2"
-          style={{ marginLeft: -(ICON - STEP) }}
-        >
-          +{overflow}
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className="ring-popover bg-secondary text-muted-foreground text-label relative inline-flex h-5 items-center justify-center rounded-full px-1.5 font-mono ring-2"
+              style={{ marginLeft: -(ICON - STEP) }}
+            >
+              +{overflow}
+            </span>
+          </TooltipTrigger>
+          {/* Names what the count hides, so the collapsed chains are still
+              discoverable rather than being an unexplained number. */}
+          <TooltipContent>{ordered.slice(MAX_SHOWN).map(chainName).join(', ')}</TooltipContent>
+        </Tooltip>
       )}
     </span>
   );
