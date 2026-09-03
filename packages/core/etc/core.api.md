@@ -93,6 +93,12 @@ export interface AccountMetadata {
     username: string;
 }
 
+// @public
+export interface AddFundsParams {
+    asset?: string;
+    chainId?: number;
+}
+
 // @public (undocumented)
 export type Address = `0x${string}`;
 
@@ -548,6 +554,12 @@ export function fetchRPCRequest(request: RequestArguments, rpcUrl: string): Prom
 export function fetchTokenQuotes(paymasterUrl: string, chainId: number, tokens: Address_2[]): Promise<TokenQuote[]>;
 
 // @public
+export interface FundingSource {
+    id: string;
+    kind: 'receive';
+}
+
+// @public
 export function generateKeyPair(): Promise<CryptoKeyPair>;
 
 // @public (undocumented)
@@ -857,6 +869,9 @@ export type NativePasskeyCreateFn = (options: NativePasskeyCreateOptions) => Pro
 // @public
 export type NativePasskeyGetFn = (options: NativePasskeyGetOptions) => Promise<NativePasskeyGetResponse>;
 
+// @public
+export function parseAddFundsParams(params: unknown): AddFundsParams;
+
 // @public (undocumented)
 export interface PasskeyAccount {
     // (undocumented)
@@ -1036,6 +1051,9 @@ export interface ProviderRpcError extends Error {
 }
 
 // @public
+export const RECEIVE_SOURCE: FundingSource;
+
+// @public
 export const RECONNECT_REQUIRED: "JAW_RECONNECT_REQUIRED";
 
 // @public (undocumented)
@@ -1055,6 +1073,9 @@ export type RequestCapabilities = {
 
 // @public
 export function requiresInteraction(method: string): boolean;
+
+// @public
+export function resolveDestination(accounts: readonly Address[]): Address;
 
 // @public
 export type RevokePermissionApiResponse = {
