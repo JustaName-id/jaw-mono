@@ -1,30 +1,41 @@
-import { SUPPORTED_CHAINS } from '../account/smartAccount.js';
+import { MAINNET_CHAINS, SUPPORTED_CHAINS } from '../account/smartAccount.js';
 import type { Chain } from '../store/types.js';
 
 /**
  * The chains the receive screen shows the address as working on.
  *
- * Taken from the store, which holds what the SDK was initialised with:
+ * Sourced from the store, which holds what the SDK was initialised with:
  * `createInitialChains` fills it with every chain we support, narrowed only by
- * the `showTestnets` preference. So this is "everywhere this address works",
- * not "the chains this dapp uses" — core is never told the dapp's own chain
- * list, only wagmi knows that. Worth being exact about, because the stack is
- * the screen's claim to the user and it must not overstate what the app accepts.
+ * the `showTestnets` preference. Core is never told the dapp's own chain list
+ * (only wagmi knows that), so this is "everywhere this address works", never a
+ * claim about what the app accepts.
  *
- * Not a dapp param either way: the destination and the chains it works on are
+ * Mainnets only. A testnet in the stack means nothing to someone about to send
+ * real funds, and with `showTestnets` on the store carries 22 chains, which
+ * turns the stack into a count rather than information.
+ *
+ * The active chain is always included, even when it is a testnet: the QR points
+ * there, so a stack without it would contradict the code beside it.
+ *
+ * Not a dapp param either way — the destination and the chains it works on are
  * facts about the account, not something a request should be able to assert.
- *
- * An empty or entirely unsupported store falls back to the active chain, since
- * the address does work there and an empty stack under "Receive on" would read
- * as a broken screen.
  */
 export function visibleChains(configured: readonly Chain[], activeChainId: number): number[] {
-    const supported = new Set(SUPPORTED_CHAINS.map((c) => c.id));
+    const mainnets = new Set(MAINNET_CHAINS.map((c) => c.id));
 
     // Deduped: a store holding the same chain twice would otherwise render two
     // identical icons in the stack.
-    const visible = [...new Set(configured.map((c) => c.id))].filter((id) => supported.has(id));
+    const held = [...new Set(configured.map((c) => c.id))];
+    const visible = held.filter((id) => mainnets.has(id));
+
+    // Whatever the QR encodes belongs in the stack. Testnets are excluded from
+    // the list but not from this, or a testnet session shows a stack of chains
+    // the code does not point at.
+    const activeIsSupported = SUPPORTED_CHAINS.some((c) => c.id === activeChainId);
+    if (activeIsSupported && !visible.includes(activeChainId)) {
+        return [activeChainId, ...visible];
+    }
 
     if (visible.length > 0) return visible;
-    return supported.has(activeChainId) ? [activeChainId] : [];
+    return activeIsSupported ? [activeChainId] : [];
 }

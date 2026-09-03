@@ -64,10 +64,14 @@ export const AddFundsDialog = ({
             <ChainStack chains={chains} activeChainId={chainId} apiKey={apiKey} />
           </div>
 
+          {/* No chain named in words: the stack above shows where the address
+              works, and the icon inside the QR shows which chain that code is
+              for. Naming one in prose only invites a mismatch between the three
+              of them. */}
           <p className="text-muted-foreground text-body-xs mt-2 leading-normal">
             {asset
-              ? `Send ${asset} on ${chainName} to this address. Other assets on other chains will still arrive, but this app is asking for ${asset}.`
-              : `Send any supported asset on ${chainName} to this address.`}
+              ? `Send ${asset} to this address. Anything else you send still arrives, but this app is asking for ${asset}.`
+              : 'Send any supported asset to this address.'}
           </p>
         </div>
 

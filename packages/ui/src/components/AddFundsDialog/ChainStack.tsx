@@ -3,8 +3,19 @@
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
 import { ChainIcon } from './ChainIcon';
 
-/** Icons shown before the rest collapse into a "+N". */
-const MAX_SHOWN = 5;
+/**
+ * Icons shown before the rest collapse into a "+N".
+ *
+ * High enough to stack every mainnet we support today (15), because a "+10"
+ * next to five icons is a count rather than information — the whole point of
+ * the stack is showing the set. The cap stays as a guard: it only engages if the
+ * supported list grows past what fits, at which point this needs a rethink
+ * rather than a wider row.
+ */
+const MAX_SHOWN = 16;
+
+/** Overlap step in px. Half an icon reads as a stack; tighter than that reads as a smear. */
+const STEP = 10;
 
 export interface ChainStackProps {
   /** Chain ids the address works on, from the request. */
@@ -41,7 +52,7 @@ export function ChainStack({ chains, activeChainId, apiKey }: ChainStackProps) {
           // Overlap by half an icon. The ring is the surface colour, so each
           // icon reads as separate from the one behind it in both themes.
           className="ring-popover relative inline-flex rounded-full ring-2"
-          style={{ marginLeft: i === 0 ? 0 : -8, zIndex: shown.length - i }}
+          style={{ marginLeft: i === 0 ? 0 : -(20 - STEP), zIndex: shown.length - i }}
         >
           <ChainIcon chainId={id} apiKey={apiKey} size={20} />
         </span>
@@ -49,7 +60,7 @@ export function ChainStack({ chains, activeChainId, apiKey }: ChainStackProps) {
       {overflow > 0 && (
         <span
           className="ring-popover bg-secondary text-muted-foreground text-label relative inline-flex h-5 items-center justify-center rounded-full px-1.5 font-mono ring-2"
-          style={{ marginLeft: -8 }}
+          style={{ marginLeft: -(20 - STEP) }}
         >
           +{overflow}
         </span>
