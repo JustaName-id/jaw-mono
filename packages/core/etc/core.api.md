@@ -1569,6 +1569,9 @@ export type ViemRPCParams<M extends string> = ExtractParams<WalletRpcSchema, M>;
 export type ViemRPCReturnType<M extends string> = ExtractReturnType<WalletRpcSchema, M>;
 
 // @public
+export function visibleChains(configured: readonly Chain[], activeChainId: number): number[];
+
+// @public
 export type WalletConnectCapabilities = {
     signInWithEthereum?: SignInWithEthereumCapabilityRequest;
     subnameTextRecords?: SubnameTextRecordCapabilityRequest;
