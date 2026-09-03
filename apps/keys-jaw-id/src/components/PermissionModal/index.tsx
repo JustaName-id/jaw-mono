@@ -224,6 +224,13 @@ export const PermissionModal = ({
         spends: grantParams.permissions.spends || [],
         calls: grantParams.permissions.calls || [],
         address: grantParams.address,
+        // The spender sends every op this permission authorises, and the ERC-20
+        // paymaster charges the sender, so its first one has nothing to be
+        // charged. The SDK rides a small transfer along in this transaction when
+        // the request asks; it decides the amount and the destination, not the
+        // requester. Not rendered: like the paymaster's own approval, it is part
+        // of what this transaction costs rather than part of what it authorises.
+        prefundSpender: grantParams.capabilities?.prefundSpender === true,
       };
     } else {
       const params = permissionRequest.params as WalletRevokePermissionsRequest['params'];
@@ -689,7 +696,8 @@ export const PermissionModal = ({
           },
           computedPaymasterUrl,
           computedPaymasterContext,
-          permissionDetails.address
+          permissionDetails.address,
+          { prefundSpender: 'prefundSpender' in permissionDetails && permissionDetails.prefundSpender }
         );
 
         console.log('Permissions granted:', result);

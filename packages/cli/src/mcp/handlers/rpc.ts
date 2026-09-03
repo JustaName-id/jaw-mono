@@ -5,6 +5,7 @@ import { getBridge } from '../../lib/bridge-singleton.js';
 import { SessionBridge } from '../../lib/session-bridge.js';
 import { supportsSessionMode } from '../../lib/rpc-classifier.js';
 import { loadConfig } from '../../lib/config.js';
+import { tryLoadSessionConfig } from '../../lib/session-config.js';
 import type { JawConfig } from '../../lib/types.js';
 
 function resolveApiKey(config: JawConfig): string {
@@ -27,46 +28,68 @@ function envSessionEnabled(): boolean {
   return value === '1' || value === 'true';
 }
 
-// Autonomous (session) signing has no per-call human confirmation, so a
-// prompt-injected agent could burst signing calls and silently drain the
-// session key's on-chain allowance. A small client-side rate limit on signing
-// methods bounds that; the on-chain permission scope remains the hard cap.
-const SIGN_RATE_WINDOW_MS = 60_000;
-const MAX_SIGNS_PER_WINDOW = 5;
-const SESSION_SIGNING_METHODS = ['wallet_sendCalls', 'personal_sign', 'eth_signTypedData_v4'];
+// Autonomous sends have no per-call human confirmation, so a prompt-injected
+// agent could burst them. The window slows that down; the bound is the grant.
+// A send only reaches a target and selector the permission lists, and a token it
+// moves is metered against that token's period allowance: under `--x402` the
+// allowance is the ceiling, under a hand-written scope whose `calls` have no
+// matching `spends` the allowlist is, and nothing counts how often it fires.
+// This window is per-process, so a restart starts a fresh one.
+const SEND_RATE_WINDOW_MS = 60_000;
+const MAX_SENDS_PER_WINDOW = 5;
+const RATE_LIMITED_SESSION_METHODS = ['wallet_sendCalls'];
 
 export function registerRpcTool(server: McpServer): void {
-  // Per-server (per-process) sliding window over recent autonomous signs.
-  const recentSigns: number[] = [];
-  function assertUnderSignLimit(): void {
+  // Per-server (per-process) sliding window over recent autonomous sends.
+  const recentSends: number[] = [];
+  function assertUnderSendLimit(): void {
     const now = Date.now();
-    while (recentSigns.length && now - recentSigns[0] > SIGN_RATE_WINDOW_MS) recentSigns.shift();
-    if (recentSigns.length >= MAX_SIGNS_PER_WINDOW) {
-      throw new Error('Autonomous signing rate limit reached, retry shortly or call again with session: false.');
+    while (recentSends.length && now - recentSends[0] > SEND_RATE_WINDOW_MS) recentSends.shift();
+    if (recentSends.length >= MAX_SENDS_PER_WINDOW) {
+      throw new Error('Autonomous send rate limit reached, retry shortly or call again with session: false.');
     }
-    recentSigns.push(now);
+    recentSends.push(now);
   }
 
-  server.registerTool(
+  // Same explicit signature the other tools use. This one carried a
+  // `@ts-expect-error` on the handler instead, which stopped covering anything
+  // once the error moved to the schema argument: the directive then reports
+  // itself as unused, which is the failure mode that made the cast the house
+  // pattern in the first place.
+  type RegisterRpc = (
+    name: string,
+    config: { description: string; inputSchema: typeof rpcMethodSchema },
+    handler: (params: { method: string; params?: unknown; chainId?: number; session?: boolean }) => Promise<unknown>
+  ) => void;
+  (server.registerTool as unknown as RegisterRpc)(
     'jaw_rpc',
     {
       description:
         'Execute any JAW.id wallet RPC method. ' +
         'Supports transactions, signing, permissions, and queries. ' +
-        'By default, methods that require signing open the browser for passkey authentication. ' +
-        'Pass session: true to sign autonomously with the local session key instead ' +
+        'By default, any method that uses the account opens the browser for passkey authentication. ' +
+        'Pass session: true to send transactions autonomously with the local session key instead ' +
         '(requires a session created via `jaw session setup` — check jaw_session_status). ' +
+        'Session mode sends, it does not sign: personal_sign and eth_signTypedData_v4 always open ' +
+        'the browser, and asking for either with session: true is refused rather than routed. ' +
         'IMPORTANT: Read the jaw://api-reference resource for the full list of methods, ' +
         'and jaw://api-reference/{method} for detailed parameter formats and examples.',
       inputSchema: rpcMethodSchema,
     },
-    // @ts-expect-error — MCP SDK deep type inference with z.any() in schema
-    async (params: { method: string; params?: unknown; chainId?: number; session?: boolean }) => {
+    async (params) => {
       try {
         const config = loadConfig();
         const apiKey = resolveApiKey(config);
-        const chainId = resolveChainId(params.chainId, config);
         const useSession = params.session ?? envSessionEnabled();
+        // In session mode the session's own chain is the only one that can
+        // work: `SessionBridge` refuses any other, and an agent that never
+        // asked for a chain would otherwise be told its session was made for
+        // the wrong one. An explicit `chainId` still wins, so asking for a
+        // different chain on purpose still gets that refusal.
+        const chainId =
+          useSession && params.chainId === undefined
+            ? (tryLoadSessionConfig()?.chainId ?? resolveChainId(undefined, config))
+            : resolveChainId(params.chainId, config);
 
         let bridge: { request(method: string, params?: unknown): Promise<unknown>; close(): void };
 
@@ -77,8 +100,8 @@ export function registerRpcTool(server: McpServer): void {
                 'Call again with session: false to route through the browser bridge.'
             );
           }
-          if (SESSION_SIGNING_METHODS.includes(params.method)) {
-            assertUnderSignLimit();
+          if (RATE_LIMITED_SESSION_METHODS.includes(params.method)) {
+            assertUnderSendLimit();
           }
           bridge = new SessionBridge({ apiKey, chainId });
         } else {
@@ -87,7 +110,6 @@ export function registerRpcTool(server: McpServer): void {
             apiKey,
             chainId,
             ens: config.ens,
-            paymasterUrl: config.paymasters?.[chainId]?.url,
           });
         }
 

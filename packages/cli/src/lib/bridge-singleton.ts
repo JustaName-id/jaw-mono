@@ -25,8 +25,8 @@ export interface BridgeOptions {
   apiKey: string;
   chainId?: number;
   ens?: string;
-  paymasterUrl?: string;
   timeout?: number;
+  connectTimeout?: number;
 }
 
 /**
@@ -34,6 +34,19 @@ export interface BridgeOptions {
  */
 export async function getBridge(options: BridgeOptions): Promise<WSBridge> {
   const config = loadConfig();
+  // Both waits on a person: thirty seconds for the browser to reach the relay,
+  // two minutes to approve once it is there. Those suit a browser this process
+  // opened itself and nothing else. A first passkey, a URL carried to a phone,
+  // or a machine with no browser to open takes longer than either before
+  // anyone has done anything wrong, so one knob raises both.
+  const envTimeout = Number(process.env['JAW_BRIDGE_TIMEOUT_MS']);
+  const fromEnv = Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : undefined;
+  const timeout = options.timeout ?? fromEnv;
+  // Resolved on its own, never from the caller's request timeout. Deriving it
+  // meant `jaw rpc call --timeout 300` silently gave the browser five minutes
+  // to connect, and then dropping that flag's default cut the same wait to
+  // thirty seconds. Neither followed from anything the caller asked for.
+  const connectTimeout = options.connectTimeout ?? fromEnv;
   const keysUrl = options.keysUrl ?? config.keysUrl ?? DEFAULT_KEYS_URL;
   const relayUrl = options.relayUrl ?? config.relayUrl ?? DEFAULT_RELAY_URL;
   const chainId = options.chainId ?? config.defaultChain ?? 1;
@@ -49,7 +62,13 @@ export async function getBridge(options: BridgeOptions): Promise<WSBridge> {
   let relaySession = loadRelaySession();
   if (relaySession && relaySession.relayUrl === relayUrl && relaySession.peerPublicKey) {
     try {
-      return await connectBridge(relaySession, options, chainId, keysUrl, relayUrl, false);
+      // Deliberately not the long wait: nothing is opened here, so this only
+      // asks whether the browser from an earlier command is still connected.
+      // When it is not, the answer is to give up quickly and fall through to a
+      // fresh session that does open one. Waiting the human-sized wait to find
+      // that out leaves the command silent for as long as someone will stare at
+      // it, having just told them a browser was opening.
+      return await connectBridge({ ...options, timeout }, relaySession, chainId, keysUrl, relayUrl, false);
     } catch {
       // Connection failed — stale session or relay restarted.
       // Delete and fall through to create a new one.
@@ -64,7 +83,7 @@ export async function getBridge(options: BridgeOptions): Promise<WSBridge> {
   // New session — this is the only path that opens a browser
   const session = await createNewSession(relayUrl);
   saveRelaySession(session);
-  return await connectBridge(session, options, chainId, keysUrl, relayUrl, true);
+  return await connectBridge({ ...options, timeout, connectTimeout }, session, chainId, keysUrl, relayUrl, true);
 }
 
 async function createNewSession(relayUrl: string): Promise<RelaySession> {
@@ -83,23 +102,29 @@ async function createNewSession(relayUrl: string): Promise<RelaySession> {
 }
 
 async function connectBridge(
-  relaySession: RelaySession,
   options: BridgeOptions,
+  relaySession: RelaySession,
   chainId: number,
   keysUrl: string,
   relayUrl: string,
   openBrowser: boolean
 ): Promise<WSBridge> {
   const config = loadConfig();
+  // Read as one entry, so the url and the context cannot come from different
+  // paymasters. Every caller used to look this up and forward the url alone,
+  // which is how a configured `context` was lost before it reached the browser.
+  const paymaster = config.paymasters?.[chainId];
   const bridge = new WSBridge({
     relayUrl,
     session: relaySession.session,
     timeout: options.timeout,
+    connectTimeout: options.connectTimeout,
     config: {
       apiKey: options.apiKey,
       chainId,
       ens: options.ens ?? config.ens,
-      paymasterUrl: options.paymasterUrl ?? config.paymasters?.[chainId]?.url,
+      paymasterUrl: paymaster?.url,
+      paymasterContext: paymaster?.context,
     },
     privateKeyHex: relaySession.privateKey,
     publicKeyHex: relaySession.publicKey,
@@ -111,6 +136,15 @@ async function connectBridge(
     openBrowser
       ? async () => {
           const bridgeUrl = buildBridgeUrl(keysUrl, relaySession.session, relayUrl, relaySession.publicKey);
+          // Over SSH, in a container, or under a test driver, there is no
+          // browser worth opening and `open` either does nothing or opens one on
+          // the wrong machine, leaving the command waiting on an approval nobody
+          // was told how to give. Printing the URL is the way out, and it goes
+          // to stderr so it cannot land in the middle of `--output json`.
+          if (process.env['JAW_NO_BROWSER']) {
+            process.stderr.write(`Open this URL to approve:\n${bridgeUrl}\n`);
+            return;
+          }
           const { default: open } = await import('open');
           await open(bridgeUrl);
         }

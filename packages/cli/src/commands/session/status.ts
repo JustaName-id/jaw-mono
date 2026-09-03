@@ -1,6 +1,9 @@
 import { BaseCommand } from '../../base-command.js';
 import { keystoreExists } from '../../lib/keystore.js';
-import { loadSessionConfig } from '../../lib/session-config.js';
+import { isLegacySession, liveOrphans, loadSessionConfig } from '../../lib/session-config.js';
+import { loadConfig } from '../../lib/config.js';
+import { readLiveness, type PermissionLiveness } from '../../x402/permission-onchain.js';
+import { recoverPermission } from '../../x402/permission-recovery.js';
 import type { OutputFormat } from '../../lib/types.js';
 
 export default class SessionStatus extends BaseCommand {
@@ -22,12 +25,33 @@ export default class SessionStatus extends BaseCommand {
     const config = loadSessionConfig();
     const now = Date.now() / 1000;
     const isExpired = config.expiry <= now;
+    // The one fact no local file can hold. Expiry is already on disk, so it
+    // needs no read; a revoke made from keys.jaw.id or from another machine
+    // leaves this file saying the session is fine. Fails soft to 'unknown',
+    // which is what a session written before the struct was stored reports.
+    // Best-effort, and quiet without an API key: this command has never needed
+    // one, and a session written before the struct existed should not start
+    // demanding a key to report what it always reported.
+    const permission = await recoverPermission(config, loadConfig().apiKey);
+    // Carried into everything below, including the json, so the run that
+    // recovers the struct reports it rather than the next one.
+    const current = permission ? { ...config, permission } : config;
+    const liveness = await readLiveness(current);
+    // Permissions from earlier sessions that are still live on chain. Said in
+    // terms of the permission rather than of this key: setup generates a fresh
+    // key whenever it is not reusing one, and `--yes` always does, so the key
+    // that could exercise these is usually gone. The grant on the account is
+    // what outlives the session, and before setup recorded the id it could not
+    // be revoked at all.
+    const stillLive = liveOrphans(config.orphanedPermissions, now);
 
     if (format === 'json') {
       this.outputResult(
         {
-          ...config,
+          ...current,
           expired: isExpired,
+          permissionOnChain: liveness,
+          ...(stillLive.length > 0 ? { stillLiveOnChain: stillLive } : {}),
         },
         format
       );
@@ -39,19 +63,57 @@ export default class SessionStatus extends BaseCommand {
       this.log('Session expired.\n');
       this.log(`  Session address:  ${config.sessionAddress}`);
       this.log(`  Owner address:    ${config.ownerAddress}`);
-      this.log(`  Permission ID:    ${config.permissionId}`);
+      this.log(`  Permission ID:    ${config.permissionId}${onChainNote(liveness)}`);
       this.log(`  Chain:            ${config.chainId}`);
       this.log(`  Expired:          ${new Date(config.expiry * 1000).toISOString()} (${ago} days ago)`);
+      if (stillLive.length > 0) this.log(stillLiveLine(stillLive.length));
       this.log('\nRun `jaw session setup` to create a new session.');
     } else {
       const remaining = Math.floor((config.expiry - now) / 86400);
       this.log('Session active.\n');
       this.log(`  Session address:  ${config.sessionAddress}`);
+      if (isLegacySession(config)) {
+        // Auto mode refuses these, so say it here rather than letting the next
+        // command be the one that explains it.
+        this.log('                    (separate from the session key: created by an older CLI)');
+      } else {
+        this.log('                    (the session key EOA, and the x402 payer)');
+      }
       this.log(`  Owner address:    ${config.ownerAddress}`);
-      this.log(`  Permission ID:    ${config.permissionId}`);
+      this.log(`  Permission ID:    ${config.permissionId}${onChainNote(liveness)}`);
       this.log(`  Chain:            ${config.chainId}`);
       this.log(`  Expires:          ${new Date(config.expiry * 1000).toISOString()}`);
-      this.log(`  Status:           Valid (${remaining} days remaining)`);
+      // Revoked outranks the local expiry: the session has time left on paper
+      // and can no longer pull anything through the permission.
+      this.log(
+        liveness === 'revoked'
+          ? '  Status:           Revoked on chain. Run `jaw session setup` to create a new session.'
+          : `  Status:           Valid (${remaining} days remaining)`
+      );
+      if (stillLive.length > 0) this.log(stillLiveLine(stillLive.length));
     }
   }
+}
+
+/**
+ * What to add after the permission id, or nothing when the chain did not
+ * answer. Silence rather than "unknown" on every run of an older session: it
+ * is a question the user did not ask and the CLI cannot answer.
+ */
+function onChainNote(liveness: PermissionLiveness): string {
+  if (liveness === 'revoked') return '   (REVOKED on chain)';
+  if (liveness === 'unapproved') return '   (not approved on chain)';
+  if (liveness === 'mismatch') return '   (does not match the stored permission)';
+  return '';
+}
+
+/**
+ * Said whenever earlier sessions left grants behind, because that is authority
+ * on the account which this session does not describe and nothing else reports.
+ */
+function stillLiveLine(count: number): string {
+  return (
+    `  Still live:       ${count} permission${count === 1 ? '' : 's'} from earlier sessions ` +
+    '(`jaw session revoke` removes them too)'
+  );
 }

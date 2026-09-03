@@ -81,7 +81,7 @@ describe('validation', () => {
       ).toThrow('Invalid permissions');
     });
 
-    it('rejects non-hex allowance', () => {
+    it('rejects an allowance that is neither decimal nor hex', () => {
       expect(() =>
         parsePermissionsConfig({ spends: [{ token: validAddr, allowance: 'not-hex', unit: 'day' }] })
       ).toThrow('Invalid permissions');
@@ -89,8 +89,33 @@ describe('validation', () => {
 
     it('rejects empty hex allowance (0x)', () => {
       expect(() => parsePermissionsConfig({ spends: [{ token: validAddr, allowance: '0x', unit: 'day' }] })).toThrow(
-        'non-empty 0x hex value'
+        'decimal or 0x hex integer'
       );
+    });
+
+    // The SDK feeds allowance to BigInt(), which takes both forms, and the
+    // permissions doc shows the decimal one. Rejecting decimal here made the
+    // documented example fail against the CLI.
+    it('accepts a decimal allowance, matching the SDK and the docs', () => {
+      const parsed = parsePermissionsConfig({
+        spends: [{ token: validAddr, allowance: '10000000', unit: 'day' }],
+      });
+      expect(parsed.spends?.[0].allowance).toBe('10000000');
+    });
+
+    it('still accepts a hex allowance', () => {
+      const parsed = parsePermissionsConfig({
+        spends: [{ token: validAddr, allowance: '0x989680', unit: 'day' }],
+      });
+      expect(parsed.spends?.[0].allowance).toBe('0x989680');
+    });
+
+    it('rejects a signed or fractional allowance', () => {
+      for (const allowance of ['-1', '1.5', '1e6']) {
+        expect(() => parsePermissionsConfig({ spends: [{ token: validAddr, allowance, unit: 'day' }] })).toThrow(
+          'decimal or 0x hex integer'
+        );
+      }
     });
 
     it('rejects non-object input', () => {

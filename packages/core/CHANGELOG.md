@@ -1,3 +1,32 @@
+## 1.3.0 (2026-09-03)
+
+### 🚀 Features
+
+- **core,cli:** let the grant leave the spender able to pay for its own first op ([2765cf40](https://github.com/JustaName-id/jaw-mono/commit/2765cf40))
+
+### 🩹 Fixes
+
+- **core:** size the paymaster approval over the batch the prefund is in ([ea8d3056](https://github.com/JustaName-id/jaw-mono/commit/ea8d3056))
+- **core:** send an even yParity as one byte, the way the send path does ([0bd189b7](https://github.com/JustaName-id/jaw-mono/commit/0bd189b7))
+- **core:** take the tightest allowance as the prefund ceiling ([9958a38c](https://github.com/JustaName-id/jaw-mono/commit/9958a38c))
+- **core:** take the widest allowance when a token carries several periods ([e1726a10](https://github.com/JustaName-id/jaw-mono/commit/e1726a10))
+- **core:** bound the prefund by what the permission lets the session spend ([3831454d](https://github.com/JustaName-id/jaw-mono/commit/3831454d))
+- **core,ui:** price the prefund off the wallet's own paymaster ([2ae91627](https://github.com/JustaName-id/jaw-mono/commit/2ae91627))
+- **core,cli:** close two edges the last two commits left open ([1a05732d](https://github.com/JustaName-id/jaw-mono/commit/1a05732d))
+- **core:** decide the prefund fee against the token it actually sends ([340a57bb](https://github.com/JustaName-id/jaw-mono/commit/340a57bb))
+- **core:** stop the approval from going missing or to the wrong spender ([93a67eb8](https://github.com/JustaName-id/jaw-mono/commit/93a67eb8))
+- **core,cli:** size the approval over the sent userOp, and stop failing silently ([ac01c82e](https://github.com/JustaName-id/jaw-mono/commit/ac01c82e))
+- **core,cli:** resolve the paymaster once, so the approval matches the send ([b66338f7](https://github.com/JustaName-id/jaw-mono/commit/b66338f7))
+- **cli,core:** review follow-ups for the ERC-7739 wrapped signer ([04ea5e3f](https://github.com/JustaName-id/jaw-mono/commit/04ea5e3f))
+- **core:** expose the EIP-7702 authorization on the smart account ([baa76467](https://github.com/JustaName-id/jaw-mono/commit/baa76467))
+- **core:** carry the EIP-7702 authorization through paymaster gas estimation ([d204986f](https://github.com/JustaName-id/jaw-mono/commit/d204986f))
+
+### ❤️ Thank You
+
+- Claude Code
+- Ghadi Mhawej
+- Mariano Aguero @mariano-aguero
+
 ## 1.2.3 (2026-08-20)
 
 ### 🩹 Fixes

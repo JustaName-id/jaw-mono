@@ -15,6 +15,7 @@ import {
     pad,
     BaseError,
     type LocalAccount,
+    type PrivateKeyAccount,
     decodeFunctionData,
     isAddressEqual,
     type Client,
@@ -144,6 +145,18 @@ export async function toJustanAccount(parameters: ToJustanAccountParameters): Pr
     return toSmartAccount({
         client,
         entryPoint,
+        // In 7702 mode, expose the authority/delegate pair so viem attaches a
+        // stub-signed authorization to any userOp it prepares while the EOA is
+        // still undeployed. Without it, estimation-only flows that call
+        // prepareUserOperation themselves (e.g. the ERC-20 paymaster approval
+        // sizing) simulate a codeless sender and fail. The send path passes
+        // its own signed authorization explicitly, which takes precedence.
+        // Gated on signAuthorization: viem may call it on this account, so a
+        // LocalAccount without it (remote signer) keeps the old behavior
+        // instead of throwing mid-estimation.
+        ...(isEip7702 && eip7702Account && delegationContract && eip7702Account.signAuthorization
+            ? { authorization: { account: eip7702Account as PrivateKeyAccount, address: delegationContract } }
+            : {}),
         async decodeCalls(data) {
             const result = decodeFunctionData({
                 abi,

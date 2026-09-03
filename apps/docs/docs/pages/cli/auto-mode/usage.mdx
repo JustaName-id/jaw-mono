@@ -7,7 +7,6 @@ Add `--session` (or `-s`) to any `jaw rpc call` command to use the local session
 ```bash
 jaw rpc call eth_requestAccounts --session --chain 84532
 jaw rpc call wallet_sendCalls '{"calls":[...]}' --session --chain 84532
-jaw rpc call personal_sign '"Hello"' --session --chain 84532
 ```
 
 Also available as an environment variable:
@@ -25,8 +24,6 @@ jaw rpc call eth_requestAccounts --chain 84532
 | `eth_accounts`          | Same as above                                                           |
 | `wallet_sendCalls`      | Signs locally, auto-injects `permissionId`, sends via PermissionManager |
 | `wallet_getCallsStatus` | Queries transaction status                                              |
-| `personal_sign`         | Signs message with session key                                          |
-| `eth_signTypedData_v4`  | Signs typed data with session key                                       |
 
 ### Blocked Methods
 
@@ -36,7 +33,18 @@ These require a browser and passkey — they cannot run in session mode:
 | -------------------------- | --------------------------------------------- |
 | `wallet_grantPermissions`  | "Requires browser — run `jaw session setup`"  |
 | `wallet_revokePermissions` | "Requires browser — run `jaw session revoke`" |
+| `personal_sign`            | "not available in auto mode"                  |
+| `eth_signTypedData_v4`     | "not available in auto mode"                  |
 | Any other method           | `Method <name> is not supported in auto mode` |
+
+:::warning
+Signing is browser only on purpose. A signature the session makes is not a call,
+so it does not pass the spend caps, does not reach the payment ledger, and does
+not take the payment lock. Asked for the right typed data, a session key signs
+away its own balance, and an EIP-2612 `permit` would keep taking every later
+top-up. Paying an x402 challenge does not go through these methods: use
+[`jaw x402 pay`](/cli/x402), which signs inside the policy.
+:::
 
 ## Session Management
 

@@ -1,0 +1,166 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
+
+const TEST_ROOT = path.join(os.tmpdir(), 'jaw-ledger-spend-test');
+
+vi.mock('../lib/paths.js', () => {
+  const p = require('node:path');
+  const o = require('node:os');
+  const root = p.join(o.tmpdir(), 'jaw-ledger-spend-test');
+  return { PATHS: { root, x402Log: p.join(root, 'x402-log.jsonl') } };
+});
+
+const { appendX402Log, sumSpentSince, sumToppedUpSince } = await import('./ledger.js');
+
+const PAYER = '0x1111111111111111111111111111111111111111';
+const OTHER = '0x2222222222222222222222222222222222222222';
+
+beforeEach(() => {
+  if (fs.existsSync(TEST_ROOT)) fs.rmSync(TEST_ROOT, { recursive: true });
+  fs.mkdirSync(TEST_ROOT, { recursive: true });
+});
+afterEach(() => {
+  if (fs.existsSync(TEST_ROOT)) fs.rmSync(TEST_ROOT, { recursive: true });
+});
+
+const entry = (o: Partial<Parameters<typeof appendX402Log>[0]>) =>
+  appendX402Log({
+    at: '2026-02-01T00:00:00.000Z',
+    url: 'https://api.example.com/x',
+    payer: PAYER,
+    status: 'paid',
+    amount: '1000',
+    ...o,
+  } as Parameters<typeof appendX402Log>[0]);
+
+describe('sumSpentSince', () => {
+  it('adds settled payments for this payer', () => {
+    entry({});
+    entry({ amount: '2500' });
+    expect(sumSpentSince(PAYER)).toBe(3500n);
+  });
+
+  // A signed authorization may have been broadcast even when settlement did not
+  // confirm, so counting it can only under-spend the cap, never breach it.
+  it('counts failed attempts, not refusals', () => {
+    entry({ status: 'failed', amount: '1000' });
+    entry({ status: 'refused', amount: '9999' });
+    expect(sumSpentSince(PAYER)).toBe(1000n);
+  });
+
+  it('ignores other payers', () => {
+    entry({ payer: OTHER, amount: '5000' });
+    expect(sumSpentSince(PAYER)).toBe(0n);
+  });
+
+  it('matches the payer case-insensitively', () => {
+    entry({ payer: PAYER.toUpperCase().replace('0X', '0x') });
+    expect(sumSpentSince(PAYER)).toBe(1000n);
+  });
+
+  it('scopes to entries at or after the cutoff', () => {
+    entry({ at: '2026-01-01T00:00:00.000Z', amount: '4000' });
+    entry({ at: '2026-03-01T00:00:00.000Z', amount: '1000' });
+    expect(sumSpentSince(PAYER, '2026-02-01T00:00:00.000Z')).toBe(1000n);
+    expect(sumSpentSince(PAYER)).toBe(5000n);
+  });
+
+  it('skips a hand-edited amount instead of taking the cap down', () => {
+    entry({ amount: 'not-a-number' });
+    entry({ amount: '1000' });
+    expect(sumSpentSince(PAYER)).toBe(1000n);
+  });
+
+  it('is zero on an empty ledger', () => {
+    expect(sumSpentSince(PAYER)).toBe(0n);
+  });
+});
+
+describe('sumToppedUpSince', () => {
+  it('adds what was pulled through the permission, not what was paid', () => {
+    entry({ amount: '1000', topUpAmount: '5000' });
+    entry({ amount: '1000' }); // paid out of the float, no pull
+    expect(sumToppedUpSince(PAYER)).toBe(5000n);
+    expect(sumSpentSince(PAYER)).toBe(2000n);
+  });
+
+  // The pull settled before the payment it was meant for was attempted, so the
+  // allowance is gone whatever the payment ended up doing.
+  it('counts a pull whose payment was then refused', () => {
+    entry({ status: 'refused', amount: undefined, topUpAmount: '5000' });
+    expect(sumToppedUpSince(PAYER)).toBe(5000n);
+  });
+
+  it('ignores other payers and entries before the cutoff', () => {
+    entry({ payer: OTHER, topUpAmount: '9000' });
+    entry({ at: '2026-01-01T00:00:00.000Z', topUpAmount: '4000' });
+    entry({ at: '2026-03-01T00:00:00.000Z', topUpAmount: '1000' });
+    expect(sumToppedUpSince(PAYER, '2026-02-01T00:00:00.000Z')).toBe(1000n);
+  });
+
+  it('skips a hand-edited amount instead of taking the cap down', () => {
+    entry({ topUpAmount: 'not-a-number' });
+    entry({ topUpAmount: '1000' });
+    expect(sumToppedUpSince(PAYER)).toBe(1000n);
+  });
+
+  it('is zero when nothing was ever topped up', () => {
+    entry({ amount: '1000' });
+    expect(sumToppedUpSince(PAYER)).toBe(0n);
+  });
+});
+
+/**
+ * Under `upto` the ceiling and the charge are different numbers, and which one
+ * a cap must count depends on whether the payment settled. A settled one costs
+ * what settled. A failed one leaves a signature that is still spendable up to
+ * the ceiling, so it costs all of it.
+ */
+describe('sumSpentSince with a ceiling that differs from the charge', () => {
+  it('counts what settled when the payment settled', () => {
+    entry({ status: 'paid', amount: '40', authorized: '5000000' });
+    expect(sumSpentSince(PAYER)).toBe(40n);
+  });
+
+  it('counts the whole ceiling when settlement failed', () => {
+    entry({ status: 'failed', amount: '40', authorized: '5000000' });
+    expect(sumSpentSince(PAYER)).toBe(5_000_000n);
+  });
+
+  it('still counts nothing for an attempt that was never signed', () => {
+    entry({ status: 'refused', amount: '40', authorized: '5000000' });
+    expect(sumSpentSince(PAYER)).toBe(0n);
+  });
+
+  it('leaves the exact scheme untouched, where both figures are the same', () => {
+    entry({ status: 'failed', amount: '1000', authorized: '1000' });
+    expect(sumSpentSince(PAYER)).toBe(1000n);
+  });
+
+  it('reads an entry written before the ceiling was recorded', () => {
+    entry({ status: 'failed', amount: '1000' });
+    expect(sumSpentSince(PAYER)).toBe(1000n);
+  });
+
+  // The row still counts what it can be read for. An unparseable ceiling
+  // reading as zero would have let one corrupt field, or a torn write, shrink
+  // an enforced cap, which is the opposite of what a conservative rule does.
+  it('falls back to the charge when the ceiling is unreadable', () => {
+    entry({ status: 'failed', amount: '1000', authorized: 'not-a-number' });
+    entry({ status: 'paid', amount: '25' });
+    expect(sumSpentSince(PAYER)).toBe(1025n);
+  });
+
+  it('takes the larger of the two, so neither field alone can shrink the cap', () => {
+    entry({ status: 'failed', amount: '9000', authorized: '40' });
+    expect(sumSpentSince(PAYER)).toBe(9000n);
+  });
+
+  it('ignores a negative figure instead of subtracting it', () => {
+    entry({ status: 'paid', amount: '-5000' });
+    entry({ status: 'paid', amount: '25' });
+    expect(sumSpentSince(PAYER)).toBe(25n);
+  });
+});

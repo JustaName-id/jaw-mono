@@ -110,8 +110,10 @@ jaw rpc call wallet_grantPermissions '{"permissions":[{"type":"call","data":{"to
 ### wallet_revokePermissions
 
 ```bash
-jaw rpc call wallet_revokePermissions '{"permissionHash":"0x..."}'
+jaw rpc call wallet_revokePermissions '{"id":"0x..."}'
 ```
+
+`id` is the permission hash returned by `wallet_grantPermissions` and listed by `wallet_getPermissions`.
 
 ### wallet_getPermissions
 

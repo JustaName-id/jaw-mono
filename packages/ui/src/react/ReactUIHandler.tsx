@@ -64,6 +64,7 @@ import { usePermissionExecution } from '../hooks/usePermissionExecution';
 import { usePermissionRevocation } from '../hooks/usePermissionRevocation';
 import { useFunctionSignatures } from '../hooks/useFunctionSignatures';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
+import { resolvePaymaster } from '../utils/resolvePaymaster';
 import { getPublicClient } from '../utils/publicClient';
 import { getSiweOriginWarning, getSiweOriginWarningFromMessage, isSiweMessage, hexToUtf8 } from '../utils/siwe';
 import { PortalContainerContext } from '../lib/utils';
@@ -1457,21 +1458,14 @@ function TransactionDialogWrapper({
   const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
 
-  // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
-  // Priority: capabilities.paymasterService.url > paymasters[chainId].url
-  const effectivePaymasterUrl = useMemo(() => {
-    const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
-    return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
-  }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
-
-  // Extract paymasterContext from capabilities (for ERC-20 token payments, mode flags, etc.)
-  // Priority: capabilities.paymasterService.context > paymasters[chainId].context
-  const effectivePaymasterContext = useMemo(() => {
-    const capabilitiesPaymasterContext = (
-      request.data.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined
-    )?.context;
-    return capabilitiesPaymasterContext || paymasters?.[chainId]?.context;
-  }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
+  // The paymaster of the request, url and context together (EIP-5792
+  // paymasterService capability first, then the one configured for the chain).
+  // Taking the two halves apart let a capabilities url pick up a context written
+  // for a different paymaster.
+  const { url: effectivePaymasterUrl, context: effectivePaymasterContext } = useMemo(
+    () => resolvePaymaster(request.data.capabilities?.paymasterService, paymasters?.[chainId]),
+    [request.data.capabilities?.paymasterService, paymasters, chainId]
+  );
 
   const isSponsored = !!effectivePaymasterUrl;
 
@@ -1840,21 +1834,14 @@ function SendTransactionDialogWrapper({
   const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
 
-  // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
-  // Priority: capabilities.paymasterService.url > paymasters[chainId].url
-  const effectivePaymasterUrl = useMemo(() => {
-    const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
-    return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
-  }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
-
-  // Extract paymasterContext from capabilities (for ERC-20 token payments, mode flags, etc.)
-  // Priority: capabilities.paymasterService.context > paymasters[chainId].context
-  const effectivePaymasterContext = useMemo(() => {
-    const capabilitiesPaymasterContext = (
-      request.data.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined
-    )?.context;
-    return capabilitiesPaymasterContext || paymasters?.[chainId]?.context;
-  }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
+  // The paymaster of the request, url and context together (EIP-5792
+  // paymasterService capability first, then the one configured for the chain).
+  // Taking the two halves apart let a capabilities url pick up a context written
+  // for a different paymaster.
+  const { url: effectivePaymasterUrl, context: effectivePaymasterContext } = useMemo(
+    () => resolvePaymaster(request.data.capabilities?.paymasterService, paymasters?.[chainId]),
+    [request.data.capabilities?.paymasterService, paymasters, chainId]
+  );
 
   const isSponsored = !!effectivePaymasterUrl;
 
@@ -2208,21 +2195,14 @@ function PermissionDialogWrapper({
   const nativeToken = feeTokens?.find((t) => t.isNative);
   const nativeSymbol = nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || 'ETH';
 
-  // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
-  // Priority: capabilities.paymasterService.url > paymasters[chainId].url
-  const effectivePaymasterUrl = useMemo(() => {
-    const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
-    return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
-  }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
-
-  // Extract paymasterContext from capabilities (for ERC-20 token payments, mode flags, etc.)
-  // Priority: capabilities.paymasterService.context > paymasters[chainId].context
-  const effectivePaymasterContext = useMemo(() => {
-    const capabilitiesPaymasterContext = (
-      request.data.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined
-    )?.context;
-    return capabilitiesPaymasterContext || paymasters?.[chainId]?.context;
-  }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
+  // The paymaster of the request, url and context together (EIP-5792
+  // paymasterService capability first, then the one configured for the chain).
+  // Taking the two halves apart let a capabilities url pick up a context written
+  // for a different paymaster.
+  const { url: effectivePaymasterUrl, context: effectivePaymasterContext } = useMemo(
+    () => resolvePaymaster(request.data.capabilities?.paymasterService, paymasters?.[chainId]),
+    [request.data.capabilities?.paymasterService, paymasters, chainId]
+  );
 
   // Check if this is a sponsored transaction (paymaster provided)
   const isSponsored = !!effectivePaymasterUrl;
@@ -2586,14 +2566,17 @@ function PermissionDialogWrapper({
         calls: request.data.permissions.calls,
       };
 
-      // Grant permissions using Account class with paymaster context
+      // Grant permissions using Account class with paymaster context.
+      // The last argument needs a core that carries the prefund; without it the
+      // spender is granted the permission and holds nothing to pay its first op.
       const result = await account.grantPermissions(
         request.data.expiry,
         request.data.spender as Address,
         permissionsDetail,
         computedPaymasterUrl,
         computedPaymasterContext,
-        request.data.address
+        request.data.address,
+        { prefundSpender: request.data.capabilities?.prefundSpender === true }
       );
 
       setStatus('Permissions granted successfully!');
@@ -2890,21 +2873,14 @@ function RevokePermissionDialogWrapper({
   const nativeToken = feeTokens?.find((t) => t.isNative);
   const nativeSymbol = nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || 'ETH';
 
-  // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
-  // Priority: capabilities.paymasterService.url > paymasters[chainId].url
-  const effectivePaymasterUrl = useMemo(() => {
-    const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
-    return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
-  }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
-
-  // Extract paymasterContext from capabilities (EIP-5792 paymasterService capability)
-  // Priority: capabilities.paymasterService.context > paymasters[chainId].context
-  const effectivePaymasterContext = useMemo(() => {
-    const capabilitiesPaymasterContext = (
-      request.data.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined
-    )?.context;
-    return capabilitiesPaymasterContext || paymasters?.[chainId]?.context;
-  }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
+  // The paymaster of the request, url and context together (EIP-5792
+  // paymasterService capability first, then the one configured for the chain).
+  // Taking the two halves apart let a capabilities url pick up a context written
+  // for a different paymaster.
+  const { url: effectivePaymasterUrl, context: effectivePaymasterContext } = useMemo(
+    () => resolvePaymaster(request.data.capabilities?.paymasterService, paymasters?.[chainId]),
+    [request.data.capabilities?.paymasterService, paymasters, chainId]
+  );
 
   // Check if this is a sponsored transaction (paymaster provided)
   const isSponsored = !!effectivePaymasterUrl;

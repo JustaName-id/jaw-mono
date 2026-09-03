@@ -62,6 +62,7 @@ import {
     getPermissionFromRelay,
     relayPermissionToPermission,
     encodeExecuteBatchWithPermission,
+    type Permission,
 } from '../rpc/permissions.js';
 import { notifyReceiptReceived } from '../analytics/index.js';
 
@@ -177,9 +178,14 @@ export const getBundlerClient = (
         transport: http(chain.rpcUrl),
     });
 
-    // Priority: overrides (from capabilities) > chain config (from SDK config)
-    const effectivePaymasterUrl = paymasterUrlOverride || chain.paymaster?.url;
-    const effectivePaymasterContext = paymasterContextOverride || chain.paymaster?.context;
+    // Priority: overrides (from capabilities) > chain config (from SDK config).
+    // The url decides for the pair. Resolving the two independently lets them
+    // come from different sources: a caller passing only a url override, on an
+    // account configured with `paymasterContext`, would send that context to the
+    // other paymaster. A context belongs to the paymaster it was written for.
+    const fromOverride = paymasterUrlOverride !== undefined;
+    const effectivePaymasterUrl = fromOverride ? paymasterUrlOverride : chain.paymaster?.url;
+    const effectivePaymasterContext = fromOverride ? paymasterContextOverride : chain.paymaster?.context;
 
     // If no paymaster URL, return bundler client without paymaster
     if (!effectivePaymasterUrl) {
@@ -296,7 +302,7 @@ async function prepareEip7702Calls(
  * Formats raw calls and applies EIP-7702 preparation when a localAccount is present.
  * For non-7702 accounts (no localAccount), just formats the calls.
  */
-async function prepareCallsForExecution(
+export async function prepareCallsForExecution(
     smartAccount: SmartAccount,
     calls: Array<{ to: Address; value?: bigint; data?: Hex }>,
     chain: Chain,
@@ -407,6 +413,43 @@ export async function sendCalls(
 }
 
 /**
+ * Wrap calls into the single permission-manager call a permission send executes:
+ * `PERMISSIONS_MANAGER.executeBatchWithPermission(permission, calls)`.
+ *
+ * Exported because the ERC-20 paymaster approval has to be sized over the userOp
+ * that actually goes out. The wrapper's signature verification and spend
+ * accounting cost gas the raw calls do not, so sizing over the raw calls puts the
+ * ceiling being approved under what the paymaster then charges. Callers build the
+ * wrapper with this, size the approval over it, and hand it back to
+ * `sendCallsWithPermission` as `permissionCall`, so the shape cannot drift and
+ * the permission is still fetched only once.
+ *
+ * @param permission - The permission to execute under
+ * @param calls - Array of calls to execute
+ * @returns The spender-level call to the permission manager
+ */
+export function buildPermissionManagerCall(
+    permission: Permission,
+    calls: Array<{
+        to: Address;
+        value?: bigint;
+        data?: Hex;
+    }>
+): { to: Address; value: bigint; data: Hex } {
+    const formattedCalls = calls.map((call) => ({
+        target: getAddress(call.to),
+        value: call.value ?? 0n,
+        data: call.data ?? ('0x' as Hex),
+    }));
+
+    return {
+        to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
+        value: 0n,
+        data: encodeExecuteBatchWithPermission(permission, formattedCalls),
+    };
+}
+
+/**
  * Send multiple calls using a permission.
  * This encodes the calls and sends them through the JustaPermissionManager contract's executeBatch function.
  *
@@ -415,6 +458,9 @@ export async function sendCalls(
  * @param chain - The chain to send on
  * @param permissionId - The ID (hash) of the permission to use
  * @param apiKey - API key for fetching permission from relay
+ * @param permissionCall - The already-encoded permission-manager call, when the
+ *        caller built one to size the paymaster approval. Skips a second relay
+ *        fetch, and guarantees the userOp that was sized is the one sent.
  * @returns The bundled transaction result with userOpHash and chainId
  */
 export async function sendCallsWithPermission(
@@ -430,21 +476,18 @@ export async function sendCallsWithPermission(
     paymasterUrlOverride?: string,
     paymasterContextOverride?: Record<string, unknown>,
     localAccount?: LocalAccount,
-    approvalCall?: { to: Address; value?: bigint; data: Hex }
+    approvalCall?: { to: Address; value?: bigint; data: Hex },
+    permissionCall?: { to: Address; value: bigint; data: Hex }
 ): Promise<BundledTransactionResult> {
-    // Fetch the permission from the relay
-    const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
-    const permission = relayPermissionToPermission(relayPermission);
-
-    // Format calls for the contract
-    const formattedCalls = calls.map((call) => ({
-        target: getAddress(call.to),
-        value: call.value ?? 0n,
-        data: call.data ?? ('0x' as Hex),
-    }));
-
-    // Encode the executeBatch call with permission
-    const encodedData = encodeExecuteBatchWithPermission(permission, formattedCalls);
+    // A caller that sized an ERC-20 paymaster approval already built this call to
+    // size it over; reuse it rather than fetching the permission a second time and
+    // re-encoding, which is also what keeps the sized userOp and the sent one identical.
+    const managerCall =
+        permissionCall ??
+        buildPermissionManagerCall(
+            relayPermissionToPermission(await getPermissionFromRelay(permissionId, apiKey)),
+            calls
+        );
 
     // Build the spender-level calls: optional paymaster approval + permission manager call.
     // The approval must be at this level (not inside the permission batch) because the
@@ -459,11 +502,7 @@ export async function sendCallsWithPermission(
         });
     }
 
-    spenderCalls.push({
-        to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
-        value: 0n,
-        data: encodedData,
-    });
+    spenderCalls.push(managerCall);
 
     // EIP-7702: prepend delegation authorization + owner setup if needed
     const { calls: finalCalls, authorization } = localAccount
@@ -530,31 +569,18 @@ export async function estimateUserOpGasWithPermission(
     permissionId: Hex,
     apiKey: string
 ): Promise<bigint> {
-    // Fetch the permission from the relay
-    const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
-    const permission = relayPermissionToPermission(relayPermission);
-
-    // Format calls for the contract
-    const formattedCalls = calls.map((call) => ({
-        target: getAddress(call.to),
-        value: call.value ?? 0n,
-        data: call.data ?? ('0x' as Hex),
-    }));
-
-    // Encode the executeBatch call with permission
-    const encodedData = encodeExecuteBatchWithPermission(permission, formattedCalls);
+    // Built the same way the send builds it, so what is estimated stays the shape
+    // that goes out.
+    const permissionCall = buildPermissionManagerCall(
+        relayPermissionToPermission(await getPermissionFromRelay(permissionId, apiKey)),
+        calls
+    );
 
     const bundlerClient = getBundlerClient(chain);
 
     const gasEstimate = await bundlerClient.estimateUserOperationGas({
         account: smartAccount,
-        calls: [
-            {
-                to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
-                value: 0n,
-                data: encodedData,
-            },
-        ],
+        calls: [permissionCall],
     });
 
     return gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit;

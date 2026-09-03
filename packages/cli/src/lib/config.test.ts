@@ -18,7 +18,7 @@ vi.mock('./paths.js', () => {
     },
   };
 });
-const { loadConfig, saveConfig, setConfigValue, redactConfig } = await import('./config.js');
+const { loadConfig, saveConfig, setConfigValue, setX402PolicyValue, redactConfig } = await import('./config.js');
 const { PATHS } = await import('./paths.js');
 
 beforeEach(() => {
@@ -59,6 +59,23 @@ describe('config', () => {
     setConfigValue('apiKey', 'new-key');
     expect(loadConfig().apiKey).toBe('new-key');
   });
+
+  it('coerces numeric keys passed as strings (the MCP tool path)', () => {
+    // The MCP jaw_config_set tool types value as a string; a numeric key must
+    // land as a number, not a string that would break `expiry * 86400`.
+    setConfigValue('defaultChain', '8453');
+    setConfigValue('sessionExpiry', '14');
+    const config = loadConfig();
+    expect(config.defaultChain).toBe(8453);
+    expect(config.sessionExpiry).toBe(14);
+  });
+
+  it('rejects non-integer / non-positive values for numeric keys', () => {
+    expect(() => setConfigValue('sessionExpiry', 'abc')).toThrow(/positive integer/);
+    expect(() => setConfigValue('defaultChain', '0x10')).toThrow(/positive integer/);
+    expect(() => setConfigValue('defaultChain', '-1')).toThrow(/positive integer/);
+    expect(() => setConfigValue('sessionExpiry', '1.5')).toThrow(/positive integer/);
+  });
 });
 
 describe('redactConfig', () => {
@@ -95,6 +112,41 @@ describe('redactConfig', () => {
       paymasters: { 1: { url: 'https://pm.example.com/rpc' } },
     }) as { paymasters: Record<number, { context?: unknown }> };
     expect(redacted.paymasters[1].context).toBeUndefined();
+  });
+});
+
+describe('setX402PolicyValue', () => {
+  it('sets a scalar cap and merges into the x402 block', () => {
+    setX402PolicyValue('maxAmountPerPayment', '50000');
+    setX402PolicyValue('maxTotalPerSession', '1000000');
+    expect(loadConfig().x402).toEqual({ maxAmountPerPayment: '50000', maxTotalPerSession: '1000000' });
+  });
+
+  it('stores topUpFloat as a scalar string, not an array (BigInt-safe at read time)', () => {
+    setX402PolicyValue('topUpFloat', '2000000');
+    const stored = loadConfig().x402?.topUpFloat;
+    expect(stored).toBe('2000000');
+    // Regression guard: the funder does BigInt(topUpFloat); an array would throw.
+    expect(() => BigInt(stored as string)).not.toThrow();
+  });
+
+  it('rejects a non-numeric scalar amount instead of storing a footgun', () => {
+    expect(() => setX402PolicyValue('topUpFloat', 'abc')).toThrow(/non-negative integer/);
+    expect(() => setX402PolicyValue('maxAmountPerPayment', '-5')).toThrow(/non-negative integer/);
+    expect(loadConfig().x402?.topUpFloat).toBeUndefined();
+  });
+
+  it('comma-splits an allow-list field', () => {
+    setX402PolicyValue('allowedNetworks', 'eip155:8453, eip155:84532');
+    expect(loadConfig().x402?.allowedNetworks).toEqual(['eip155:8453', 'eip155:84532']);
+  });
+
+  it('does not disturb other config keys', () => {
+    saveConfig({ apiKey: 'keep-me' });
+    setX402PolicyValue('maxAmountPerPayment', '10');
+    const config = loadConfig();
+    expect(config.apiKey).toBe('keep-me');
+    expect(config.x402?.maxAmountPerPayment).toBe('10');
   });
 });
 

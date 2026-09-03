@@ -1,3 +1,18 @@
+## 1.3.4 (2026-09-03)
+
+### 🩹 Fixes
+
+- **core,ui:** price the prefund off the wallet's own paymaster ([2ae91627](https://github.com/JustaName-id/jaw-mono/commit/2ae91627))
+- **ui:** pair the paymaster url with its own context ([be17c203](https://github.com/JustaName-id/jaw-mono/commit/be17c203))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.3.0
+
+### ❤️ Thank You
+
+- Mariano Aguero @mariano-aguero
+
 ## 1.3.3 (2026-08-20)
 
 ### 🩹 Fixes

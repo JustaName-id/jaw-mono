@@ -165,6 +165,12 @@ export type RequestCapabilities = {
     paymasterService?: PaymasterServiceCapability;
     /** Permissions capability for wallet_sendCalls */
     permissions?: PermissionsCapability;
+    /**
+     * On `wallet_grantPermissions`, send a small amount of the permission's own
+     * spend token to the spender in the same transaction, so its first userOp
+     * can pay its own fee. The wallet decides the amount; the request only asks.
+     */
+    prefundSpender?: boolean;
     /** Additional capabilities can be added here */
     [key: string]: unknown;
 };
@@ -335,6 +341,10 @@ export function normalizeRevokePermissionsParams(params: unknown): NormalizedRev
  * @param chain - Chain configuration
  * @param apiKey - API key for relay authentication
  * @param paymasterUrlOverride - Optional paymaster URL that overrides chain.paymasterUrl
+ * @param prependCalls - Calls to execute ahead of the approval, in the same
+ * transaction. The caller decides what belongs there and in what order; this
+ * function only puts the approval last. A single call is still accepted, which
+ * is the shape this parameter had when it only ever carried the ERC-20 approval.
  */
 export async function grantPermissions(
     smartAccount: SmartAccount,
@@ -345,7 +355,7 @@ export async function grantPermissions(
     apiKey: string,
     paymasterUrlOverride?: string,
     paymasterContextOverride?: Record<string, unknown>,
-    erc20ApprovalCall?: { to: Address; value?: bigint; data: Hex }
+    prependCalls?: { to: Address; value?: bigint; data?: Hex } | Array<{ to: Address; value?: bigint; data?: Hex }>
 ): Promise<WalletGrantPermissionsResponse> {
     // Derive address and chainId from smart account and chain
     const account = smartAccount.address;
@@ -355,11 +365,9 @@ export async function grantPermissions(
 
     const approveCallData = encodeApprovePermission(permission);
 
-    // Build calls array - prepend ERC-20 approval if provided
     const permissionCall = { to: PERMISSIONS_MANAGER_ADDRESS as Address, data: approveCallData };
-    const calls: Array<{ to: Address; value?: bigint; data?: Hex }> = erc20ApprovalCall
-        ? [erc20ApprovalCall, permissionCall]
-        : [permissionCall];
+    const prepend = prependCalls ? (Array.isArray(prependCalls) ? prependCalls : [prependCalls]) : [];
+    const calls: Array<{ to: Address; value?: bigint; data?: Hex }> = [...prepend, permissionCall];
 
     const txHash = await sendTransaction(
         smartAccount,

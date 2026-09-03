@@ -23,6 +23,9 @@ export { createSmartAccountForAddress } from './smartAccount.js';
 // EIP-7702 delegation utilities
 export { isDelegatedToImplementation } from './delegation.js';
 
+// Options for the grant, named so callers can type the argument they pass
+export { type GrantPermissionsOptions } from './spenderPrefund.js';
+
 // ERC-20 Paymaster utilities
 export {
     fetchTokenQuotes,

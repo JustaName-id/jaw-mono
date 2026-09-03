@@ -28,6 +28,11 @@ vi.stubGlobal('localStorage', {
   },
 });
 
+// memStore is module-level and shared across every describe block, so clear it
+// before each test — otherwise a session written by one suite bleeds into the
+// next and makes the persistence tests order-dependent.
+beforeEach(() => memStore.clear());
+
 const SELF_ORIGIN = 'https://keys.jaw.id';
 const DAPP_ORIGIN = 'https://dapp.example.com';
 
