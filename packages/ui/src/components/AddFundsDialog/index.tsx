@@ -5,11 +5,13 @@ import { ShellDialog } from '../ShellDialog';
 import { DialogAppHeader } from '../DialogAppHeader';
 import { Button } from '../ui/button';
 import { CopyButton } from '../CopyButton';
+import { IdentityAvatar } from '../IdentityAvatar';
 import { QrCode } from './QrCode';
 import { ChainStack } from './ChainStack';
 import { useChainIconURI } from '../../hooks';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
 import { eip681Uri } from '../../utils/eip681';
+import { isSafeImageUrl } from '../../utils/safeUrl';
 import type { AddFundsDialogProps } from './types';
 
 /**
@@ -41,6 +43,10 @@ export const AddFundsDialog = ({
   // one thing the user came here for.
   const { name, avatar } = useReverseIdentity(address, chainId, mainnetRpcUrl);
 
+  // ENS records are attacker-controlled, so the scheme is checked before the URL
+  // reaches an <img src>: `isSafeImageUrl` allows only https and data:image.
+  const safeAvatar = isSafeImageUrl(avatar) ? avatar : null;
+
   return (
     <ShellDialog open={open} onOpenChange={onOpenChange} onClose={onDone}>
       <div className="flex min-h-0 flex-1 flex-col">
@@ -71,11 +77,38 @@ export const AddFundsDialog = ({
                 inverse. `text-black` sets the currentColor the modules paint
                 with, so the code stays standard whatever the surface does. */}
             <div className="rounded-card border-border border bg-white p-4 text-black">
-              {/* Solid code, nothing in the middle. `renderCenter` exists for
-                  when a routing address gives the centre something to say; until
-                  then the modules stay whole rather than clearing space for a
-                  logo that repeats what the stack above already shows. */}
-              <QrCode value={eip681Uri(address, chainId)} size={196} label={`QR code to receive on ${chainName}`} />
+              {/* The account's ENS avatar in the middle when it has one, and a
+                  solid code when it does not. Modules are only cleared when
+                  something is there to fill them — an empty hole reads as a
+                  rendering fault, which is why nothing was placed here before.
+                  The avatar earns the space because it identifies whose account
+                  this is at the moment someone is about to send to it. */}
+              <QrCode
+                value={eip681Uri(address, chainId)}
+                size={196}
+                label={`QR code to receive on ${chainName}`}
+                renderCenter={
+                  safeAvatar
+                    ? (px) => (
+                        <span
+                          // White plate: an avatar with transparency would
+                          // otherwise show the cleared modules through it.
+                          className="flex items-center justify-center overflow-hidden rounded-full bg-white"
+                          style={{ width: px, height: px }}
+                        >
+                          <IdentityAvatar
+                            src={safeAvatar}
+                            // No fallback: if the image fails, the centre must be
+                            // empty rather than showing an identicon that looks
+                            // like part of the code.
+                            fallback={null}
+                            className="h-full w-full rounded-full object-cover"
+                          />
+                        </span>
+                      )
+                    : undefined
+                }
+              />
             </div>
 
             <div className="flex w-full flex-col items-center gap-1">
@@ -84,7 +117,17 @@ export const AddFundsDialog = ({
                   the name checkable. */}
               {name && (
                 <p className="text-foreground text-value flex min-w-0 items-center gap-1.5">
-                  {avatar && <img src={avatar} alt="" className="size-blob-sm rounded-full" width={16} height={16} />}
+                  {/* IdentityAvatar, not a bare <img>: it carries the
+                      no-referrer policy these URLs need (an ENS record must not
+                      receive the wallet page URL, api-key included) and falls
+                      back cleanly when the image fails. */}
+                  {/* `size-blob` is the inline account-avatar token (15px).
+                      This said `size-blob-sm`, which is not in the size scale at
+                      all — it only looked right while the raw <img> also carried
+                      width/height attributes to constrain it. */}
+                  {safeAvatar && (
+                    <IdentityAvatar src={safeAvatar} fallback={null} className="size-blob flex-none rounded-full" />
+                  )}
                   <span className="truncate">{name}</span>
                   {/* Copies the name, not the address. A sender pasting into a
                       wallet that resolves ENS wants the name; one pasting into
