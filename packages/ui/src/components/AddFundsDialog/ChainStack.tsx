@@ -14,9 +14,15 @@ import { ChainIcon } from './ChainIcon';
  */
 const MAX_SHOWN = 16;
 
-/** Icon size and overlap step in px. Half an icon reads as a stack; tighter reads as a smear. */
+/**
+ * Icon size and the step between them, in px.
+ *
+ * A 10px step on a 20px icon hid half of every logo and the row read as a smear
+ * of crescents. 14 leaves most of each logo visible while still overlapping
+ * enough to read as one stack rather than a list.
+ */
 const ICON = 20;
-const STEP = 10;
+const STEP = 14;
 
 export interface ChainStackProps {
   /** The chain the QR pins. Leads the stack, and is included even if it is a testnet. */
@@ -40,14 +46,14 @@ export function ChainStack({ activeChainId, apiKey }: ChainStackProps) {
   const ordered = useMemo(() => {
     const mainnets = MAINNET_CHAINS.map((c) => c.id);
 
-    // Mainnets only: a testnet in the stack means nothing to someone about to
-    // send real funds. The active chain is the exception — the QR points there,
-    // so a stack without it would contradict the code beside it.
+    // Mainnets only. A testnet means nothing to someone about to send real
+    // funds, and adding the active one when it is a testnet drew the same logo
+    // twice: a testnet shares its mainnet's icon, so Base Sepolia beside Base
+    // read as a duplicate rather than as two networks.
     if (mainnets.includes(activeChainId)) {
       return [activeChainId, ...mainnets.filter((id) => id !== activeChainId)];
     }
-    const known = SUPPORTED_CHAINS.some((c) => c.id === activeChainId);
-    return known ? [activeChainId, ...mainnets] : mainnets;
+    return mainnets;
   }, [activeChainId]);
 
   const shown = ordered.slice(0, MAX_SHOWN);

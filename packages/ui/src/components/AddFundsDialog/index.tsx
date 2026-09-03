@@ -7,7 +7,6 @@ import { Button } from '../ui/button';
 import { CopyButton } from '../CopyButton';
 import { QrCode } from './QrCode';
 import { ChainStack } from './ChainStack';
-import { ChainIcon } from './ChainIcon';
 import { useChainIconURI } from '../../hooks';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
 import { eip681Uri } from '../../utils/eip681';
@@ -63,10 +62,9 @@ export const AddFundsDialog = ({
             <ChainStack activeChainId={chainId} apiKey={apiKey} />
           </div>
 
-          {/* No chain named in words: the stack above shows where the address
-              works, and the icon inside the QR shows which chain that code is
-              for. Naming one in prose only invites a mismatch between the three
-              of them. */}
+          {/* No chain named in words: the stack above already shows where the
+              address works, and naming one in prose only invites the two to
+              disagree. */}
           <p className="text-muted-foreground text-body-xs mt-2 leading-normal">
             {asset
               ? `Send ${asset} to this address. Anything else you send still arrives, but this app is asking for ${asset}.`
@@ -80,23 +78,11 @@ export const AddFundsDialog = ({
                 contrast, and the modules are drawn in the foreground colour, so
                 the plate is what keeps a dark-mode code readable. */}
             <div className="rounded-card border-border bg-background border p-4">
-              <QrCode
-                value={eip681Uri(address, chainId)}
-                size={196}
-                label={`QR code to receive on ${chainName}`}
-                // The chain in the middle of the code it is encoded into. The
-                // payload already carries the chain for scanners; this is the
-                // same fact for the person holding the phone, at the moment
-                // they are deciding whether to scan.
-                renderCenter={(px) => (
-                  <span
-                    className="bg-background flex items-center justify-center rounded-full"
-                    style={{ width: px, height: px }}
-                  >
-                    <ChainIcon chainId={chainId} apiKey={apiKey} size={Math.round(px * 0.88)} />
-                  </span>
-                )}
-              />
+              {/* Solid code, nothing in the middle. `renderCenter` exists for
+                  when a routing address gives the centre something to say; until
+                  then the modules stay whole rather than clearing space for a
+                  logo that repeats what the stack above already shows. */}
+              <QrCode value={eip681Uri(address, chainId)} size={196} label={`QR code to receive on ${chainName}`} />
             </div>
 
             <div className="flex w-full flex-col items-center gap-1">
