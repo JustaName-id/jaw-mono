@@ -99,6 +99,19 @@ export interface AddFundsParams {
     chainId?: number;
 }
 
+// @public
+export interface AddFundsUIRequest extends BaseUIRequest {
+    // (undocumented)
+    data: {
+        address: Address;
+        chainId: number;
+        chains: number[];
+        asset?: string;
+    };
+    // (undocumented)
+    type: 'wallet_addFunds';
+}
+
 // @public (undocumented)
 export type Address = `0x${string}`;
 
@@ -1506,11 +1519,11 @@ export interface UIHandlerOptions {
     timeout?: number;
 }
 
-// @public
-export type UIRequest = ConnectUIRequest | SignatureUIRequest | TypedDataUIRequest | TransactionUIRequest | SendTransactionUIRequest | PermissionUIRequest | RevokePermissionUIRequest | WalletSignUIRequest;
+// @public (undocumented)
+export type UIRequest = ConnectUIRequest | SignatureUIRequest | TypedDataUIRequest | TransactionUIRequest | SendTransactionUIRequest | PermissionUIRequest | RevokePermissionUIRequest | WalletSignUIRequest | AddFundsUIRequest;
 
 // @public
-export type UIRequestType = 'wallet_connect' | 'wallet_sendCalls' | 'eth_sendTransaction' | 'wallet_grantPermissions' | 'wallet_revokePermissions' | 'personal_sign' | 'eth_signTypedData_v4' | 'wallet_sign';
+export type UIRequestType = 'wallet_connect' | 'wallet_sendCalls' | 'eth_sendTransaction' | 'wallet_grantPermissions' | 'wallet_revokePermissions' | 'personal_sign' | 'eth_signTypedData_v4' | 'wallet_sign' | 'wallet_addFunds';
 
 // @public
 export interface UIResponse<T = unknown> {

@@ -270,10 +270,14 @@ export abstract class JAWSigner implements Signer {
                 return this.handleWalletConnectUnauthenticated(request);
             }
 
+            // addFunds is in this group because the receive screen shows the
+            // connected account's address: it needs the same account resolution
+            // as the signing methods even though it signs nothing.
             case 'wallet_sendCalls':
             case 'wallet_sign':
             case 'wallet_grantPermissions':
-            case 'wallet_revokePermissions': {
+            case 'wallet_revokePermissions':
+            case 'wallet_addFunds': {
                 return this.dispatchSigningRequest(request);
             }
 
@@ -381,6 +385,7 @@ export abstract class JAWSigner implements Signer {
             case 'eth_signTypedData_v4':
             case 'wallet_grantPermissions':
             case 'wallet_revokePermissions':
+            case 'wallet_addFunds':
                 return this.dispatchSigningRequest(request);
 
             case 'eth_sign':
