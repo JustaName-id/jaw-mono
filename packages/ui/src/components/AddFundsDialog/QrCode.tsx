@@ -55,7 +55,10 @@ export function QrCode({ value, size = 220, renderCenter, label }: QrCodeProps) 
         // Adjacent modules must not leave hairline seams between them, which is
         // what a scanner reads as a broken module.
         shapeRendering="crispEdges"
-        className="text-foreground block"
+        // No colour of its own: the modules paint in the inherited currentColor,
+        // so whoever supplies the plate decides the contrast. Setting a themed
+        // colour here is what inverted the code in dark mode.
+        className="block"
       >
         <path d={path} fill="currentColor" />
       </svg>

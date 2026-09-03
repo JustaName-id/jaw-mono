@@ -68,9 +68,12 @@ export function ChainStack({ activeChainId, apiKey }: ChainStackProps) {
       {shown.map((id, i) => (
         <span
           key={id}
-          // The ring is the surface colour, so each icon reads as separate from
-          // the one behind it in both themes.
-          className="ring-popover relative inline-flex rounded-full ring-2"
+          // White plate, not a themed one: these logos are brand SVGs with
+          // transparent grounds, drawn for light backgrounds. On the dark dialog
+          // the transparency let the surface through and the marks read as holes.
+          // The ring stays the surface colour so each icon still separates from
+          // the one behind it.
+          className="ring-popover relative inline-flex overflow-hidden rounded-full bg-white ring-2"
           style={{ marginLeft: i === 0 ? 0 : -(ICON - STEP), zIndex: shown.length - i }}
         >
           <ChainIcon chainId={id} apiKey={apiKey} size={ICON} />

@@ -74,10 +74,13 @@ export const AddFundsDialog = ({
 
         <div className="jaw-scroll min-h-0 flex-1 overflow-y-auto px-6 py-4">
           <div className="flex flex-col items-center gap-4">
-            {/* White plate under the code regardless of theme. A scanner reads
-                contrast, and the modules are drawn in the foreground colour, so
-                the plate is what keeps a dark-mode code readable. */}
-            <div className="rounded-card border-border bg-background border p-4">
+            {/* Actually white, with actually dark modules, in both themes.
+                `bg-background` + `text-foreground` inverted the code in dark
+                mode (light modules on a dark plate), which is out of spec: the
+                format expects dark on light and plenty of scanners refuse the
+                inverse. `text-black` sets the currentColor the modules paint
+                with, so the code stays standard whatever the surface does. */}
+            <div className="rounded-card border-border border bg-white p-4 text-black">
               {/* Solid code, nothing in the middle. `renderCenter` exists for
                   when a routing address gives the centre something to say; until
                   then the modules stay whole rather than clearing space for a
