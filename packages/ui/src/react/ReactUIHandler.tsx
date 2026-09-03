@@ -2822,7 +2822,6 @@ function AddFundsDialogWrapper({
       }}
       address={request.data.address}
       chainId={request.data.chainId}
-      asset={request.data.asset}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       apiKey={apiKey}
       appName={appName}

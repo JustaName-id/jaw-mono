@@ -299,10 +299,7 @@ function WagmiPageContent({
 
           case 'useAddFunds':
             // Resolves null: the screen closing is the whole outcome.
-            result = await addFunds({
-              chainId: params.chainId as number | undefined,
-              asset: params.asset as string | undefined,
-            });
+            result = await addFunds({ chainId: params.chainId as number | undefined });
             break;
 
           case 'usePermissions': {

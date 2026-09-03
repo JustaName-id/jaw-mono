@@ -95,7 +95,6 @@ export interface AccountMetadata {
 
 // @public
 export interface AddFundsParams {
-    asset?: string;
     chainId?: number;
 }
 
@@ -105,7 +104,6 @@ export interface AddFundsUIRequest extends BaseUIRequest {
     data: {
         address: Address;
         chainId: number;
-        asset?: string;
     };
     // (undocumented)
     type: 'wallet_addFunds';

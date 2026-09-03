@@ -15,8 +15,6 @@ const METHOD = 'wallet_addFunds';
 export interface AddFundsParams {
     /** Chain the QR pins via EIP-681. Undefined ⇒ the connected chain. */
     chainId?: number;
-    /** Asset symbol to ask the sender for, e.g. 'USDC'. Display only. */
-    asset?: string;
 }
 
 /**
@@ -36,11 +34,10 @@ export function parseAddFundsParams(params: unknown): AddFundsParams {
         throw standardErrors.rpc.invalidParams(`${METHOD}: expected a single object parameter`);
     }
 
-    const { chainId, asset } = params[0];
+    const { chainId } = params[0];
 
     return {
         chainId: parseChainId(chainId),
-        asset: parseAsset(asset),
     };
 }
 
@@ -65,18 +62,4 @@ function parseChainId(value: unknown): number | undefined {
     }
 
     throw standardErrors.rpc.invalidParams(`${METHOD}: chainId must be a number or a hex quantity`);
-}
-
-/**
- * An asset symbol, which is rendered as-is next to the QR. Length and charset
- * are bounded because this string is dapp-supplied text on a wallet surface: a
- * long or newline-bearing value could push the address out of view or dress the
- * screen up as something it is not.
- */
-function parseAsset(value: unknown): string | undefined {
-    if (value === undefined || value === null) return undefined;
-    if (typeof value !== 'string' || !/^[A-Za-z0-9.$-]{1,12}$/.test(value)) {
-        throw standardErrors.rpc.invalidParams(`${METHOD}: asset must be a short token symbol, e.g. 'USDC'`);
-    }
-    return value;
 }

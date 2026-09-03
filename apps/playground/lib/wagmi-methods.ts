@@ -142,18 +142,10 @@ export const WAGMI_METHODS: WagmiMethod[] = [
         defaultValue: 'all',
         options: CHAIN_FILTER_OPTIONS,
       },
-      {
-        name: 'asset',
-        type: 'string',
-        label: 'Asset',
-        description: 'Token symbol to ask the sender for, e.g. USDC. Display only.',
-        required: false,
-      },
     ],
     getCodeSnippet: (params) => {
       const args: string[] = [];
       if (params.chainId && params.chainId !== 'all') args.push(`chainId: ${parseInt(params.chainId, 16)}`);
-      if (params.asset) args.push(`asset: '${params.asset}'`);
       return `const { mutateAsync: addFunds } = useAddFunds();
 
 // Resolves null when the user closes the screen.
@@ -162,7 +154,6 @@ await addFunds({${args.length ? ` ${args.join(', ')} ` : ''}});`;
     buildParams: (params) => {
       const built: Record<string, unknown> = {};
       if (params.chainId && params.chainId !== 'all') built.chainId = parseInt(params.chainId, 16);
-      if (params.asset) built.asset = params.asset;
       return built;
     },
   },

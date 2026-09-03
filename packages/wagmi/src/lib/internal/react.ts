@@ -866,7 +866,7 @@ export namespace useAddFunds {
  * ```tsx
  * const { mutate, isPending } = useAddFunds();
  *
- * mutate({ asset: 'USDC' });
+ * mutate({});
  * ```
  */
 export function useAddFunds<config extends Config = ResolvedRegister['config'], context = unknown>(

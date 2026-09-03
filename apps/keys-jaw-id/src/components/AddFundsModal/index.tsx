@@ -72,7 +72,6 @@ export const AddFundsModal = ({ params, chain, apiKey, origin, appName, appLogoU
       open
       address={resolveDestination([walletAddress as Address])}
       chainId={chainId}
-      asset={addFunds.asset}
       mainnetRpcUrl={mainnetRpcUrl}
       apiKey={prodApiKey}
       origin={origin}

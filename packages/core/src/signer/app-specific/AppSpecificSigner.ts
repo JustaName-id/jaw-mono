@@ -441,7 +441,6 @@ export class AppSpecificSigner extends JAWSigner {
                         // address the user does not own.
                         address: resolveDestination(this.accounts),
                         chainId,
-                        asset: addFundsParams.asset,
                     },
                 };
 

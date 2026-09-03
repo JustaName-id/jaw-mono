@@ -220,8 +220,6 @@ export interface AddFundsUIRequest extends BaseUIRequest {
         address: Address;
         /** Chain the QR pins via EIP-681. */
         chainId: number;
-        /** Asset symbol to ask the sender for, e.g. 'USDC'. Display only. */
-        asset?: string;
     };
 }
 

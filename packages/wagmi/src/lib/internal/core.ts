@@ -595,8 +595,6 @@ export namespace addFunds {
      * be on it.
      */
     chainId?: number;
-    /** Asset symbol to ask the sender for, e.g. 'USDC'. Display only. */
-    asset?: string;
   };
 
   /**
@@ -617,14 +615,14 @@ export namespace addFunds {
  *
  * @example
  * ```ts
- * await Actions.addFunds(config, { asset: 'USDC' });
+ * await Actions.addFunds(config);
  * ```
  */
 export async function addFunds<config extends Config>(
   config: config,
   parameters: addFunds.Parameters<config> = {}
 ): Promise<addFunds.ReturnType> {
-  const { address, chainId, connector, asset } = parameters;
+  const { address, chainId, connector } = parameters;
 
   // chainId picks which chain the QR names, so the connector does not need to
   // be on it — the address is the same on every chain either way.
@@ -637,7 +635,7 @@ export async function addFunds<config extends Config>(
 
   await client.request({
     method: 'wallet_addFunds' as never,
-    params: [{ chainId, asset }] as never,
+    params: [{ chainId }] as never,
   });
 
   return null;

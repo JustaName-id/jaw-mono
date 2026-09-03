@@ -102,14 +102,13 @@ test('getPermissions omits chainId from params when not provided', async () => {
   expect(params.chainId).toBeUndefined();
 });
 
-test('addFunds forwards only the display hints, never a destination', async () => {
+test('addFunds forwards only the chain, never a destination', async () => {
   const { connector, requests } = fakeConnection();
 
   const result = await addFunds(config, {
     connector: connector as never,
     address: ACCOUNT,
     chainId: mainnet.id,
-    asset: 'USDC',
   });
 
   // Null, not the provider's answer: there is no outcome to report.
@@ -120,7 +119,7 @@ test('addFunds forwards only the display hints, never a destination', async () =
   // `address` selects which connected account to act as, exactly as in the
   // other actions. It must not travel as a destination the wallet would honour.
   const params = (requests[0].params as [Record<string, unknown>])[0];
-  expect(params).toEqual({ chainId: mainnet.id, asset: 'USDC' });
+  expect(params).toEqual({ chainId: mainnet.id });
   expect(params.address).toBeUndefined();
 });
 
@@ -139,5 +138,5 @@ test('addFunds takes no arguments at all', async () => {
   const { connector, requests } = fakeConnection();
 
   await expect(addFunds(config, { connector: connector as never })).resolves.toBeNull();
-  expect((requests[0].params as [Record<string, unknown>])[0]).toEqual({ chainId: undefined, asset: undefined });
+  expect((requests[0].params as [Record<string, unknown>])[0]).toEqual({ chainId: undefined });
 });

@@ -636,14 +636,6 @@ describe('AppSpecificSigner', () => {
                 );
             });
 
-            it('passes the asset symbol through for display', async () => {
-                await signer.request({ method: 'wallet_addFunds', params: [{ asset: 'USDC' }] });
-
-                expect(mockUIHandler.request).toHaveBeenCalledWith(
-                    expect.objectContaining({ data: expect.objectContaining({ asset: 'USDC' }) })
-                );
-            });
-
             // A dapp naming the destination could point the QR at an address the
             // user does not own, while they are looking at wallet chrome.
             it('ignores a dapp-supplied address and uses the session account', async () => {
@@ -665,9 +657,9 @@ describe('AppSpecificSigner', () => {
                 await expect(signer.request({ method: 'wallet_addFunds' })).resolves.toBeNull();
             });
 
-            it('refuses a malformed asset before any screen opens', async () => {
+            it('refuses a malformed chainId before any screen opens', async () => {
                 await expect(
-                    signer.request({ method: 'wallet_addFunds', params: [{ asset: 'USDC\nsend to 0xbad' }] })
+                    signer.request({ method: 'wallet_addFunds', params: [{ chainId: 'base' }] })
                 ).rejects.toThrow();
 
                 expect(mockUIHandler.request).not.toHaveBeenCalled();

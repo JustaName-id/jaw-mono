@@ -25,7 +25,6 @@ export const AddFundsDialog = ({
   onOpenChange,
   address,
   chainId,
-  asset,
   mainnetRpcUrl,
   apiKey,
   appName,
@@ -61,15 +60,6 @@ export const AddFundsDialog = ({
             <h2 className="text-foreground text-title">Receive on</h2>
             <ChainStack activeChainId={chainId} apiKey={apiKey} />
           </div>
-
-          {/* No chain named in words: the stack above already shows where the
-              address works, and naming one in prose only invites the two to
-              disagree. */}
-          <p className="text-muted-foreground text-body-xs mt-2 leading-normal">
-            {asset
-              ? `Send ${asset} to this address. Anything else you send still arrives, but this app is asking for ${asset}.`
-              : 'Send any supported asset to this address.'}
-          </p>
         </div>
 
         <div className="jaw-scroll min-h-0 flex-1 overflow-y-auto px-6 py-4">
@@ -90,13 +80,16 @@ export const AddFundsDialog = ({
 
             <div className="flex w-full flex-col items-center gap-1">
               {/* The ENS name when we have one, above the address it stands
-                  for. The address stays visible either way: a sender pasting
-                  into an exchange needs it, and it is what makes the name
-                  checkable. */}
+                  for. The address stays visible either way: it is what makes
+                  the name checkable. */}
               {name && (
                 <p className="text-foreground text-value flex min-w-0 items-center gap-1.5">
                   {avatar && <img src={avatar} alt="" className="size-blob-sm rounded-full" width={16} height={16} />}
                   <span className="truncate">{name}</span>
+                  {/* Copies the name, not the address. A sender pasting into a
+                      wallet that resolves ENS wants the name; one pasting into
+                      an exchange wants the hex below. Both are one tap. */}
+                  <CopyButton value={name} size={13} className="flex-none" label="Copy name" />
                 </p>
               )}
               {/* The full address, not a truncated one. Truncation is fine

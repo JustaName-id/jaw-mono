@@ -778,18 +778,10 @@ console.log('Connected accounts:', result.accounts);`;
         defaultValue: 'default',
         options: CHAIN_OPTIONS,
       },
-      {
-        name: 'asset',
-        type: 'string',
-        label: 'Asset',
-        description: 'Token symbol to ask the sender for, e.g. USDC. Display only.',
-        required: false,
-      },
     ],
     getCodeSnippet: (params) => {
       const args: string[] = [];
       if (params.chainId && params.chainId !== 'default') args.push(`chainId: ${parseInt(params.chainId, 16)}`);
-      if (params.asset) args.push(`asset: '${params.asset}'`);
       return `// Resolves null when the user closes — deposits land off-app,
 // so there is no outcome to report.
 await jaw.provider.request({
@@ -798,9 +790,8 @@ await jaw.provider.request({
 });`;
     },
     buildParams: (params) => {
-      const addFunds: { chainId?: number; asset?: string } = {};
+      const addFunds: { chainId?: number } = {};
       if (params.chainId && params.chainId !== 'default') addFunds.chainId = parseInt(params.chainId, 16);
-      if (params.asset) addFunds.asset = params.asset;
       return [addFunds];
     },
   },
