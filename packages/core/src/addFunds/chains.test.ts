@@ -7,7 +7,7 @@ const SECOND_MAINNET = MAINNET_CHAINS[1]!.id;
 const A_TESTNET = TESTNET_CHAINS[0]!.id;
 
 describe('visibleChains', () => {
-    it('returns the app’s configured chains', () => {
+    it('returns the chains the store holds', () => {
         expect(visibleChains([{ id: BASE }, { id: SECOND_MAINNET }], BASE)).toEqual([BASE, SECOND_MAINNET]);
     });
 
@@ -19,21 +19,21 @@ describe('visibleChains', () => {
         expect(visibleChains([{ id: BASE }, { id: BASE }], BASE)).toEqual([BASE]);
     });
 
-    // The old allowlist fell back to every supported chain, which is how a
-    // mainnet-only app ended up offering testnets.
-    it('never widens to every supported chain when the app configured one', () => {
+    // The store is what the SDK was initialised with, so this must never widen
+    // beyond it: the stack is a claim about where the address works.
+    it('never widens beyond what the store holds', () => {
         const visible = visibleChains([{ id: BASE }], BASE);
         expect(visible).toEqual([BASE]);
         expect(visible).not.toContain(A_TESTNET);
     });
 
-    it('shows a testnet only when the app configured it', () => {
+    it('shows a testnet only when the store holds it (showTestnets)', () => {
         expect(visibleChains([{ id: A_TESTNET }], A_TESTNET)).toEqual([A_TESTNET]);
     });
 
     // An empty stack under "Receive on" reads as a broken screen, and the
     // address does work on the chain the user is on.
-    it('falls back to the active chain when nothing configured is supported', () => {
+    it('falls back to the active chain when the store holds nothing usable', () => {
         expect(visibleChains([], BASE)).toEqual([BASE]);
         expect(visibleChains([{ id: 999_999 }], BASE)).toEqual([BASE]);
     });
