@@ -23,7 +23,6 @@ import {
   buildErc20PaymasterContext,
   JAW_PAYMASTER_URL,
   JAW_RPC_URL,
-  type FeeTokenCapability,
 } from '@jaw.id/core';
 
 // Transaction execution result
@@ -307,7 +306,7 @@ export const TransactionModal = ({
         );
 
         const chainIdHex = `0x${chain.id.toString(16)}` as `0x${string}`;
-        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken;
 
         if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
           if (isMounted) setFeeTokensLoading(false);

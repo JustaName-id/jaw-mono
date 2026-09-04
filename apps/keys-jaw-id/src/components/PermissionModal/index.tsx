@@ -30,7 +30,6 @@ import {
   JAW_RPC_URL,
   SUPPORTED_CHAINS,
   handleGetCapabilitiesRequest,
-  type FeeTokenCapability,
 } from '@jaw.id/core';
 
 // Known function selectors mapping
@@ -509,7 +508,7 @@ export const PermissionModal = ({
         );
 
         const chainIdHex = `0x${(chain?.id || 1).toString(16)}` as `0x${string}`;
-        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken;
 
         if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
           if (isMounted) setFeeTokensLoading(false);

@@ -234,7 +234,7 @@ export interface CallStatusResponse {
 }
 
 // @public (undocumented)
-export type CapabilitiesResult = Record<`0x${string}`, Record<string, unknown>>;
+export type CapabilitiesResult = Record<`0x${string}`, ChainCapabilities>;
 
 // @public (undocumented)
 export type Chain = {
@@ -247,6 +247,16 @@ export type Chain = {
     };
     paymaster?: PaymasterConfig;
 };
+
+// @public
+export interface ChainCapabilities {
+    // (undocumented)
+    [capability: string]: unknown;
+    // (undocumented)
+    chainMetadata?: ChainMetadataCapability;
+    // (undocumented)
+    feeToken?: FeeTokenCapability;
+}
 
 // @public
 export interface ChainMetadataCapability {
