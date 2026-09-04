@@ -3,6 +3,7 @@ import { isLegacySession, loadSessionConfig, type SessionConfig } from './sessio
 import { loadConfig } from './config.js';
 import { encodeFunctionData, erc20Abi, maxUint256 } from 'viem';
 import { usdcForNetwork } from '../x402/asset-registry.js';
+import { whyFeeTokenDisagrees } from '../x402/fee-token.js';
 import { PERMIT2_ADDRESS } from '../x402/permit2.js';
 
 // JAW's ERC-20 paymaster, mirrored from core's JAW_PAYMASTER_URL. Kept as a
@@ -66,6 +67,20 @@ function resolvePaymaster(
   url.searchParams.set('chainId', String(options.chainId));
   url.searchParams.set('api-key', options.apiKey);
   return { paymasterUrl: url.toString(), paymasterContext: { token: asset.address } };
+}
+
+/**
+ * Say so when the token this session names is not one the paymaster takes.
+ *
+ * Only for JAW's own paymaster: a user who brought their own url owns that
+ * relationship, and the capabilities response describes ours.
+ */
+async function warnOnFeeTokenDrift(options: SessionBridgeOptions): Promise<void> {
+  if (options.paymasterUrl && !options.paymasterUrl.startsWith(JAW_ERC20_PAYMASTER_URL)) return;
+  const asset = usdcForNetwork(`eip155:${options.chainId}`);
+  if (!asset || !options.apiKey) return;
+  const warning = await whyFeeTokenDisagrees(asset, options.apiKey);
+  if (warning) console.warn(`[jaw] ${warning}`);
 }
 
 /**
@@ -151,6 +166,12 @@ export class SessionBridge {
     privateKeyHex = null;
 
     const { Account } = await import('@jaw.id/core');
+    // The token in the context is the registry's, and until now nothing compared
+    // it against what the paymaster actually takes. Checked here rather than in
+    // the constructor because it costs a network read, and warned rather than
+    // corrected: see `whyFeeTokenDisagrees`.
+    await warnOnFeeTokenDrift(this.options);
+
     // Every session is EIP-7702, so the account re-derives to the session key
     // EOA and the delegation rides its userOps. Deriving any other way would
     // produce an address the permission was never granted to.
