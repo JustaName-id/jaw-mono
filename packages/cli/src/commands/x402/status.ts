@@ -96,7 +96,10 @@ export default class X402Status extends BaseCommand {
     // performed it, which is the run where it matters most.
     const policy = resolveSessionX402Policy(config.x402, current);
 
-    const spent = sumSpentSince(payer, session.createdAt);
+    // The session total, so payer only. The per-period figures below come from
+    // `currentLimitUsage`, which scopes to the permission because those mirror
+    // the chain.
+    const spent = sumSpentSince({ payer }, session.createdAt);
 
     const sessionCap = parseBigInt(policy.maxTotalPerSession);
     const decimals = asset?.decimals ?? 6;
