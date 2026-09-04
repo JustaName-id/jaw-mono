@@ -133,6 +133,75 @@ describe('withPaymentLock', () => {
   });
 });
 
+describe('withPaymentLock heartbeat', () => {
+  // The reason the heartbeat exists. `at` used to be written once, so the
+  // threshold had to predict how long a payment could take: it was a sum of the
+  // timeouts on the payment path, `upto` added two 90s waits to that path, and a
+  // second payer arriving mid-payment could break a live lock and end up in the
+  // critical section beside the first, both having read the same ledger total.
+  it('does not let a beating holder be broken as stale', async () => {
+    const holder = withPaymentLock(async () => new Promise((r) => setTimeout(r, 400)), { heartbeatMs: 25 });
+    await new Promise((r) => setTimeout(r, 40));
+
+    // Would have broken the lock at 200ms without a beat, since `at` never moved.
+    await expect(withPaymentLock(async () => 'got in', { staleAfterMs: 200, timeoutMs: 300 })).rejects.toThrow(
+      /Another payment/
+    );
+    await holder;
+  });
+
+  it('advances `at` while the work runs', async () => {
+    let first = 0;
+    let last = 0;
+    await withPaymentLock(
+      async () => {
+        first = JSON.parse(fs.readFileSync(PATHS.paymentLock, 'utf-8')).at;
+        await new Promise((r) => setTimeout(r, 120));
+        last = JSON.parse(fs.readFileSync(PATHS.paymentLock, 'utf-8')).at;
+      },
+      { heartbeatMs: 20 }
+    );
+    expect(last).toBeGreaterThan(first);
+  });
+
+  // The beat-side twin of "never deletes a lock that is no longer ours". If ours
+  // was broken as stale and someone else took the file, writing our timestamp
+  // over theirs would hide a live second payer behind our own liveness.
+  it('stops beating once the lock is no longer ours', async () => {
+    const foreign = { pid: process.pid, token: 'someone-else', at: Date.now() - 10_000 };
+    await withPaymentLock(
+      async () => {
+        fs.writeFileSync(PATHS.paymentLock, JSON.stringify(foreign));
+        await new Promise((r) => setTimeout(r, 120));
+      },
+      { heartbeatMs: 20 }
+    );
+    expect(JSON.parse(fs.readFileSync(PATHS.paymentLock, 'utf-8'))).toEqual(foreign);
+  });
+
+  // Beats are renamed over the lock rather than written in place. A plain write
+  // truncates first, so every interval would reopen the window where the file
+  // parses as null and `unreadableLockIsTorn` has to adjudicate it.
+  it('is never observed half-written by a concurrent reader', async () => {
+    await withPaymentLock(
+      async () => {
+        const until = Date.now() + 200;
+        while (Date.now() < until) {
+          const raw = fs.readFileSync(PATHS.paymentLock, 'utf-8');
+          expect(JSON.parse(raw).pid).toBe(process.pid);
+          await new Promise((r) => setTimeout(r, 1));
+        }
+      },
+      { heartbeatMs: 5 }
+    );
+  });
+
+  it('leaves no staging file behind', async () => {
+    await withPaymentLock(async () => new Promise((r) => setTimeout(r, 80)), { heartbeatMs: 10 });
+    expect(fs.readdirSync(TEST_ROOT)).toEqual([]);
+  });
+});
+
 describe('withPaymentLock, unreadable and unbreakable locks', () => {
   it('waits out a lock file that is still being written instead of breaking it', async () => {
     // The winner creates the file with `wx` and writes a tick later, so there is
@@ -173,5 +242,21 @@ describe('withPaymentLock, unreadable and unbreakable locks', () => {
     expect(timer).toHaveBeenCalled(); // the event loop kept turning
     clearTimeout(handle);
     fs.rmdirSync(PATHS.paymentLock);
+  });
+});
+
+describe('withPaymentLock heartbeat staging file', () => {
+  // A crash between the staging write and the rename leaves the file behind, and
+  // nothing in the CLI sweeps `~/.jaw`. Naming it by pid means the next payment
+  // from the same process slot consumes the leftover instead of adding to it; a
+  // token, fresh per acquisition, would leave one file per crash forever.
+  it('consumes a staging file left behind by an earlier crash', async () => {
+    const staging = `${PATHS.paymentLock}.${process.pid}`;
+    fs.writeFileSync(staging, 'left over from a crash');
+
+    await withPaymentLock(async () => new Promise((r) => setTimeout(r, 40)), { heartbeatMs: 10 });
+
+    expect(fs.existsSync(staging)).toBe(false);
+    expect(fs.readdirSync(TEST_ROOT)).toEqual([]);
   });
 });

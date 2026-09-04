@@ -29,11 +29,23 @@ interface LockFile {
 }
 
 /**
- * A payment can legitimately take a while: up to 90s waiting on a top-up to
- * confirm, plus two 30s HTTP timeouts. The threshold sits well past that, so a
- * slow payment is never mistaken for a crashed one.
+ * How long a lock may go without a heartbeat before it counts as abandoned.
+ *
+ * The holder rewrites `at` every `HEARTBEAT_INTERVAL_MS` while its work runs, so
+ * this asks whether the holder is still making progress. It used to ask a
+ * different question: how long a payment could possibly take, answered by summing
+ * the timeouts on the payment path. `upto` then added two 90s `awaitCall`s and
+ * pushed the bounded worst case to 249s, near enough to the old 300s that a
+ * second payer arriving mid-payment could break a live lock and land in the
+ * critical section beside it, both having read the same ledger total. A number
+ * derived from a sum has to be re-derived every time a step is added, and was not.
+ *
+ * Three missed beats, so a momentarily busy event loop does not cost the lock.
  */
-export const STALE_AFTER_MS = 300_000;
+export const STALE_AFTER_MS = 90_000;
+
+/** How often the holder rewrites `at` while its work runs. */
+const HEARTBEAT_INTERVAL_MS = 30_000;
 
 /** How long to wait for the holder before refusing. Refusing is safe; overspending is not. */
 export const DEFAULT_ACQUIRE_TIMEOUT_MS = 120_000;
@@ -43,6 +55,8 @@ const POLL_INTERVAL_MS = 100;
 export interface LockOptions {
   timeoutMs?: number;
   staleAfterMs?: number;
+  /** Overridable so a test does not have to wait out a real interval. */
+  heartbeatMs?: number;
   /** Called once when the wait becomes noticeable, so a blocked CLI explains itself. */
   onWait?: (holderPid: number) => void;
 }
@@ -180,12 +194,56 @@ export async function withPaymentLock<T>(fn: () => Promise<T>, options: LockOpti
   const releaseOnExit = () => release(token);
   process.once('exit', releaseOnExit);
 
+  // `unref` so a beat still pending cannot hold a finished command's event loop open.
+  const heartbeat = setInterval(() => {
+    if (!beat(token)) clearInterval(heartbeat);
+  }, options.heartbeatMs ?? HEARTBEAT_INTERVAL_MS);
+  heartbeat.unref();
+
   try {
     return await fn();
   } finally {
+    clearInterval(heartbeat);
     process.removeListener('exit', releaseOnExit);
     release(token);
   }
+}
+
+/**
+ * Rewrite `at` so the age check measures progress rather than a predicted duration.
+ *
+ * Renamed over the lock rather than written in place, because rename is atomic and
+ * no reader ever sees a half-written file. Writing in place would reopen the torn
+ * window `unreadableLockIsTorn` covers, once per interval instead of once at
+ * creation.
+ *
+ * False when the file is no longer ours, which means our lock was judged stale and
+ * taken while the work was still running. Beating over the new holder would leave
+ * two payers in the critical section, so the caller stops beating instead.
+ */
+function beat(token: string): boolean {
+  if (readLock()?.token !== token) return false;
+  // Named by pid, not by token: a crash between the write and the rename leaves
+  // this behind, and nothing in the CLI ever reads that directory to clean it. A
+  // token is fresh per acquisition, so that would litter one file per crash; a
+  // pid is reused by the OS, so the set stays bounded and the next payment from
+  // the same slot overwrites it.
+  const staging = `${PATHS.paymentLock}.${process.pid}`;
+  try {
+    fs.writeFileSync(staging, JSON.stringify({ pid: process.pid, token, at: Date.now() } satisfies LockFile), {
+      mode: 0o600,
+    });
+    fs.renameSync(staging, PATHS.paymentLock);
+  } catch {
+    // One missed beat is survivable, the threshold allows three. A staging file
+    // left behind is not, so clear it and let the next beat try again.
+    try {
+      fs.unlinkSync(staging);
+    } catch {
+      /* nothing to clean up */
+    }
+  }
+  return true;
 }
 
 /** Release only our own lock: if ours was broken as stale, the file is someone else's now. */
