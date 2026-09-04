@@ -36,6 +36,30 @@ for (const chainId of Object.values(USDC_BY_NETWORK).map((a) => a.chainId)) {
 const clients = new Map<string, PublicClient>();
 
 /**
+ * Every read through this transport runs inside the payment lock, so one that
+ * hangs wedges every payment on the machine and not just its own. viem's
+ * defaults are 10s per request across four attempts, roughly 41s before a read
+ * gives up, and a payment makes at least four of them: the Permit2 allowance,
+ * the payer balance, the delegation probe and the account's EIP-712 domain.
+ *
+ * The rest of this path is bounded on purpose too (`FETCH_TIMEOUT_MS` in http.ts,
+ * the race in `awaitCall`). These reads were the ones left out of that rule.
+ */
+
+/**
+ * Per attempt, not per read: `RPC_RETRY_COUNT` attempts of this each.
+ *
+ * The same 5000 appears as `DEFAULT_TIMEOUT_MS` in `permission-onchain.ts`, which
+ * bounds a whole read including its retries through `within()`. The two are
+ * complementary and the shared number is a coincidence, not one knob: a transport
+ * timeout cannot stop three attempts from adding up, which is what `within()` is
+ * there for. `permission-onchain.ts` reads through this transport too, so it has
+ * both, and neither is redundant.
+ */
+const RPC_TIMEOUT_MS = 5_000;
+const RPC_RETRY_COUNT = 2;
+
+/**
  * Route reads through the same JAW proxy core uses, so the x402 modules see the
  * same node/state core does and don't depend on viem's public RPC fallback
  * (rate-limited and flaky). This matters for the delegation probe in payer.ts:
@@ -43,8 +67,9 @@ const clients = new Map<string, PublicClient>();
  * needed. Falls back to the public RPC when no apiKey is configured (e.g. tests).
  */
 function rpcTransport(chainId: number, apiKey?: string) {
-  if (!apiKey) return http();
-  return http(`${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}`);
+  const options = { timeout: RPC_TIMEOUT_MS, retryCount: RPC_RETRY_COUNT };
+  if (!apiKey) return http(undefined, options);
+  return http(`${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}`, options);
 }
 
 /** Shared per-(chain, apiKey) public client for the x402 modules (reads only). */
