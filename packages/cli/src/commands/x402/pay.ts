@@ -67,7 +67,13 @@ export default class X402Pay extends BaseCommand {
     // the two front ends enforced different caps for the same session.
     const policy = resolveSessionX402Policy(config.x402, session);
 
-    const spent = sumSpentSince(payer.address, session?.createdAt);
+    // Payer, deliberately, with no permission: this total is measured against
+    // `maxTotalPerSession`, which is the user's own ceiling rather than the
+    // chain's, and it spans permissions. `session add` preserves `createdAt` so
+    // that adding a capability cannot reset it; scoping to the new permission
+    // would hand back the same clean slate through the other door.
+    const scope = { payer: payer.address };
+    const spent = sumSpentSince(scope, session?.createdAt);
 
     if (flags.pay && (!session || !config.apiKey)) {
       // Without a session there is no permission to pull through, so the payer
@@ -90,7 +96,7 @@ export default class X402Pay extends BaseCommand {
       // Re-read here, not before the lock: another process may have paid while
       // we waited our turn, and a stale total waves through a payment the cap
       // should have stopped. Same for the period window, which moves on its own.
-      const spentThisSession = flags.pay ? sumSpentSince(payer.address, session?.createdAt) : spent;
+      const spentThisSession = flags.pay ? sumSpentSince(scope, session?.createdAt) : spent;
 
       // Only wired for a real payment: a dry run returns before the funding hook,
       // so building a bridge for it would open a connection nothing uses. Built
@@ -136,6 +142,7 @@ export default class X402Pay extends BaseCommand {
             at: new Date().toISOString(),
             url: args.url,
             payer: outcome.payer,
+            permissionId: session?.permissionId,
             status: outcome.paid ? 'paid' : outcome.attemptedPayment ? 'failed' : 'refused',
             amount: settled?.amount,
             authorized: settled?.authorized,

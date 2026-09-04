@@ -1,5 +1,5 @@
 import { currentPeriodWindow, normalizePeriod } from './period.js';
-import { sumSpentSince, sumToppedUpSince } from './ledger.js';
+import { sumSpentSince, sumToppedUpSince, type SpendScope } from './ledger.js';
 import { parseBigInt } from './amount.js';
 import { readCurrentPeriods, type ReadDeps } from './permission-onchain.js';
 import { USDC_BY_NETWORK } from './asset-registry.js';
@@ -22,11 +22,12 @@ import type { SessionConfig } from '../lib/session-config.js';
 export function currentLimitUsage(
   policy: X402Policy,
   payerAddress: string,
-  session: { expiry: number } | null | undefined,
+  session: { expiry: number; permissionId?: string } | null | undefined,
   now: Date = new Date()
 ): LimitUsage[] {
   if (!session || !policy.perPeriod) return [];
 
+  const scope: SpendScope = { permissionId: session.permissionId, payer: payerAddress };
   const usage: LimitUsage[] = [];
   for (const limit of policy.perPeriod) {
     const anchorMs = Date.parse(limit.anchor);
@@ -43,8 +44,8 @@ export function currentLimitUsage(
     const since = new Date(window.start * 1000).toISOString();
     usage.push({
       ...limit,
-      spent: sumSpentSince(payerAddress, since),
-      toppedUp: sumToppedUpSince(payerAddress, since),
+      spent: sumSpentSince(scope, since),
+      toppedUp: sumToppedUpSince(scope, since),
       endsAt: new Date(window.end * 1000),
       source: 'ledger',
     });
@@ -79,6 +80,8 @@ export async function currentLimitUsageOnChain(
   const local = currentLimitUsage(policy, payerAddress, session, now);
   if (!session || local.length === 0) return local;
 
+  const scope: SpendScope = { permissionId: session.permissionId, payer: payerAddress };
+
   // The same token the policy was seeded from, resolved the same way.
   const asset = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === session.chainId);
   if (!asset) return local;
@@ -110,11 +113,11 @@ export async function currentLimitUsageOnChain(
     if (!match || match.period.status !== 'ok') return limit;
 
     const since = new Date(match.period.start * 1000).toISOString();
-    const fromLedger = sumToppedUpSince(payerAddress, since);
+    const fromLedger = sumToppedUpSince(scope, since);
     const metered = match.period.spend >= fromLedger;
     return {
       ...limit,
-      spent: sumSpentSince(payerAddress, since),
+      spent: sumSpentSince(scope, since),
       toppedUp: metered ? match.period.spend : fromLedger,
       endsAt: new Date(match.period.end * 1000),
       source: metered ? 'chain' : 'ledger',
