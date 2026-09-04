@@ -10,7 +10,7 @@ const loadConfigMock = vi.fn();
 vi.mock('../lib/config.js', () => ({ loadConfig: () => loadConfigMock() }));
 
 const createPublicClientMock = vi.fn((..._args: unknown[]) => ({}) as unknown);
-const httpMock = vi.fn((url?: string) => ({ __url: url }));
+const httpMock = vi.fn((url?: string, options?: unknown) => ({ __url: url, __options: options }));
 vi.mock('viem', async (importActual) => {
   const actual = await importActual<typeof import('viem')>();
   return { ...actual, createPublicClient: createPublicClientMock, http: httpMock };
@@ -63,5 +63,19 @@ describe('publicClientFor transport + cache', () => {
     expect(createPublicClientMock).toHaveBeenCalledTimes(2);
     expect(transportUrlOf(0)).toBeUndefined();
     expect(transportUrlOf(1)).toContain('api-key=pk_live_456');
+  });
+
+  // These reads run inside the payment lock, so leaving them on viem's defaults
+  // (10s across four attempts) lets one slow node hold up every payment on the
+  // machine. Asserted on the options passed to `http`, not on wall-clock
+  // behaviour, so the test stays fast and does not depend on viem's backoff.
+  it.each([
+    ['keyless', {}],
+    ['keyed', { apiKey: 'pk_test_123' }],
+  ])('bounds the %s transport with an explicit timeout and retry count', async (_label, config) => {
+    loadConfigMock.mockReturnValue(config);
+    const publicClientFor = await freshPublicClientFor();
+    publicClientFor(8453);
+    expect(httpMock.mock.calls[0]?.[1]).toEqual({ timeout: 5_000, retryCount: 2 });
   });
 });
