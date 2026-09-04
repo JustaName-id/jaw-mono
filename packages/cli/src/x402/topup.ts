@@ -3,7 +3,7 @@ import { usdcForNetwork, type UsdcAsset } from './asset-registry.js';
 import { publicClientFor, usdcBalance, type BalanceReader } from './balance.js';
 import { PERMIT2_ADDRESS } from './permit2.js';
 import { parseBigInt } from './amount.js';
-import { firstOperationCost, gasReserve } from './gas-reserve.js';
+import { gasReserve, topUpFeeHeadroom } from './gas-reserve.js';
 import { errorMessage } from '../lib/errors.js';
 import type { X402PaymentRequirement } from './types.js';
 
@@ -211,18 +211,22 @@ export async function ensurePayerFunds(
       // `skipped` says no principal moved, which stays true, but the approval
       // is a userOp the user paid for and it belongs in the trace either way.
       if (!granted.ok) return { ok: false, reason: granted.reason, approvalBatchId: granted.batchId };
+      // No principal moved, but the approval is a userOp the payer was charged
+      // for, so its balance is not what the branch above checked any more.
+      const short = await payerStillShort(asset, payerAddress, price, requirement.network, opts);
+      if (short) return { ok: false, reason: short, approvalBatchId: granted.batchId };
       return { ok: true, skipped: true, approvalBatchId: granted.batchId, permit2Allowance: granted.allowance };
     }
     return { ok: true, skipped: true, permit2Allowance };
   }
 
   const shortfall = needed - balance;
-  const feePerOp = firstOperationCost(asset);
+  const feePerOp = topUpFeeHeadroom(asset);
   // The payer pays the fee for the very transfer that refills it, so a refill
   // clamped to exactly the shortfall lands short by that fee: the payment is
   // then signed for more than the payer holds and fails, with the cap already
-  // spent on it. Below one operation over the shortfall there is no amount
-  // worth pulling, so refuse here, while nothing has moved. Measured against
+  // spent on it. Below the headroom over the shortfall there is no amount worth
+  // pulling, so refuse here, while nothing has moved. Measured against
   // `needed` rather than the price, so an upto payment that still owes Permit2
   // an approval is judged with that operation counted in.
   if (opts.maxTopUp !== undefined && opts.maxTopUp < shortfall + feePerOp) {
@@ -309,7 +313,50 @@ export async function ensurePayerFunds(
     permit2Allowance = granted.allowance;
   }
 
+  const short = await payerStillShort(asset, payerAddress, price, requirement.network, opts);
+  if (short) return { ok: false, reason: short, amount: amount.toString(), batchId, approvalBatchId };
+
   return { ok: true, amount: amount.toString(), batchId, approvalBatchId, permit2Allowance };
+}
+
+/**
+ * Whether the payer can actually pay, read after the userOps it was charged for.
+ *
+ * The bar before the refill is a prediction: it guesses the fee the payer is
+ * about to be charged for the transfer that refills it. This is the measurement,
+ * and it needs no constant at all. Whatever the fee turned out to be, at any gas
+ * price on any chain, the balance says so.
+ *
+ * Refusing here still costs the caps what already moved, so the refusal carries
+ * the trace for the audit row. It costs a retry; signing a payment the payer
+ * cannot cover costs the whole ceiling, because a failed attempt reserves it.
+ *
+ * A read that fails proceeds rather than refuses. The transfer has landed and
+ * drawn the cap either way, so refusing on an unreachable node buys a certain
+ * non-payment where going on still has a chance of settling.
+ */
+async function payerStillShort(
+  asset: UsdcAsset,
+  payerAddress: `0x${string}`,
+  price: bigint,
+  network: string,
+  opts: TopUpOptions
+): Promise<string | null> {
+  let balance: bigint;
+  try {
+    const read = opts.balanceReader;
+    balance = read ? await read(asset, payerAddress) : BigInt((await usdcBalance(network, payerAddress)).raw);
+  } catch (err) {
+    // Said out loud rather than swallowed: the payment goes on, and the operator
+    // needs to know the one check that would have caught a short payer never ran.
+    console.warn(`[jaw] Could not re-read the payer balance after the refill (${errorMessage(err)}); paying anyway.`);
+    return null;
+  }
+  if (balance >= price) return null;
+  return (
+    `the payer holds ${balance} base units after the refill and this payment needs ${price}: the fee it was ` +
+    'charged for the refill came to more than the headroom left for it. Retry once the cap allows a larger one.'
+  );
 }
 
 /**
