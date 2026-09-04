@@ -10,6 +10,7 @@ import {
     isSessionExpired,
 } from './SignerUtils.js';
 import { storeCallStatus, waitForReceiptInBackground } from '../rpc/wallet_sendCalls.js';
+import { normalizeAddFundsParams, type NormalizedAddFundsParams } from '../rpc/addFundsParams.js';
 import { normalizeSendCallsParams, type NormalizedSendCallsParams } from '../rpc/sendCallsParams.js';
 import { normalizeSendTransactionParams, type NormalizedSendTransactionParams } from '../rpc/sendTransactionParams.js';
 import { normalizeRevokePermissionsParams, type NormalizedRevokePermissionsParams } from '../rpc/permissions.js';
@@ -50,7 +51,8 @@ type ConstructorOptions = {
 export type NormalizedSigningParams =
     | { method: 'wallet_sendCalls'; params: NormalizedSendCallsParams }
     | { method: 'eth_sendTransaction'; params: NormalizedSendTransactionParams }
-    | { method: 'wallet_revokePermissions'; params: NormalizedRevokePermissionsParams };
+    | { method: 'wallet_revokePermissions'; params: NormalizedRevokePermissionsParams }
+    | { method: 'wallet_addFunds'; params: NormalizedAddFundsParams };
 
 /**
  * Abstract base class for all JAW signers.
@@ -155,6 +157,14 @@ export abstract class JAWSigner implements Signer {
                     params: normalizeRevokePermissionsParams(request.params),
                 };
 
+            // Runs before the screen opens, so a malformed chainId is refused
+            // with -32602 in BOTH modes. Validating in the AppSpecific handler
+            // alone left CrossPlatform unchecked: it has no per-method case of
+            // its own, so a bad value reached keys, where it was swallowed and
+            // the screen opened on the connected chain instead.
+            case 'wallet_addFunds':
+                return { method: 'wallet_addFunds', params: normalizeAddFundsParams(request.params) };
+
             default:
                 return undefined;
         }
@@ -211,6 +221,7 @@ export abstract class JAWSigner implements Signer {
                 return (params as [Address, string] | undefined)?.[0];
             case 'wallet_sign':
                 return (params as [{ address?: Address }] | undefined)?.[0]?.address;
+
             default:
                 return undefined;
         }
@@ -270,10 +281,14 @@ export abstract class JAWSigner implements Signer {
                 return this.handleWalletConnectUnauthenticated(request);
             }
 
+            // addFunds is in this group because the receive screen shows the
+            // connected account's address: it needs the same account resolution
+            // as the signing methods even though it signs nothing.
             case 'wallet_sendCalls':
             case 'wallet_sign':
             case 'wallet_grantPermissions':
-            case 'wallet_revokePermissions': {
+            case 'wallet_revokePermissions':
+            case 'wallet_addFunds': {
                 return this.dispatchSigningRequest(request);
             }
 
@@ -381,6 +396,7 @@ export abstract class JAWSigner implements Signer {
             case 'eth_signTypedData_v4':
             case 'wallet_grantPermissions':
             case 'wallet_revokePermissions':
+            case 'wallet_addFunds':
                 return this.dispatchSigningRequest(request);
 
             case 'eth_sign':

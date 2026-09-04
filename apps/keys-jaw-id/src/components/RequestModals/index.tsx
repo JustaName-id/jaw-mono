@@ -9,6 +9,7 @@ import { SiweModal } from '../SiweModal';
 import { isSiweMessage, getSiweOriginWarningFromMessage } from '@jaw.id/ui';
 import { Eip712Modal } from '../Eip712Modal';
 import { PermissionModal, type PermissionRequestData } from '../PermissionModal';
+import { AddFundsModal } from '../AddFundsModal';
 import type { WalletSendCallsReturn, EthSendTransactionReturn } from '../../lib/tx-handler';
 import { SDKRequestType } from '../../lib/sdk-types';
 import { debugLog } from '../../lib/debug-log';
@@ -385,5 +386,35 @@ export function RequestModals({
       />
     );
   }
+  if (pendingRequest.type === SDKRequestType.ADD_FUNDS) {
+    return (
+      // Keyed by request — see TransactionModal above.
+      <AddFundsModal
+        key={pendingRequest.requestId}
+        params={pendingRequest.params}
+        chain={pendingRequest.chain as chain}
+        apiKey={apiKey}
+        origin={pendingRequest.origin}
+        appName={pendingRequest.metadata?.appName}
+        appLogoUrl={pendingRequest.metadata?.appLogoUrl}
+        // No onError and no rejection path: nothing here can fail and nothing
+        // was asked for approval. Deposits land off-app, so the user closing is
+        // the normal finish and the dapp gets null.
+        onDone={async () => {
+          try {
+            await pendingRequest.onApprove(null);
+            debugLog('✅ Add funds screen closed');
+          } catch (err) {
+            console.error('❌ Failed to resolve add funds:', err);
+          }
+          // Closes either way, and with no delivered-tick beat: nothing was
+          // signed, so a success flourish would be claiming something happened.
+          // The user pressed Done, which is the whole outcome.
+          communicator.requestClose();
+        }}
+      />
+    );
+  }
+
   return null;
 }
