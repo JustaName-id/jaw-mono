@@ -53,11 +53,14 @@ function SpendRow({
   chainId,
   nativeSymbol,
   isLoading,
+  expiryDate,
 }: {
   spend: SpendPermission;
   chainId?: number;
   nativeSymbol: string;
   isLoading?: boolean;
+  /** The horizon `spend.total` is a total up to. */
+  expiryDate?: string;
 }) {
   const isNative = isNativeToken(spend.tokenAddress);
   const symbol = isNative ? nativeSymbol : spend.token;
@@ -117,6 +120,15 @@ function SpendRow({
           {spend.amountUsd && !spend.decimalsUnknown && (
             <span className="text-muted-foreground text-code ml-1 font-mono">${spend.amountUsd}</span>
           )}
+          {/* The rate is what the row led with; this is what approving it costs by the
+              time the permission expires. Its own line at full width, because it is
+              the larger number and the one a decision should rest on. */}
+          {spend.total && (
+            <span className="text-muted-foreground text-code w-full text-right font-mono">
+              up to {spend.total} {symbol}
+              {expiryDate ? ` by ${expiryDate}` : ''}
+            </span>
+          )}
         </span>
       )}
     </div>
@@ -128,18 +140,27 @@ export function SpendLimits({
   chainId,
   nativeSymbol,
   isLoading,
+  expiryDate,
 }: {
   spends: SpendPermission[];
   chainId?: number;
   nativeSymbol: string;
   isLoading?: boolean;
+  expiryDate?: string;
 }) {
   return (
     <div className="flex flex-col gap-2">
       <SectionHeading label="Spend limit" count={spends.length} />
       <div className="border-border rounded-box overflow-hidden border">
         {spends.map((spend, i) => (
-          <SpendRow key={i} spend={spend} chainId={chainId} nativeSymbol={nativeSymbol} isLoading={isLoading} />
+          <SpendRow
+            key={i}
+            spend={spend}
+            chainId={chainId}
+            nativeSymbol={nativeSymbol}
+            isLoading={isLoading}
+            expiryDate={expiryDate}
+          />
         ))}
       </div>
     </div>
