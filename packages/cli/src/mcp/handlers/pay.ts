@@ -89,7 +89,10 @@ export function registerPayTool(server: McpServer): void {
             // safe while one process did all the paying; with the lock admitting
             // other processes, a memoised total would miss what they spent and
             // wave through a payment the cap should have stopped.
-            const sessionSpent = sumSpentSince(payer.address, session?.createdAt);
+            // Payer only: the session total is the user's ceiling and spans
+            // permissions. See the same scope in `commands/x402/pay.ts`.
+            const scope = { payer: payer.address };
+            const sessionSpent = sumSpentSince(scope, session?.createdAt);
 
             // Locate the grant period containing now, and count spend inside it.
             // Recomputed per payment because the window moves on its own, and
@@ -149,6 +152,7 @@ export function registerPayTool(server: McpServer): void {
                 at: new Date().toISOString(),
                 url: params.url,
                 payer: result.payer,
+                permissionId: session?.permissionId,
                 status: result.paid ? 'paid' : result.attemptedPayment ? 'failed' : 'refused',
                 amount: settled?.amount,
                 authorized: settled?.authorized,

@@ -14,6 +14,12 @@ export interface X402LogEntry {
   url: string;
   /** The paying EOA. */
   payer: string;
+  /**
+   * The permission this spend is charged against, which is the unit the chain
+   * meters. Absent on entries written before the field existed; `countsIn`
+   * charges those to their payer instead.
+   */
+  permissionId?: string;
   /** paid = settled; failed = signed+sent but settlement failed; refused = never signed. */
   status: 'paid' | 'failed' | 'refused';
   /**
@@ -141,25 +147,68 @@ export function spendFigureOf(entry: X402LogEntry): bigint {
 }
 
 /**
- * Sum a payer's settled and attempted payments since an ISO instant (its whole
+ * What a spend total is counted over.
+ *
+ * The permission, because that is what the chain meters: one permission carries
+ * one per-period allowance and every spender under it draws on the same counter.
+ * Counting per payer measured each spender against its own copy of the cap, so
+ * two sessions granted 10 a day spent 20 a day and no number in the product said
+ * so.
+ *
+ * The payer is not decoration. It is the fallback for entries that predate
+ * `permissionId`, and the filter reporting still needs.
+ */
+export interface SpendScope {
+  /**
+   * Omitted on purpose by the session total, which is measured against
+   * `maxTotalPerSession`, the user's own ceiling rather than the chain's, and
+   * spans every permission the payer has held. Set by the per-period figures,
+   * which mirror an on-chain counter that a new permission resets.
+   */
+  permissionId?: string;
+  /** The paying EOA, which is what an entry with no permission is charged to. */
+  payer: string;
+}
+
+/**
+ * Whether one row belongs to this scope.
+ *
+ * Matched on the permission when both sides name one. When either does not, the
+ * payers decide: on the day this shipped every existing row had no permission,
+ * and dropping them would have reset a live cap to zero and handed an agent its
+ * whole allowance back mid-period. An entry with no permission is charged to the
+ * payer that wrote it, which is the permission it was spending under at the time.
+ *
+ * Conservative in the same direction as `spendFigureOf`: it can overcount across
+ * a re-grant to the same key, never undercount. The payer branch stops being
+ * reached once every row carries a permission.
+ */
+function countsIn(entry: X402LogEntry, scope: SpendScope): boolean {
+  if (scope.permissionId && entry.permissionId) {
+    return entry.permissionId.toLowerCase() === scope.permissionId.toLowerCase();
+  }
+  return entry.payer?.toLowerCase() === scope.payer.toLowerCase();
+}
+
+/**
+ * Sum settled and attempted payments in `scope` since an ISO instant (its whole
  * history when `since` is omitted).
  *
  * Reading it from the ledger rather than an in-memory counter is what makes a
  * cap survive a process restart, which an agent could otherwise relaunch its way
  * past. What each row costs is `spendFigureOf`.
  */
-export function sumSpentSince(payerAddress: string, since?: string): bigint {
-  const payer = payerAddress.toLowerCase();
+export function sumSpentSince(scope: SpendScope, since?: string): bigint {
   return readX402Log().reduce((total, entry) => {
-    if (entry.payer?.toLowerCase() !== payer) return total;
+    if (!countsIn(entry, scope)) return total;
     if (since && entry.at < since) return total;
     return total + spendFigureOf(entry);
   }, 0n);
 }
 
 /**
- * Sum what a payer pulled through the permission since an ISO instant (its whole
- * history when `since` is omitted).
+ * Sum what was pulled through the permission in `scope` since an ISO instant
+ * (its whole history when `since` is omitted).
  *
  * Distinct from `sumSpentSince` because the two meter different things: the
  * on-chain allowance is drawn down by the top-up, not by the payment it later
@@ -170,11 +219,10 @@ export function sumSpentSince(payerAddress: string, since?: string): bigint {
  * Every status counts, refusals included: the pull settled on-chain before the
  * payment it was for was ever attempted, so the allowance is gone either way.
  */
-export function sumToppedUpSince(payerAddress: string, since?: string): bigint {
-  const payer = payerAddress.toLowerCase();
+export function sumToppedUpSince(scope: SpendScope, since?: string): bigint {
   return readX402Log().reduce((total, entry) => {
     if (!entry.topUpAmount) return total;
-    if (entry.payer?.toLowerCase() !== payer) return total;
+    if (!countsIn(entry, scope)) return total;
     if (since && entry.at < since) return total;
     try {
       return total + BigInt(entry.topUpAmount);

@@ -529,6 +529,15 @@ describe('jaw_pay_and_fetch', () => {
       // The transfer went through the session bridge with the granted permission.
       const send = sessionRequestMock.mock.calls.find((c) => c[0] === 'wallet_sendCalls');
       expect(send).toBeTruthy();
+
+      // The ledger row carries the permission it was charged against. The sums
+      // fall back to the payer when a row has none, which is what keeps a live
+      // cap from resetting, and which also means a dropped write here would look
+      // like nothing at all: the totals would quietly go back to counting per
+      // spender, which is the defect this field exists to fix.
+      const { readX402Log } = await import('../x402/ledger.js');
+      const row = readX402Log().at(-1);
+      expect(row?.permissionId).toBe('0xperm1');
     } finally {
       vi.unstubAllGlobals();
       sessionRequestMock.mockReset();

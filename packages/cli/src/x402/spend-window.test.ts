@@ -19,11 +19,18 @@ const h = vi.hoisted(() => ({
     | { status: 'outside-window' }
     | { status: 'unavailable' },
   reads: 0,
+  scopes: [] as unknown[],
 }));
 
 vi.mock('./ledger.js', () => ({
-  sumToppedUpSince: () => h.toppedUp,
-  sumSpentSince: () => h.spent,
+  sumToppedUpSince: (scope: unknown) => {
+    h.scopes.push(scope);
+    return h.toppedUp;
+  },
+  sumSpentSince: (scope: unknown) => {
+    h.scopes.push(scope);
+    return h.spent;
+  },
 }));
 
 vi.mock('./permission-onchain.js', () => ({
@@ -144,5 +151,35 @@ describe('currentLimitUsageOnChain', () => {
   it('does not read the chain when no period applies at all', async () => {
     expect(await currentLimitUsageOnChain({}, PAYER, SESSION, NOW)).toEqual([]);
     expect(h.reads).toBe(0);
+  });
+});
+
+/**
+ * The window is read per permission, not per payer. One permission carries one
+ * allowance and every spender under it draws on the same counter, so a scope
+ * that lost the permission would measure each spender against its own copy of a
+ * cap the chain meters once.
+ */
+describe('the ledger is asked about the session permission', () => {
+  beforeEach(() => {
+    h.scopes.length = 0;
+  });
+
+  it('carries the permission and the payer into every sum', () => {
+    currentLimitUsage(POLICY, PAYER, SESSION, NOW);
+
+    expect(h.scopes.length).toBeGreaterThan(0);
+    for (const scope of h.scopes) {
+      expect(scope).toEqual({ permissionId: SESSION.permissionId, payer: PAYER });
+    }
+  });
+
+  it('asks about the payer alone when the session names no permission', () => {
+    currentLimitUsage(POLICY, PAYER, { expiry: SESSION.expiry }, NOW);
+
+    expect(h.scopes.length).toBeGreaterThan(0);
+    for (const scope of h.scopes) {
+      expect(scope).toEqual({ permissionId: undefined, payer: PAYER });
+    }
   });
 });
