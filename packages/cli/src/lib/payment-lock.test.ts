@@ -263,7 +263,8 @@ describe('withPaymentLock heartbeat', () => {
   // heartbeat that could never land looked exactly like one momentary miss. A
   // read-only home is the reachable version: `at` freezes and the next payer
   // breaks a live lock, with nothing anywhere saying why.
-  it('says so when the beats stop landing', async () => {
+  // Skipped as root, where a read-only directory stops nothing.
+  it.skipIf(process.getuid?.() === 0)('says so when the beats stop landing', async () => {
     const warnings: string[] = [];
     const written = vi.spyOn(process.stderr, 'write').mockImplementation(((line: unknown) => {
       warnings.push(String(line));
@@ -286,6 +287,32 @@ describe('withPaymentLock heartbeat', () => {
     const notLanding = warnings.filter((line) => line.includes('heartbeat is not landing'));
     expect(notLanding).toHaveLength(1); // once, not once per beat
     expect(notLanding[0]).toMatch(/EACCES[\s\S]*another payment may start alongside this one/);
+  });
+
+  // The other door to the same failure: the beat never gets as far as the write
+  // because the read before it keeps coming back null. Skipping is right, staying
+  // silent about it is not, since `at` freezes either way.
+  it('says so when the lock cannot be read at all', async () => {
+    const warnings: string[] = [];
+    const written = vi.spyOn(process.stderr, 'write').mockImplementation(((line: unknown) => {
+      warnings.push(String(line));
+      return true;
+    }) as typeof process.stderr.write);
+    try {
+      await withPaymentLock(
+        async () => {
+          fs.writeFileSync(PATHS.paymentLock, 'not json, so every read comes back null');
+          await new Promise((r) => setTimeout(r, 90));
+        },
+        { heartbeatMs: 20 }
+      );
+    } finally {
+      written.mockRestore();
+    }
+
+    const notLanding = warnings.filter((line) => line.includes('heartbeat is not landing'));
+    expect(notLanding).toHaveLength(1);
+    expect(notLanding[0]).toMatch(/the lock cannot be read/);
   });
 
   it('leaves no staging file behind', async () => {
@@ -389,6 +416,7 @@ describe('withPaymentLock heartbeat staging file', () => {
         const before = at();
         const until = Date.now() + 1_000;
         while (at() === before && Date.now() < until) await new Promise((r) => setTimeout(r, 2));
+        expect(at()).not.toBe(before); // otherwise the mode below is just the one we created
         mode = fs.statSync(PATHS.paymentLock).mode & 0o777;
       },
       { heartbeatMs: 10 }

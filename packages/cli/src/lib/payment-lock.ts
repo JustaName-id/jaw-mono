@@ -142,8 +142,8 @@ function isStale(lock: LockFile | null, staleAfterMs: number): boolean {
   if (!isAlive(lock.pid)) return true; // holder died without releasing
   // By type, not by presence: a `beatMs` that is not a number is not a promise
   // to beat, and erring long only delays a break that is already overdue.
-  const beats = typeof lock.beatMs === 'number';
-  const threshold = beats ? staleAfterMs : Math.max(staleAfterMs, LEGACY_STALE_AFTER_MS);
+  const beating = typeof lock.beatMs === 'number';
+  const threshold = beating ? staleAfterMs : Math.max(staleAfterMs, LEGACY_STALE_AFTER_MS);
   return Date.now() - lock.at > threshold; // alive but wedged past any real payment
 }
 
@@ -277,7 +277,7 @@ function beat(held: Held, staleAfterMs: number): boolean {
   // rest of the work and let a waiter break a live lock. Writing here would be
   // worse, since the file may already belong to a payer that just created it,
   // so skip this beat and keep the interval alive for the next one.
-  if (!current) return true;
+  if (!current) return missedBeat(held, 'the lock cannot be read');
   if (current.token !== held.lock.token) return false;
   // Already breakable: a payer that reads the lock right now is entitled to
   // unlink it and take the file. Beating would put our timestamp back over a
@@ -308,25 +308,35 @@ function beat(held: Held, staleAfterMs: number): boolean {
     } catch {
       /* nothing to clean up */
     }
-    held.missed += 1;
-    // Counted rather than swallowed: one miss is survivable and looks exactly
-    // like all of them from in here. A read-only or full home never lands a
-    // single beat, `at` freezes, and the next payer breaks a live lock with
-    // nothing anywhere saying why. The threshold allows three misses, so the
-    // second is the last point where saying so is still ahead of the failure,
-    // and once is enough since every later beat has the same thing to say.
-    //
     // Not retried in place over the lock: that write truncates first, so under
     // the one failure both paths share, no space left, it would tear a lock that
     // is otherwise intact and lose it in two seconds instead of ninety.
-    if (held.missed === 2) {
-      process.stderr.write(
-        `[jaw] warning: the payment lock heartbeat is not landing (${errorMessage(err)}); ` +
-          `another payment may start alongside this one\n`
-      );
-    }
-    return true;
+    return missedBeat(held, errorMessage(err));
   }
+}
+
+/**
+ * A beat that did not land, counted rather than swallowed.
+ *
+ * One miss is survivable and looks exactly like all of them from in here. A home
+ * that is full, read-only, or out of file descriptors never lands a single beat:
+ * `at` freezes and the next payer breaks a live lock with nothing anywhere
+ * saying why. The threshold allows three misses, so the second is the last point
+ * where saying so is still ahead of the failure, and once is enough since every
+ * later beat has the same thing to say.
+ *
+ * Always true: a beat that did not land is a reason to try the next one, not to
+ * give up the lock.
+ */
+function missedBeat(held: Held, why: string): boolean {
+  held.missed += 1;
+  if (held.missed === 2) {
+    process.stderr.write(
+      `[jaw] warning: the payment lock heartbeat is not landing (${why}); ` +
+        `another payment may start alongside this one\n`
+    );
+  }
+  return true;
 }
 
 /** Release only our own lock: if ours was broken as stale, the file is someone else's now. */
