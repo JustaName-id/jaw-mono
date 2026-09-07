@@ -53,4 +53,31 @@ describe('a spend row states what the whole permission can move', () => {
     );
     expect(html).not.toContain('up to');
   });
+
+  // The amount, its rate and its fiat figure sit in a row that does not wrap, where
+  // a full width is a flex basis and shrinks back onto one line. The total only gets
+  // the line it is written for by sitting outside that row.
+  it('sits outside the row the rate shrinks inside of', () => {
+    const html = markup(spend({ total: '300.00' }), 'Mar 3, 2027');
+    // The row's own closing tag falls between it and the total, which balances the
+    // tags either side. Were the total still a child, its opening tag would not be.
+    const between = html.slice(html.indexOf('ml-auto'), html.indexOf('up to'));
+    expect(between.match(/<span/g)?.length).toBe(between.match(/<\/span>/g)?.length);
+  });
+
+  // A token that won't answer decimals() leaves the amount unscaled, and the total
+  // is unscaled by the same factor: a millionfold for a six-decimal token. Wearing a
+  // symbol it would read as the token's own units.
+  it('qualifies an unscaled total instead of dressing it as the token', () => {
+    const html = markup(spend({ amount: '10000000', decimalsUnknown: true, total: '300000000' }), 'Mar 3, 2027');
+    expect(html).toContain('up to 300000000 base units');
+    expect(html).not.toContain('up to 300000000 USDC');
+  });
+
+  // A max-uint allowance times its windows is a 78-digit integer, and the dialog has
+  // no width for it.
+  it('lets a total that long wrap rather than push the dialog sideways', () => {
+    const html = markup(spend({ total: '1'.repeat(78) }));
+    expect(html).toMatch(/class="[^"]*break-all[^"]*"[^>]*>up to/);
+  });
 });

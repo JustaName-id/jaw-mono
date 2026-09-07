@@ -64,6 +64,9 @@ function SpendRow({
 }) {
   const isNative = isNativeToken(spend.tokenAddress);
   const symbol = isNative ? nativeSymbol : spend.token;
+  // A token whose symbol never resolved still has to be named on both lines that
+  // carry a figure, and a truncated address names it the same way in both.
+  const symbolLabel = symbol || getDisplayAddress(undefined, spend.tokenAddress);
   const rate = spendRate(spend.duration);
 
   // A raw base-units allowance runs to tens of digits (a max-uint cap is 78), which no dialog width
@@ -93,9 +96,7 @@ function SpendRow({
       ) : (
         <span className="flex min-w-0 flex-1 flex-col items-start">
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="text-foreground text-value truncate font-semibold">
-              {symbol || getDisplayAddress(undefined, spend.tokenAddress)}
-            </span>
+            <span className="text-foreground text-value truncate font-semibold">{symbolLabel}</span>
             {!isNative && <CopyButton value={spend.tokenAddress} size={11} label="Copy token address" />}
           </span>
           {spend.decimalsUnknown && <span className="text-code text-warning mt-1 font-mono">decimals unknown</span>}
@@ -120,15 +121,21 @@ function SpendRow({
           {spend.amountUsd && !spend.decimalsUnknown && (
             <span className="text-muted-foreground text-code ml-1 font-mono">${spend.amountUsd}</span>
           )}
-          {/* The rate is what the row led with; this is what approving it costs by the
-              time the permission expires. Its own line at full width, because it is
-              the larger number and the one a decision should rest on. */}
-          {spend.total && (
-            <span className="text-muted-foreground text-code w-full text-right font-mono">
-              up to {spend.total} {symbol}
-              {expiryDate ? ` by ${expiryDate}` : ''}
-            </span>
-          )}
+        </span>
+      )}
+      {/* The rate is what the row led with; this is what approving it costs by the time
+          the permission expires. A sibling of the amount block rather than a child of
+          it, because `w-full` inside that non-wrapping row is a flex basis and shrinks
+          back onto one line. Out here it gets the line it needs, which is the point:
+          it is the larger number and the one a decision should rest on.
+
+          A total scaled by unknown decimals would be wrong by the same factor the
+          amount is, so it carries the same `base units` qualifier rather than a token
+          symbol, and `break-all` for the tens of digits that then come with it. */}
+      {!isLoading && spend.total && (
+        <span className="text-muted-foreground text-code w-full break-all text-right font-mono">
+          up to {spend.total} {spend.decimalsUnknown ? 'base units' : symbolLabel}
+          {expiryDate ? ` by ${expiryDate}` : ''}
         </span>
       )}
     </div>
