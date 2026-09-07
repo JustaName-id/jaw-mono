@@ -114,6 +114,16 @@ export const DEFAULT_X402_POLICY: X402Policy = {
  * Every limit is carried, not reduced to one: the contract charges each of
  * them, so which refuses depends on the amount and the moment, and a single
  * pair cannot answer that.
+ *
+ * `ceilingFor` in `@jaw.id/core` (`account/spenderPrefund.ts`) reads the same
+ * spends under the same rule to size the grant's prefund, reduced to the
+ * tightest entry because it needs one number. A change to what the contract
+ * charges lands in both.
+ *
+ * An entry that cannot be read is skipped here rather than taking the whole
+ * policy down: the chain still charges that limit, so a pull past it reverts
+ * instead of overspending. Core refuses outright on the same input, which is
+ * what sizing a transfer calls for.
  */
 export function policyFromPermission(permission: GrantedPermission | undefined, chainId: number): X402Policy {
   if (!permission) return {};
