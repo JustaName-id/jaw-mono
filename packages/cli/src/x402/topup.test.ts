@@ -50,12 +50,19 @@ function payerHolding(initial: bigint) {
   let balance = initial;
   return {
     balanceReader: async () => balance,
-    /** Apply the `transfer(payer, amount)` calls a `wallet_sendCalls` carried. */
+    /**
+     * Apply the `transfer(payer, amount)` calls a `wallet_sendCalls` carried.
+     * Only the ones addressed to the payer: a refill sent to the wrong address
+     * moves the user's USDC and leaves the payer as empty as it was, and a
+     * harness that credits it anyway cannot tell those two apart.
+     */
     settle(params: unknown) {
       const batch = (params as [{ calls?: Array<{ data: `0x${string}` }> }])[0];
       for (const call of batch?.calls ?? []) {
         const decoded = decodeFunctionData({ abi: erc20Abi, data: call.data });
-        if (decoded.functionName === 'transfer') balance += decoded.args[1] as bigint;
+        if (decoded.functionName !== 'transfer') continue;
+        const [to, value] = decoded.args;
+        if (to.toLowerCase() === PAYER.toLowerCase()) balance += value;
       }
     },
   };
@@ -69,9 +76,14 @@ function fakeChain(
   const payer = payerHolding(initial);
   const wired = fakeExecutor({
     ...overrides,
+    // Settled only once the send succeeds. A `sendCalls` override that throws is
+    // a transfer that reverted, and crediting the payer first would make the one
+    // case the post-refill read must not be fooled by, nothing moved, the one
+    // case this harness cannot express.
     sendCalls: async (params) => {
+      const sent = overrides?.sendCalls ? await overrides.sendCalls(params) : { id: '0xbatch1', chainId: 84532 };
       payer.settle(params);
-      return overrides?.sendCalls ? overrides.sendCalls(params) : { id: '0xbatch1', chainId: 84532 };
+      return sent;
     },
   });
   return { ...wired, balanceReader: payer.balanceReader };
@@ -188,33 +200,35 @@ describe('ensurePayerFunds', () => {
     });
 
     expect(out.ok).toBe(false);
-    expect(out.reason).toContain('2050000 topped up');
+    // The figure the message names is the shortfall plus headroom for the fee,
+    // not the fee itself: naming it as the fee would send an operator to raise a
+    // cap that only looked short.
+    expect(out.reason).toContain('2010000 topped up: 2000000 short, plus 10000 of headroom');
     expect(requests).toHaveLength(0);
   });
 
-  // A cap landing exactly on one operation's cost used to pass this guard, and
-  // the clamp then cut the refill to it. The payment was left with 6% over a gas
-  // estimate measured once on one chain, and past that it was signed for more
-  // than the payer held, with the period allowance already spent on the transfer.
-  test('Given a cap that clears the shortfall by only one operation, When topping up, Then it refuses before the cap is drawn', async () => {
-    const { executor, requests, balanceReader } = fakeChain(0n);
-
-    const out = await ensurePayerFunds(requirement('2000000'), PAYER, executor, {
-      balanceReader,
-      maxTopUp: 2_010_000n, // the price plus exactly one operation at the old bar
-      ...instantly,
-    });
-
-    expect(out.ok).toBe(false);
-    expect(requests).toHaveLength(0);
-  });
-
-  test('Given a cap that clears the shortfall by the headroom, When topping up, Then the refill runs clamped to the cap', async () => {
+  // The bar stays at one operation because the fee is no longer predicted: the
+  // balance is read back once the refill lands. A wider bar would refuse this,
+  // and every cap would end its period with an unspendable tail.
+  test('Given a cap that clears the shortfall by exactly one operation, When topping up, Then the refill runs clamped to the cap', async () => {
     const { executor, balanceReader } = fakeChain(0n);
 
     const out = await ensurePayerFunds(requirement('2000000'), PAYER, executor, {
       balanceReader,
-      maxTopUp: 2_050_000n, // the price plus the headroom a clamped refill must leave
+      maxTopUp: 2_010_000n, // the price plus exactly one operation
+      ...instantly,
+    });
+
+    expect(out.ok).toBe(true);
+    expect(out.amount).toBe('2010000');
+  });
+
+  test('Given a cap between the price and the bar, When topping up, Then the refill runs clamped to the cap', async () => {
+    const { executor, balanceReader } = fakeChain(0n);
+
+    const out = await ensurePayerFunds(requirement('2000000'), PAYER, executor, {
+      balanceReader,
+      maxTopUp: 2_050_000n,
       ...instantly,
     });
 
@@ -230,11 +244,13 @@ describe('ensurePayerFunds', () => {
   // the price is refused before the payment is signed rather than after it fails.
   test('Given a refill that lands short of the price, When the balance is read back, Then it refuses before signing', async () => {
     const { executor, requests } = fakeExecutor();
+    let call = 0;
 
     const out = await ensurePayerFunds(requirement('2000000'), PAYER, executor, {
       // A chain that credits less than it was sent, which is what a fee larger
-      // than the headroom looks like from here.
-      balanceReader: async () => 1_999_999n,
+      // than the headroom looks like from here. It has to move: an unchanged
+      // balance is how replica lag reads, and the funder treats it as such.
+      balanceReader: async () => (++call === 1 ? 0n : 1_999_999n),
       ...instantly,
     });
 
@@ -244,6 +260,39 @@ describe('ensurePayerFunds', () => {
     expect(requests.some((r) => r.method === 'wallet_sendCalls')).toBe(true);
     expect(out.amount).toBeDefined();
     expect(out.batchId).toBeDefined();
+  });
+
+  // The bundler confirmed the transfer; the balance is read through a different
+  // provider. A replica a block behind still answers with the pre-refill figure,
+  // and refusing on it would burn the cap the refill just drew for a payment the
+  // funds are already there for.
+  test('Given the node has not caught up, When the balance reads unchanged, Then it warns and pays rather than refusing', async () => {
+    const { executor } = fakeExecutor();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const out = await ensurePayerFunds(requirement('2000000'), PAYER, executor, {
+      balanceReader: async () => 0n,
+      ...instantly,
+    });
+
+    expect(out.ok).toBe(true);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('unchanged from before it'));
+    warn.mockRestore();
+  });
+
+  test('Given the node catches up on a later poll, When the balance has moved, Then the short payer is refused', async () => {
+    const { executor } = fakeExecutor();
+    let call = 0;
+
+    const out = await ensurePayerFunds(requirement('2000000'), PAYER, executor, {
+      // 0 before the refill, still 0 on the first look back, then the transfer
+      // and its oversized fee both land.
+      balanceReader: async () => (++call <= 2 ? 0n : 1_999_999n),
+      ...instantly,
+    });
+
+    expect(out.ok).toBe(false);
+    expect(out.reason).toContain('after the refill');
   });
 
   test('Given the on-chain cap rejects the transfer, When topping up, Then it refuses with the on-chain reason and no payment proceeds', async () => {
@@ -261,6 +310,10 @@ describe('ensurePayerFunds', () => {
     expect(out.ok).toBe(false);
     expect(out.reason).toContain('top-up refused on-chain');
     expect(out.reason).toContain('spend limit exceeded');
+    // The revert moved nothing, and the post-refill read is only sound if the
+    // harness says so: a payer credited for a transfer that reverted would hide
+    // exactly the state that check exists to catch.
+    expect(await balanceReader()).toBe(0n);
   });
 
   test('Given the transaction fails after broadcast, When polling, Then it reports the cap/revoked explanation', async () => {
@@ -555,6 +608,46 @@ describe('Permit2 approval for upto', () => {
       permit2Allowance: 2n ** 256n - 1n,
     });
     expect(requests.some((r) => r.method === 'wallet_sendCalls')).toBe(false);
+  });
+
+  // No principal moved on this branch and no cap was drawn: the payer covered
+  // the price on its own and only the approval was sent. Sending the operator to
+  // the permission cap would be blaming the one thing that did not happen.
+  test('blames the approval, not the cap, when its gas leaves the payer short', async () => {
+    const { executor, opts } = approving(0n);
+    let call = 0;
+
+    const outcome = await ensurePayerFunds(uptoRequirement('1000000'), PAYER, executor, {
+      ...opts,
+      // Covers the price and the reserve, then the approval's gas takes it under.
+      balanceReader: async () => (++call === 1 ? 1_100_000n : 999_999n),
+    });
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.reason).toContain('after the Permit2 approval');
+    expect(outcome.reason).toContain('Retry the payment');
+    expect(outcome.reason).not.toContain('cap');
+    expect(outcome.approvalBatchId).toBe('0xapproval1');
+    // Nothing moved, so nothing may reach the ledger as topped up.
+    expect(outcome.amount).toBeUndefined();
+  });
+
+  test('warns about the approval rather than a refill when the balance cannot be re-read', async () => {
+    const { executor, opts } = approving(0n);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    let call = 0;
+
+    const outcome = await ensurePayerFunds(uptoRequirement('1000000'), PAYER, executor, {
+      ...opts,
+      balanceReader: async () => {
+        if (++call === 1) return 1_100_000n;
+        throw new Error('rpc down');
+      },
+    });
+
+    expect(outcome.ok).toBe(true);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('after the Permit2 approval'));
+    warn.mockRestore();
   });
 
   test('does not grant it again once the allowance covers the ceiling', async () => {

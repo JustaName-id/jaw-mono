@@ -37,33 +37,16 @@ export function gasReserve(asset: UsdcAsset): bigint {
  * the floor a session has to clear to be able to send anything at all, which is
  * a different question from `gasReserve`: that one decides how much to leave
  * behind, this one decides whether there is enough to act.
+ *
+ * It is also the bar a clamped refill has to clear, for the same reason: below
+ * one operation there is no amount worth pulling, because the transfer cannot
+ * pay for itself. Above it the fee is no longer predicted at all, since
+ * `ensurePayerFunds` reads the payer balance back once the refill lands and
+ * refuses there on whatever the fee turned out to be. Widening this bar past one
+ * operation only buys a guess the measurement already covers, and it costs the
+ * tail of every period cap: a cap holding the price and a cent is a payment that
+ * settles, and a wider bar refuses it with nothing moved.
  */
 export function firstOperationCost(asset: UsdcAsset): bigint {
   return 10n ** BigInt(asset.decimals) / 100n;
-}
-
-/**
- * Headroom a clamped refill has to leave for the fee it is about to be charged.
- *
- * `firstOperationCost` was the bar, and it is the wrong instrument for this
- * question: it is a cent, rounded up from one measurement on one chain, and the
- * refill guard sits exactly on it. A cap landing precisely at the bar passes,
- * the clamp then cuts the refill to that figure, and the payment is left with
- * 6% over a gas estimate. Past that the payment is signed for more than the
- * payer holds, and the transfer has already drawn the period allowance, so the
- * retry is short with no cap left to fix it.
- *
- * Derived from the reserve rather than written as a fourth literal, so a
- * re-measurement moves one number and the relationship survives it. Half is
- * 0.05, roughly five operations at the measured cost, and it is bounded above by
- * the reserve itself: a bar over 0.1 would refuse refills the unclamped path
- * already treats as fine. The multiple is a choice about how far a gas price can
- * run, not a measurement, and it is written here as one.
- *
- * It is the bar for refusing before anything moves. What decides whether the
- * payment can actually be made is the payer's balance after the refill lands,
- * which `ensurePayerFunds` reads rather than predicts.
- */
-export function topUpFeeHeadroom(asset: UsdcAsset): bigint {
-  return gasReserve(asset) / 2n;
 }
