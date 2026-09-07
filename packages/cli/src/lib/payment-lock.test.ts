@@ -207,20 +207,27 @@ describe('withPaymentLock heartbeat', () => {
   // heartbeat for the rest of the work, and 90s later a waiter breaks a lock
   // that is very much alive.
   it('keeps beating through a read that comes back empty', async () => {
-    await withPaymentLock(
-      async () => {
-        const mine = fs.readFileSync(PATHS.paymentLock, 'utf-8');
-        const before = JSON.parse(mine).at;
+    // The blip is long enough to reach the warning, so the spy is what keeps it
+    // out of the suite's output.
+    const written = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    try {
+      await withPaymentLock(
+        async () => {
+          const mine = fs.readFileSync(PATHS.paymentLock, 'utf-8');
+          const before = JSON.parse(mine).at;
 
-        fs.writeFileSync(PATHS.paymentLock, ''); // a beat lands on the blip
-        await new Promise((r) => setTimeout(r, 50));
-        fs.writeFileSync(PATHS.paymentLock, mine);
+          fs.writeFileSync(PATHS.paymentLock, ''); // beats land on the blip
+          await new Promise((r) => setTimeout(r, 50));
+          fs.writeFileSync(PATHS.paymentLock, mine);
 
-        await new Promise((r) => setTimeout(r, 60));
-        expect(JSON.parse(fs.readFileSync(PATHS.paymentLock, 'utf-8')).at).toBeGreaterThan(before);
-      },
-      { heartbeatMs: 20 }
-    );
+          await new Promise((r) => setTimeout(r, 60));
+          expect(JSON.parse(fs.readFileSync(PATHS.paymentLock, 'utf-8')).at).toBeGreaterThan(before);
+        },
+        { heartbeatMs: 20 }
+      );
+    } finally {
+      written.mockRestore();
+    }
   });
 
   // A beat that finds our own lock already past the threshold must not write it
