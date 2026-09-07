@@ -15,8 +15,13 @@ vi.mock('./paths.js', () => {
 const { withPaymentLock } = await import('./payment-lock.js');
 const { PATHS } = await import('./paths.js');
 
+// `beatMs` by default: this stands in for a holder on the current version, which
+// is the one the staleness threshold is written for. Omit it for a 0.2.0 holder.
 const writeLock = (o: Record<string, unknown>) =>
-  fs.writeFileSync(PATHS.paymentLock, JSON.stringify({ pid: process.pid, token: 'other', at: Date.now(), ...o }));
+  fs.writeFileSync(
+    PATHS.paymentLock,
+    JSON.stringify({ pid: process.pid, token: 'other', at: Date.now(), beatMs: 30_000, ...o })
+  );
 
 beforeEach(() => {
   if (fs.existsSync(TEST_ROOT)) fs.rmSync(TEST_ROOT, { recursive: true });
@@ -196,9 +201,125 @@ describe('withPaymentLock heartbeat', () => {
     );
   });
 
+  // `readLock` returns null for every failure, not just a foreign holder: EMFILE
+  // in a long-lived MCP server, a truncated file, the tick between another
+  // payer's `wx` and its write. Reading that as "someone took our lock" ends the
+  // heartbeat for the rest of the work, and 90s later a waiter breaks a lock
+  // that is very much alive.
+  it('keeps beating through a read that comes back empty', async () => {
+    await withPaymentLock(
+      async () => {
+        const mine = fs.readFileSync(PATHS.paymentLock, 'utf-8');
+        const before = JSON.parse(mine).at;
+
+        fs.writeFileSync(PATHS.paymentLock, ''); // a beat lands on the blip
+        await new Promise((r) => setTimeout(r, 50));
+        fs.writeFileSync(PATHS.paymentLock, mine);
+
+        await new Promise((r) => setTimeout(r, 60));
+        expect(JSON.parse(fs.readFileSync(PATHS.paymentLock, 'utf-8')).at).toBeGreaterThan(before);
+      },
+      { heartbeatMs: 20 }
+    );
+  });
+
+  // A beat that finds our own lock already past the threshold must not write it
+  // back: a payer reading the file at that moment is entitled to unlink it and
+  // take it, and our `release` would then delete theirs mid-payment.
+  it('stops beating once our own lock is old enough to be broken', async () => {
+    const aged = Date.now() - 500;
+    let observed = 0;
+    await withPaymentLock(
+      async () => {
+        const mine = JSON.parse(fs.readFileSync(PATHS.paymentLock, 'utf-8'));
+        fs.writeFileSync(PATHS.paymentLock, JSON.stringify({ ...mine, at: aged }));
+        await new Promise((r) => setTimeout(r, 80));
+        observed = JSON.parse(fs.readFileSync(PATHS.paymentLock, 'utf-8')).at;
+      },
+      { heartbeatMs: 20, staleAfterMs: 100 }
+    );
+    expect(observed).toBe(aged);
+  });
+
+  // `at` moves with every beat, so it can no longer say how long the payment has
+  // been running. A waiter that polled a beating holder for the full timeout used
+  // to be told the holder had been running for one interval, which also undercut
+  // the "remove the file if that process is gone" advice next to it.
+  it('reports how long the holder has really held it, not the last beat', async () => {
+    const holder = withPaymentLock(async () => new Promise((r) => setTimeout(r, 1_200)), { heartbeatMs: 20 });
+    await new Promise((r) => setTimeout(r, 500));
+
+    // Gives up ~800ms in, which rounds to 1s. The last beat is 20ms old.
+    await expect(withPaymentLock(async () => 'x', { timeoutMs: 300 })).rejects.toThrow(/running for [1-9]\d*s/);
+    await holder;
+  });
+
+  it('falls back to `at` for a holder that has no `startedAt`', async () => {
+    writeLock({ at: Date.now() - 8_000 });
+    await expect(withPaymentLock(async () => 'x', { timeoutMs: 100 })).rejects.toThrow(/running for 8s/);
+  });
+
+  // The catch used to swallow every failure and report the beat as landed, so a
+  // heartbeat that could never land looked exactly like one momentary miss. A
+  // read-only home is the reachable version: `at` freezes and the next payer
+  // breaks a live lock, with nothing anywhere saying why.
+  it('says so when the beats stop landing', async () => {
+    const warnings: string[] = [];
+    const written = vi.spyOn(process.stderr, 'write').mockImplementation(((line: unknown) => {
+      warnings.push(String(line));
+      return true;
+    }) as typeof process.stderr.write);
+    try {
+      await withPaymentLock(
+        async () => {
+          fs.chmodSync(TEST_ROOT, 0o500); // no new files in the directory
+          await new Promise((r) => setTimeout(r, 90));
+          fs.chmodSync(TEST_ROOT, 0o700);
+        },
+        { heartbeatMs: 20 }
+      );
+    } finally {
+      fs.chmodSync(TEST_ROOT, 0o700);
+      written.mockRestore();
+    }
+
+    const notLanding = warnings.filter((line) => line.includes('heartbeat is not landing'));
+    expect(notLanding).toHaveLength(1); // once, not once per beat
+    expect(notLanding[0]).toMatch(/EACCES[\s\S]*another payment may start alongside this one/);
+  });
+
   it('leaves no staging file behind', async () => {
     await withPaymentLock(async () => new Promise((r) => setTimeout(r, 80)), { heartbeatMs: 10 });
     expect(fs.readdirSync(TEST_ROOT)).toEqual([]);
+  });
+});
+
+// `@jaw.id/cli` is published and both versions run on one machine, so a lock
+// written by a holder that never beats has to keep the threshold it was written
+// under. Breaking it at 90s puts two payers against the same cap.
+describe('withPaymentLock, a holder from before the heartbeat', () => {
+  it('does not break a lock with no `beatMs` at the heartbeat threshold', async () => {
+    writeLock({ at: Date.now() - 100_000, beatMs: undefined });
+    await expect(withPaymentLock(async () => 'got in', { timeoutMs: 200 })).rejects.toThrow(/Another payment/);
+  });
+
+  it('still breaks one past the threshold its own version used', async () => {
+    writeLock({ at: Date.now() - 400_000, beatMs: undefined });
+    await expect(withPaymentLock(async () => 'ran', { timeoutMs: 500 })).resolves.toBe('ran');
+  });
+
+  it('reads a non-numeric `beatMs` as no promise to beat', async () => {
+    writeLock({ at: Date.now() - 100_000, beatMs: 'yes' });
+    await expect(withPaymentLock(async () => 'got in', { timeoutMs: 200 })).rejects.toThrow(/Another payment/);
+  });
+
+  // The floor is a floor: a caller asking for a shorter window does not get to
+  // apply it to a holder that was never going to refresh `at`.
+  it('ignores a shorter staleAfterMs for a lock with no `beatMs`', async () => {
+    writeLock({ at: Date.now() - 100_000, beatMs: undefined });
+    await expect(withPaymentLock(async () => 'got in', { timeoutMs: 200, staleAfterMs: 1_000 })).rejects.toThrow(
+      /Another payment/
+    );
   });
 });
 
@@ -250,6 +371,32 @@ describe('withPaymentLock heartbeat staging file', () => {
   // nothing in the CLI sweeps `~/.jaw`. Naming it by pid means the next payment
   // from the same process slot consumes the leftover instead of adding to it; a
   // token, fresh per acquisition, would leave one file per crash forever.
+  // `mode` applies only to a write that creates the file, so a leftover with a
+  // looser mode was written into and renamed over the lock, carrying its mode
+  // onto it. It is the FIRST beat that does it: the one after writes a staging
+  // file of its own and puts the mode back, which is why the creation test and
+  // any assertion made later both miss it. In production that leaves the lock
+  // world-readable for a heartbeat interval.
+  it('keeps the lock owner-only across the beat that consumes a leftover', async () => {
+    const staging = `${PATHS.paymentLock}.${process.pid}`;
+    fs.writeFileSync(staging, 'left over from a crash');
+    fs.chmodSync(staging, 0o644);
+
+    let mode = 0;
+    await withPaymentLock(
+      async () => {
+        const at = () => JSON.parse(fs.readFileSync(PATHS.paymentLock, 'utf-8')).at;
+        const before = at();
+        const until = Date.now() + 1_000;
+        while (at() === before && Date.now() < until) await new Promise((r) => setTimeout(r, 2));
+        mode = fs.statSync(PATHS.paymentLock).mode & 0o777;
+      },
+      { heartbeatMs: 10 }
+    );
+
+    expect(mode).toBe(0o600);
+  });
+
   it('consumes a staging file left behind by an earlier crash', async () => {
     const staging = `${PATHS.paymentLock}.${process.pid}`;
     fs.writeFileSync(staging, 'left over from a crash');
