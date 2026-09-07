@@ -194,12 +194,17 @@ function countsIn(entry: X402LogEntry, scope: SpendScope): boolean {
  * Sum settled and attempted payments in `scope` since an ISO instant (its whole
  * history when `since` is omitted).
  *
- * Reading it from the ledger rather than an in-memory counter is what makes a
- * cap survive a process restart, which an agent could otherwise relaunch its way
+ * Takes the entries instead of reading them, so a payment that counts several
+ * caps reads the file once. The caller takes its snapshot inside the payment
+ * lock, where nothing else can append, and every cap for that payment counts
+ * against the same rows.
+ *
+ * Counting from the ledger rather than an in-memory total is what makes a cap
+ * survive a process restart, which an agent could otherwise relaunch its way
  * past. What each row costs is `spendFigureOf`.
  */
-export function sumSpentSince(scope: SpendScope, since?: string): bigint {
-  return readX402Log().reduce((total, entry) => {
+export function sumSpentSince(entries: X402LogEntry[], scope: SpendScope, since?: string): bigint {
+  return entries.reduce((total, entry) => {
     if (!countsIn(entry, scope)) return total;
     if (since && entry.at < since) return total;
     return total + spendFigureOf(entry);
@@ -218,9 +223,11 @@ export function sumSpentSince(scope: SpendScope, since?: string): bigint {
  *
  * Every status counts, refusals included: the pull settled on-chain before the
  * payment it was for was ever attempted, so the allowance is gone either way.
+ *
+ * Takes the entries for the same reason `sumSpentSince` does.
  */
-export function sumToppedUpSince(scope: SpendScope, since?: string): bigint {
-  return readX402Log().reduce((total, entry) => {
+export function sumToppedUpSince(entries: X402LogEntry[], scope: SpendScope, since?: string): bigint {
+  return entries.reduce((total, entry) => {
     if (!entry.topUpAmount) return total;
     if (!countsIn(entry, scope)) return total;
     if (since && entry.at < since) return total;

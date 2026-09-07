@@ -4,7 +4,7 @@ import { loadConfig } from '../../lib/config.js';
 import { isLegacySession, liveOrphans, tryLoadSessionConfig } from '../../lib/session-config.js';
 import { sessionPayerAddress } from '../../x402/payer.js';
 import { usdcBalance } from '../../x402/balance.js';
-import { sumSpentSince } from '../../x402/ledger.js';
+import { readX402Log, sumSpentSince } from '../../x402/ledger.js';
 import { resolveSessionX402Policy, sameLimit } from '../../x402/policy.js';
 import { currentLimitUsageOnChain } from '../../x402/spend-window.js';
 import { describePeriod } from '../../x402/period.js';
@@ -96,10 +96,13 @@ export default class X402Status extends BaseCommand {
     // performed it, which is the run where it matters most.
     const policy = resolveSessionX402Policy(config.x402, current);
 
+    // One read for the whole report: the session total and every limit below
+    // are counted against the same rows.
+    const ledger = readX402Log();
     // The session total, so payer only. The per-period figures below come from
     // `currentLimitUsage`, which scopes to the permission because those mirror
     // the chain.
-    const spent = sumSpentSince({ payer }, session.createdAt);
+    const spent = sumSpentSince(ledger, { payer }, session.createdAt);
 
     const sessionCap = parseBigInt(policy.maxTotalPerSession);
     const decimals = asset?.decimals ?? 6;
@@ -110,7 +113,7 @@ export default class X402Status extends BaseCommand {
     // CLI's ledger never saw.
     // Every limit on the payment token, each with its own window and its own
     // usage. Reducing them to one was reporting a month's budget as a day's.
-    const usage = await currentLimitUsageOnChain(policy, payer, current);
+    const usage = await currentLimitUsageOnChain(ledger, policy, payer, current);
     // Joined onto the limits the policy holds, not read off the usage list. A
     // limit whose usage could not be computed is still enforced by
     // `checkPolicy`, and reporting only what has usage made it invisible here:

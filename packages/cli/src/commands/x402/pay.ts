@@ -5,7 +5,7 @@ import { tryLoadSessionConfig } from '../../lib/session-config.js';
 import { SessionBridge } from '../../lib/session-bridge.js';
 import { Eip3009EoaPayer } from '../../x402/payer.js';
 import { payAndFetch } from '../../x402/http.js';
-import { appendX402Log, sumSpentSince } from '../../x402/ledger.js';
+import { appendX402Log, readX402Log, sumSpentSince } from '../../x402/ledger.js';
 import { resolveSessionX402Policy, topUpCeiling } from '../../x402/policy.js';
 import { currentLimitUsageOnChain } from '../../x402/spend-window.js';
 import { ensurePayerFunds } from '../../x402/topup.js';
@@ -73,7 +73,6 @@ export default class X402Pay extends BaseCommand {
     // that adding a capability cannot reset it; scoping to the new permission
     // would hand back the same clean slate through the other door.
     const scope = { payer: payer.address };
-    const spent = sumSpentSince(scope, session?.createdAt);
 
     if (flags.pay && (!session || !config.apiKey)) {
       // Without a session there is no permission to pull through, so the payer
@@ -92,11 +91,14 @@ export default class X402Pay extends BaseCommand {
     // payer reads a total that does not yet include the payment just made, which
     // is the race the lock exists to close.
     const run = async () => {
-      const periodUsage = await currentLimitUsageOnChain(policy, payer.address, session);
-      // Re-read here, not before the lock: another process may have paid while
-      // we waited our turn, and a stale total waves through a payment the cap
-      // should have stopped. Same for the period window, which moves on its own.
-      const spentThisSession = flags.pay ? sumSpentSince(scope, session?.createdAt) : spent;
+      // One read for the whole payment, taken here and not before the lock:
+      // another process may have paid while we waited our turn, and a stale
+      // total waves through a payment the cap should have stopped. Nothing can
+      // append while we hold it, so the session total and every period window
+      // count against the same rows.
+      const ledger = readX402Log();
+      const periodUsage = await currentLimitUsageOnChain(ledger, policy, payer.address, session);
+      const spentThisSession = sumSpentSince(ledger, scope, session?.createdAt);
 
       // Only wired for a real payment: a dry run returns before the funding hook,
       // so building a bridge for it would open a connection nothing uses. Built
