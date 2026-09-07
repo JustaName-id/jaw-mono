@@ -106,11 +106,11 @@ export default class X402Status extends BaseCommand {
     // session enforces. Asked of the chain first, which knows about pulls this
     // CLI's ledger never saw.
     // Every limit on the payment token, each with its own window and its own
-    // usage. Reducing them to one was reporting a month's budget as a day's.
+    // usage. Reducing them to one reports a month's budget as a day's.
     const usage = await currentLimitUsageOnChain(policy, payer, current);
     // Joined onto the limits the policy holds, not read off the usage list. A
     // limit whose usage could not be computed is still enforced by
-    // `checkPolicy`, and reporting only what has usage made it invisible here:
+    // `checkPolicy`, and reporting only what has usage makes it invisible here:
     // no line, no json entry, and a `ready: true` for a session whose grant is
     // the thing bounding it.
     const limits = (policy.perPeriod ?? []).map((limit) => {
@@ -145,9 +145,8 @@ export default class X402Status extends BaseCommand {
       return best === null || left < best ? b : a;
     }, null);
 
-    // One verdict for both renderers. `ready` used to be its own expression and
-    // drifted from the warnings: a setup whose owner was empty printed a loud
-    // "the cap is not applying" and still reported ready:true to a script.
+    // One verdict for both renderers, so a setup that prints a loud "the cap is
+    // not applying" cannot also report ready:true to a script.
     const problems = diagnose({
       expired,
       liveness,
@@ -225,8 +224,8 @@ export default class X402Status extends BaseCommand {
       );
     }
     this.log(`  caps    ${formatUsdc(policy.maxAmountPerPayment, decimals)} per payment`);
-    // Every limit, each with its own window and reset. One of them used to
-    // stand for all, which is how a 100-a-month cap was reported as 50 a day.
+    // Every limit, each with its own window and reset: one of them standing for
+    // all reports a 100-a-month cap as 50 a day.
     for (const limit of limits) {
       const floor = limit.source === 'chain' ? '' : 'at least ';
       // A limit with no window is one whose usage could not be computed. It

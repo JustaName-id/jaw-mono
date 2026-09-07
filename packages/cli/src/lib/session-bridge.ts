@@ -72,8 +72,8 @@ function resolvePaymaster(
  * The one way the send still breaks once nothing is sponsored: the ERC-20
  * paymaster charges the account the userOp is sent from, and an account with no
  * USDC cannot be charged, so sizing its approval fails. Core's error names the
- * token and the chain and nothing about the account, which is what made this
- * hard to read the first time it happened.
+ * token and the chain and nothing about the account, which is what makes it hard
+ * to read.
  *
  * A session normally receives its gas in the grant, so an empty one means that
  * transfer did not happen: the wallet that approved the permission does not

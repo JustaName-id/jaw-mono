@@ -227,18 +227,15 @@ export function registerPayTool(server: McpServer): void {
         const payer = sessionPayerAddress();
         const session = tryLoadSessionConfig();
         // The payer's float lives where the session does: a top-up refuses to
-        // run on any other chain, so a default read off config answered for
-        // Base mainnet on a Base Sepolia session and reported a funded payer as
-        // empty.
+        // run on any other chain, so a network read off config answers for the
+        // wrong chain and reports a funded payer as empty.
         //
         // With no session there is nothing to default to, and this tool's own
-        // description says it needs one. The fallback that used to sit here
-        // walked `allowedNetworks` and then Base, which reads a payment
-        // allowlist as if it named a home chain, and that reading is what
-        // produced the Base answer in the first place. So it refuses and says
-        // which two ways forward exist. An explicit `network` still answers,
-        // which is what a key still holding a balance after its session went
-        // away needs.
+        // description says it needs one, so it refuses and says which two ways
+        // forward exist. Falling back to `allowedNetworks` would read a payment
+        // allowlist as if it named a home chain. An explicit `network` still
+        // answers, which is what a key still holding a balance after its session
+        // went away needs.
         const network = params.network ?? (session ? `eip155:${session.chainId}` : undefined);
         if (!network) {
           throw new Error(
