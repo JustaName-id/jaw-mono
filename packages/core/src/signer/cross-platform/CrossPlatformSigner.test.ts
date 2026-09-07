@@ -492,6 +492,21 @@ describe('CrossPlatformSigner', () => {
         // because a method missing from the routing switch fails as a 4200
         // unsupportedMethod rather than as a visible bug.
         it('routes wallet_addFunds to the popup and resolves what the popup returns', async () => {
+            // Base configured, the way a dapp asking for Base would have it:
+            // `validateSigningRequest` refuses a chainId the wallet does not
+            // carry, and this file's default mock has `chains: []`.
+            vi.spyOn(store, 'getState').mockReturnValue({
+                account: {
+                    accounts: ['0x1234567890123456789012345678901234567890'],
+                    chain: { id: 8453 },
+                    capabilities: undefined,
+                },
+                chains: [{ id: 8453, rpcUrl: 'https://base-mainnet.rpc.com' }],
+                config: { metadata: mockMetadata, version: '1.0.0' },
+                keys: {},
+                callStatuses: {},
+            } as never);
+
             const request: RequestArguments = { method: 'wallet_addFunds', params: [{ chainId: 8453 }] };
 
             mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue({
@@ -516,6 +531,21 @@ describe('CrossPlatformSigner', () => {
         // dapp-supplied `address` surviving this would be the whole point of
         // `resolveDestination` defeated, and nothing else pins it.
         it('forwards only the normalized envelope for wallet_addFunds, dropping a dapp-supplied address', async () => {
+            // Base configured, the way a dapp asking for Base would have it:
+            // `validateSigningRequest` refuses a chainId the wallet does not
+            // carry, and this file's default mock has `chains: []`.
+            vi.spyOn(store, 'getState').mockReturnValue({
+                account: {
+                    accounts: ['0x1234567890123456789012345678901234567890'],
+                    chain: { id: 8453 },
+                    capabilities: undefined,
+                },
+                chains: [{ id: 8453, rpcUrl: 'https://base-mainnet.rpc.com' }],
+                config: { metadata: mockMetadata, version: '1.0.0' },
+                keys: {},
+                callStatuses: {},
+            } as never);
+
             mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue({
                 id: mockMessageId,
                 requestId: mockMessageId,
@@ -537,6 +567,17 @@ describe('CrossPlatformSigner', () => {
             expect(sent.action.method).toBe('wallet_addFunds');
             // Decimal in, hex out, and nothing else carried over.
             expect(sent.action.params).toEqual([{ chainId: '0x2105' }]);
+        });
+
+        // `optionalChainId` only proves the shape. Without this the QR pinned a
+        // chain the wallet knows nothing about and where the account is not
+        // deployed, while wallet_sendCalls refused the same value.
+        it('refuses an unconfigured chainId before the popup opens', async () => {
+            await expect(signer.request({ method: 'wallet_addFunds', params: [{ chainId: 1337 }] })).rejects.toThrow(
+                /Chain 1337 is not configured/
+            );
+
+            expect(mockCommunicator.postRequestAndWaitForResponse).not.toHaveBeenCalled();
         });
 
         // Closing the popup window rejects every in-flight request with 4001

@@ -447,12 +447,23 @@ export class AppSpecificSigner extends JAWSigner {
                     },
                 };
 
-                // Deposits land off-app, so closing the screen is the normal
-                // finish and there is no outcome to report. Unlike the signing
-                // cases this does not throw on a non-approval: a rejection here
-                // would tell the dapp the user refused something they were never
-                // asked to approve.
-                await this.uiHandler.request(uiRequest);
+                const response = await this.uiHandler.request(uiRequest);
+
+                // Checked like every sibling, because a non-approval here is not
+                // always a rejection: `ReactUIHandler.handleReject` *resolves*
+                // with `{ approved: false }`, and its error boundary routes a
+                // render crash through it. Discarding the response reported
+                // "screen shown and closed" for a screen that never rendered.
+                //
+                // A dismissal still reaches the dapp as null: the wrapper's Done
+                // path approves with null, and a bare rejection carries 4001,
+                // which `dispatchAddFundsRequest` maps back to null. A crash
+                // carries no code, so it surfaces.
+                if (!response.approved) {
+                    throw response.error || UIError.userRejected();
+                }
+
+                // Deposits land off-app, so there is no outcome to report.
                 return null;
             }
 

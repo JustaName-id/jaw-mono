@@ -614,7 +614,10 @@ describe('AppSpecificSigner', () => {
             });
 
             it('opens the receive screen for the session account', async () => {
-                const result = await signer.request({ method: 'wallet_addFunds', params: [{ chainId: 8453 }] });
+                // Chain 1 because this file's store mock configures 1 and
+                // 11155111: `validateSigningRequest` refuses a chainId the
+                // wallet does not carry.
+                const result = await signer.request({ method: 'wallet_addFunds', params: [{ chainId: 1 }] });
 
                 expect(result).toBeNull();
                 expect(mockUIHandler.request).toHaveBeenCalledWith(
@@ -622,7 +625,7 @@ describe('AppSpecificSigner', () => {
                         type: 'wallet_addFunds',
                         data: expect.objectContaining({
                             address: ACCOUNT,
-                            chainId: 8453,
+                            chainId: 1,
                         }),
                     })
                 );
@@ -649,12 +652,27 @@ describe('AppSpecificSigner', () => {
                 );
             });
 
-            // Deposits land off-app, so a close is the normal finish. Throwing
-            // here would report a rejection of something never asked for.
+            // Deposits land off-app, so a close is the normal finish. The
+            // handler throws 4001 like its siblings and `dispatchAddFundsRequest`
+            // maps it back to null, so the dapp still sees a plain finish.
             it('resolves null when the user closes without approving', async () => {
                 (mockUIHandler.request as Mock).mockResolvedValue({ id: 'r', approved: false });
 
                 await expect(signer.request({ method: 'wallet_addFunds' })).resolves.toBeNull();
+            });
+
+            // `ReactUIHandler.handleReject` RESOLVES with `{ approved: false }`,
+            // and its error boundary routes a render crash through it. Discarding
+            // the response told the dapp "screen shown and closed" for a screen
+            // that never rendered. A crash carries no 4001, so it must surface.
+            it('surfaces a dialog crash instead of reporting a finish', async () => {
+                (mockUIHandler.request as Mock).mockResolvedValue({
+                    id: 'r',
+                    approved: false,
+                    error: new Error('The wallet could not display this request: boom'),
+                });
+
+                await expect(signer.request({ method: 'wallet_addFunds' })).rejects.toThrow(/could not display/);
             });
 
             it('refuses a malformed chainId before any screen opens', async () => {

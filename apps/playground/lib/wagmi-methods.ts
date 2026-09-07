@@ -5,6 +5,21 @@
 
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
 
+/**
+ * Chains for a parameter that names ONE chain, where omitting it falls back to
+ * the connected chain. Distinct from `CHAIN_FILTER_OPTIONS`, whose "All chains"
+ * sentinel is right for a query filter (useGetAssets) and wrong here: the label
+ * would promise every chain for a QR that pins exactly one. Mirrors
+ * `CHAIN_OPTIONS` in rpc-methods.ts, which the same method already uses.
+ */
+export const CHAIN_DEFAULT_OPTIONS = [
+  { label: 'Default (current chain)', value: 'default' },
+  ...SUPPORTED_CHAINS.map((chain) => ({
+    label: `${chain.name} (${chain.id})`,
+    value: `0x${chain.id.toString(16)}`,
+  })),
+];
+
 export const CHAIN_FILTER_OPTIONS = [
   { label: 'All chains', value: 'all' },
   ...SUPPORTED_CHAINS.map((chain) => ({
@@ -139,13 +154,13 @@ export const WAGMI_METHODS: WagmiMethod[] = [
         label: 'Chain',
         description: 'Chain the QR pins via EIP-681. Defaults to the connected chain.',
         required: false,
-        defaultValue: 'all',
-        options: CHAIN_FILTER_OPTIONS,
+        defaultValue: 'default',
+        options: CHAIN_DEFAULT_OPTIONS,
       },
     ],
     getCodeSnippet: (params) => {
       const args: string[] = [];
-      if (params.chainId && params.chainId !== 'all') args.push(`chainId: ${parseInt(params.chainId, 16)}`);
+      if (params.chainId && params.chainId !== 'default') args.push(`chainId: ${parseInt(params.chainId, 16)}`);
       return `const { mutateAsync: addFunds } = useAddFunds();
 
 // Resolves null when the user closes the screen.
@@ -153,7 +168,7 @@ await addFunds({${args.length ? ` ${args.join(', ')} ` : ''}});`;
     },
     buildParams: (params) => {
       const built: Record<string, unknown> = {};
-      if (params.chainId && params.chainId !== 'all') built.chainId = parseInt(params.chainId, 16);
+      if (params.chainId && params.chainId !== 'default') built.chainId = parseInt(params.chainId, 16);
       return built;
     },
   },

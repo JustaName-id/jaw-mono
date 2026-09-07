@@ -1,7 +1,7 @@
 'use client';
 
 import { AddFundsDialog } from '@jaw.id/ui';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { isAddress } from 'viem';
 import {
   type Chain,
@@ -11,6 +11,7 @@ import {
   ensureIntNumber,
   normalizeAddFundsParams,
   resolveDestination,
+  standardErrorCodes,
   type Address,
 } from '@jaw.id/core';
 import { useAuth } from '../../hooks';
@@ -25,6 +26,8 @@ export interface AddFundsModalProps {
   appLogoUrl?: string;
   /** The user is done. Deposits land off-app, so this resolves the request with null. */
   onDone?: () => void;
+  /** The screen cannot be shown at all, so the dapp gets an error instead of nothing. */
+  onError?: (error: Error, errorCode?: number) => void;
 }
 
 /**
@@ -35,8 +38,20 @@ export interface AddFundsModalProps {
  * `useAuth`, not `useSessionAccount`: that one reads the same address and then
  * restores the smart account over RPC, which this screen never uses.
  */
-export const AddFundsModal = ({ params, chain, apiKey, origin, appName, appLogoUrl, onDone }: AddFundsModalProps) => {
-  const { walletAddress } = useAuth({ origin });
+export const AddFundsModal = ({
+  params,
+  chain,
+  apiKey,
+  origin,
+  appName,
+  appLogoUrl,
+  onDone,
+  onError,
+}: AddFundsModalProps) => {
+  // `isLoading` matters: this is a react-query hook with `staleTime: 0`, so the
+  // first render has no data and `walletAddress` is null before the session has
+  // even been read.
+  const { walletAddress, isLoading } = useAuth({ origin });
 
   // Validated in the popup as well as in the SDK. The popup is reachable by
   // anything that can post to it, so it cannot assume the params already passed
@@ -76,6 +91,32 @@ export const AddFundsModal = ({ params, chain, apiKey, origin, appName, appLogoU
   // value through and render a QR code pointing at nothing. `strict: false`
   // accepts a non-checksummed address, which is a legitimate way to hold one.
   const sessionAccount = walletAddress && isAddress(walletAddress, { strict: false }) ? walletAddress : null;
+
+  // Rendering nothing would answer nobody: the flow lock stays held and the dapp
+  // waits on a blank popup until the window is closed. The page's own backstop
+  // for this shape is gated on CONNECT, so it does not cover us. In an effect,
+  // not in the render that discovers it, because onReject posts to the SDK and
+  // clears state — the same reason page.tsx does it that way.
+  //
+  // Two guards, both load-bearing:
+  //
+  // `isLoading` — without it this fires on the very first render, when the auth
+  // query has no data yet, and answers -32603 for every request instead of the
+  // malformed-address case it is for. It only looked safe because the page holds
+  // the same query key, so the cache is usually warm by the time we mount; a
+  // different `origin` string would be a fresh query and a null first render.
+  //
+  // `reportedRef` — `onError` is an inline arrow in RequestModals, so it has a
+  // new identity on every render. Without the latch each re-render with no
+  // address posts another rejection for one request.
+  const reportedRef = useRef(false);
+  useEffect(() => {
+    if (isLoading || sessionAccount || reportedRef.current) return;
+    reportedRef.current = true;
+    console.error('❌ Add funds screen reached with no usable wallet address');
+    onError?.(new Error('Internal error: wallet address not available'), standardErrorCodes.rpc.internal);
+  }, [isLoading, sessionAccount, onError]);
+
   if (!sessionAccount) return null;
 
   return (

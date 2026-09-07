@@ -137,9 +137,18 @@ export abstract class JAWSigner implements Signer {
      * request when the window dies. Without this, closing the popup window gave
      * the dapp an error while pressing Done gave it null, for the same intent.
      *
-     * Scoped to the request deliberately. The connect handshake runs before
-     * this in `JAWProvider`, so closing the popup mid-ceremony is still the
-     * rejection it actually is.
+     * Scoped to the request, which covers less than it sounds. `JAWProvider`
+     * runs `handshake({ method: 'handshake' })` first, but in CrossPlatform that
+     * is the DH key exchange only — the account ceremony happens inside THIS
+     * request, because an unconnected origin resolves to the sign-in screen
+     * (`selectScreen` returns `onboarding` when `isAuthenticated` is false). So
+     * a user who abandons sign-in and closes the popup also lands here and gets
+     * null, reported as a finish for a flow that never showed an address.
+     *
+     * Left as-is because `ReturnType` is literally `null`: there is nothing for
+     * a dapp to branch on, so the wrong answer costs nothing today. Telling the
+     * two apart needs a signal that the receive screen actually went up, which
+     * the SDK side cannot see.
      */
     private async dispatchAddFundsRequest(request: RequestArguments): Promise<unknown> {
         try {
@@ -186,8 +195,32 @@ export abstract class JAWSigner implements Signer {
             // alone left CrossPlatform unchecked: it has no per-method case of
             // its own, so a bad value reached keys, where it was swallowed and
             // the screen opened on the connected chain instead.
-            case 'wallet_addFunds':
-                return { method: 'wallet_addFunds', params: normalizeAddFundsParams(request.params) };
+            case 'wallet_addFunds': {
+                const addFunds = normalizeAddFundsParams(request.params);
+
+                // `optionalChainId` only proves "positive integer or hex", and
+                // nothing downstream checks the value: addFunds is absent from
+                // CrossPlatformSigner.resolveChainFromRequest, so `resolveChain`
+                // and its 5710 are never reached, and AppSpecific just converts
+                // it. `{ chainId: 1337 }` therefore drew a screen headed
+                // "Chain 1337" with a QR encoding `@1337` — a chain the wallet
+                // knows nothing about and where the account is not deployed —
+                // while wallet_sendCalls refuses the same value.
+                //
+                // Same check and same message as wallet_switchEthereumChain, so
+                // an unconfigured chain reads identically wherever it is asked for.
+                if (addFunds.chainId !== undefined) {
+                    const chainId = ensureIntNumber(addFunds.chainId);
+                    const configured = (store.getState().chains ?? []).some((c) => c.id === chainId);
+                    if (!configured) {
+                        throw standardErrors.provider.unsupportedChain(
+                            `Chain ${chainId} is not configured. If this is a testnet, set preference.showTestnets to true.`
+                        );
+                    }
+                }
+
+                return { method: 'wallet_addFunds', params: addFunds };
+            }
 
             default:
                 return undefined;

@@ -397,20 +397,36 @@ export function RequestModals({
         origin={pendingRequest.origin}
         appName={pendingRequest.metadata?.appName}
         appLogoUrl={pendingRequest.metadata?.appLogoUrl}
-        // No onError and no rejection path: nothing here can fail and nothing
-        // was asked for approval. Deposits land off-app, so the user closing is
-        // the normal finish and the dapp gets null.
+        // The only failure this screen has: it cannot show an address at all.
+        // Everything else is a plain finish, since nothing was asked for approval.
+        onError={async (error, errorCode) => {
+          try {
+            await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.rpc.internal);
+          } catch (err) {
+            console.error('❌ Failed to reject add funds:', err);
+          }
+          communicator.requestClose();
+        }}
         onDone={async () => {
           try {
             await pendingRequest.onApprove(null);
             debugLog('✅ Add funds screen closed');
+            // `scheduleClose`, not a bare `requestClose`: it is the only close
+            // that also runs `clearScreen`. `onApprove` already released the
+            // flow lock, so the DialogVisibility backstop is gated off and the
+            // shell-X path is not taken — nothing else would clear this. The
+            // receive screen stayed mounted and flashed for a frame on the next
+            // request, which is what `clearScreen` exists to prevent.
+            //
+            // No delivered-tick beat though: nothing was signed, so a success
+            // flourish would claim something happened. Pressing Done is the
+            // whole outcome, and 'done' is what makes the screen terminal.
+            setPhase('done');
+            scheduleClose(closeDelayMs);
           } catch (err) {
             console.error('❌ Failed to resolve add funds:', err);
+            communicator.requestClose();
           }
-          // Closes either way, and with no delivered-tick beat: nothing was
-          // signed, so a success flourish would be claiming something happened.
-          // The user pressed Done, which is the whole outcome.
-          communicator.requestClose();
         }}
       />
     );

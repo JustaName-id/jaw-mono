@@ -8,7 +8,8 @@ import { CopyButton } from '../CopyButton';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { QrCode } from './QrCode';
 import { ChainStack } from './ChainStack';
-import { useChainIconURI } from '../../hooks';
+import { ChainIcon } from './ChainIcon';
+import { useChainIcons } from '../../hooks/useChainIcons';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
 import { eip681Uri } from '../../utils/eip681';
 import { isSafeImageUrl } from '../../utils/safeUrl';
@@ -34,9 +35,14 @@ export const AddFundsDialog = ({
   origin,
   onDone,
 }: AddFundsDialogProps) => {
-  const activeChain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
-  const chainName = activeChain?.name ?? `Chain ${chainId}`;
-  const chainIcon = useChainIconURI(chainId, apiKey, 24);
+  const chainName = SUPPORTED_CHAINS.find((c) => c.id === chainId)?.name ?? `Chain ${chainId}`;
+
+  // The same all-chain fetch the stack uses, so the header badge costs nothing.
+  // `useChainIconURI` asks for one chain, and the capabilities cache keys on the
+  // params, so it never shared the stack's entry: opening the screen cost two
+  // round trips where one carries every icon.
+  const icons = useChainIcons(apiKey);
+  const chainIcon = <ChainIcon icon={icons[chainId]} size={24} />;
 
   // The address renders immediately and the name replaces it if it resolves.
   // Never gated on resolution: a slow or failing lookup must not hold up the
