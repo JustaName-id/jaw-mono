@@ -53,6 +53,7 @@ import {
   X402_SCALAR_KEYS,
   resolveSessionX402Policy,
   topUpCeiling,
+  tightestLimit,
 } from './policy.js';
 import { USDC_BY_NETWORK } from './asset-registry.js';
 import type { X402PaymentRequirement } from './types.js';
@@ -315,6 +316,24 @@ describe('policyFromPermission', () => {
     );
   });
 
+  /**
+   * The permission reaches here off `loadSessionConfig`, which parses the file
+   * and casts: `parseGrantedPermission` runs when a session is written, not when
+   * one is read. So a hand-edited token carries whatever space someone left, and
+   * dropping the entry over it deletes the grant's cap and drops the session
+   * back to the defaults. `isSameToken` in `@jaw.id/core` reads the same field
+   * the same way for the prefund.
+   */
+  it('matches a token the session file left space around', () => {
+    const policy = policyFromPermission(
+      permissionWith([{ allowance: '5000000', unit: 'day', token: ` ${BASE_USDC} ` }]),
+      BASE
+    );
+    expect(policy.perPeriod).toEqual([
+      { allowance: '5000000', unit: 'day', multiplier: 1, anchor: '2026-01-01T00:00:00.000Z' },
+    ]);
+  });
+
   it('returns an empty policy on a chain with no registry USDC', () => {
     expect(policyFromPermission(permissionWith([{ allowance: '5000000', unit: 'day' }]), 1)).toEqual({});
   });
@@ -440,6 +459,33 @@ describe('topUpCeiling', () => {
     expect(topUpCeiling({ perPeriod: [limit('abc')], maxTotalPerSession: '2000000' })).toBe(0n);
     expect(topUpCeiling({ perPeriod: [limit('-1')], maxTotalPerSession: '2000000' })).toBe(0n);
     expect(topUpCeiling({ perPeriod: [limit('abc')] })).toBe(0n);
+  });
+});
+
+describe('tightestLimit', () => {
+  /**
+   * Sizing a top-up and reporting the verdict ask the same question, and each
+   * used to answer it with its own reduction: `jaw x402 status` said ready for a
+   * session whose month was drained because today's counter was at zero.
+   */
+  it('takes the limit with the least room left, not the smallest allowance', () => {
+    const day = limit('1000000');
+    const month = limit('100000000', 'month');
+    expect(tightestLimit([day, month], [usage('100000000', 99_500_000n, 'month')])).toBe(month);
+  });
+
+  /**
+   * `checkPolicy` refuses every payment on an allowance it cannot read, so a
+   * limit that ranked out of this reported the next one's healthy figure for a
+   * session where nothing could go through.
+   */
+  it('counts an unreadable allowance as no room rather than dropping it', () => {
+    const unreadable = limit('abc');
+    expect(tightestLimit([limit('1000000'), unreadable])).toBe(unreadable);
+  });
+
+  it('has nothing to report when the policy holds no limit', () => {
+    expect(tightestLimit([])).toBeNull();
   });
 });
 

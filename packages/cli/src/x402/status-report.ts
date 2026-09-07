@@ -154,6 +154,16 @@ export function diagnose(facts: StatusFacts): string[] {
     );
   }
 
+  // A limit that binds and cannot be read. `checkPolicy` refuses every payment
+  // on that input, so a session reported ready over it sent an agent to a
+  // command that was never going to pay.
+  if (facts.periodLabel != null && facts.periodCap === null) {
+    problems.push(
+      `The granted allowance for this ${facts.periodLabel} cannot be read, so every payment is refused. ` +
+        'Run `jaw session setup --x402` to grant a new permission.'
+    );
+  }
+
   if (facts.sessionCap !== null && facts.spent >= facts.sessionCap) {
     problems.push(
       'The session cap is used up. Raise it with `jaw config set x402.maxTotalPerSession <base units>` ' +
