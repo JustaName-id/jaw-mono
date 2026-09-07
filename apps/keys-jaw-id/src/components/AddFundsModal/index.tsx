@@ -13,7 +13,7 @@ import {
   resolveDestination,
   type Address,
 } from '@jaw.id/core';
-import { useSessionAccount } from '../../hooks';
+import { useAuth } from '../../hooks';
 
 export interface AddFundsModalProps {
   /** The dapp's raw params, validated here before anything renders. */
@@ -30,13 +30,13 @@ export interface AddFundsModalProps {
 /**
  * The CrossPlatform host for `wallet_addFunds`.
  *
- * Needs the connected smart-account address to show, but no signature, so it
- * only reads `walletAddress` off the session. Nothing here can be supplied by
- * the dapp: the destination comes from the session through `resolveDestination`,
- * and the chain stack is derived inside the dialog rather than passed in.
+ * Needs the connected smart-account address to show, but no signature.
+ *
+ * `useAuth`, not `useSessionAccount`: that one reads the same address and then
+ * restores the smart account over RPC, which this screen never uses.
  */
 export const AddFundsModal = ({ params, chain, apiKey, origin, appName, appLogoUrl, onDone }: AddFundsModalProps) => {
-  const { walletAddress } = useSessionAccount({ origin, chain, apiKey });
+  const { walletAddress } = useAuth({ origin });
 
   // Validated in the popup as well as in the SDK. The popup is reachable by
   // anything that can post to it, so it cannot assume the params already passed

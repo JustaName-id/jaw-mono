@@ -10,6 +10,7 @@ import { fetchRPCRequest } from '../../utils/index.js';
 import { correlationIds } from '../../store/correlation-ids/store.js';
 import { getCallStatus, getCallStatusEIP5792 } from '../../rpc/wallet_sendCalls.js';
 import { RECONNECT_REQUIRED } from '../../messages/index.js';
+import { standardErrors, standardErrorCodes } from '../../errors/index.js';
 
 // Mock dependencies
 vi.mock('../../communicator/index.js', () => ({
@@ -507,6 +508,63 @@ describe('CrossPlatformSigner', () => {
 
             await expect(signer.request(request)).resolves.toBeNull();
             expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
+        });
+
+        // The dapp's raw envelope must not cross to keys: `validateSigningRequest`
+        // normalizes addFunds now, and `handleSigningRequest` forwards the
+        // normalized params, so unknown keys are dropped at the boundary. A
+        // dapp-supplied `address` surviving this would be the whole point of
+        // `resolveDestination` defeated, and nothing else pins it.
+        it('forwards only the normalized envelope for wallet_addFunds, dropping a dapp-supplied address', async () => {
+            mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue({
+                id: mockMessageId,
+                requestId: mockMessageId,
+                correlationId: mockCorrelationId,
+                sender: 'peer-public-key-hex',
+                content: { encrypted: mockEncryptedData },
+                timestamp: new Date(),
+            } as RPCResponseMessage);
+            (decryptContent as Mock).mockResolvedValue({ result: { value: null } } as RPCResponse);
+
+            await signer.request({
+                method: 'wallet_addFunds',
+                params: [{ chainId: 8453, address: '0x9999999999999999999999999999999999999999' }],
+            });
+
+            const sent = (encryptContent as Mock).mock.calls.at(-1)?.[0] as {
+                action: { method: string; params: unknown[] };
+            };
+            expect(sent.action.method).toBe('wallet_addFunds');
+            // Decimal in, hex out, and nothing else carried over.
+            expect(sent.action.params).toEqual([{ chainId: '0x2105' }]);
+        });
+
+        // Closing the popup window rejects every in-flight request with 4001
+        // (Communicator.awaitResponseOrClosed). addFunds has no reject action at
+        // all — keys never calls onReject for it — so that 4001 is the window
+        // dying, not a refusal, and the dapp should see the same null a Done
+        // press gives rather than an error for the same intent.
+        it('resolves null when the popup window closes during wallet_addFunds', async () => {
+            mockCommunicator.postRequestAndWaitForResponse.mockRejectedValue(
+                standardErrors.provider.userRejectedRequest('Request rejected')
+            );
+
+            await expect(signer.request({ method: 'wallet_addFunds' })).resolves.toBeNull();
+        });
+
+        // The same 4001 on a method that does have a reject action still throws,
+        // so the mapping above is scoped rather than a blanket swallow.
+        it('still rejects a signing method when the popup window closes', async () => {
+            mockCommunicator.postRequestAndWaitForResponse.mockRejectedValue(
+                standardErrors.provider.userRejectedRequest('Request rejected')
+            );
+
+            await expect(
+                signer.request({
+                    method: 'personal_sign',
+                    params: ['0x48656c6c6f', '0x1234567890123456789012345678901234567890'],
+                })
+            ).rejects.toMatchObject({ code: standardErrorCodes.provider.userRejectedRequest });
         });
 
         it('should make eth_sendTransaction request to popup', async () => {

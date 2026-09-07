@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { MAINNET_CHAINS, SUPPORTED_CHAINS } from '@jaw.id/core';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { useChainIcons } from '../../hooks/useChainIcons';
 import { ChainIcon } from './ChainIcon';
 
 /**
@@ -44,6 +45,10 @@ export interface ChainStackProps {
  * one chain, so anything plumbed through produced a stack of one there.
  */
 export function ChainStack({ activeChainId, apiKey }: ChainStackProps) {
+  // One request for every icon. Per-chain fetching here meant 14 round trips on
+  // open, one per mainnet, because the capabilities cache keys on the params.
+  const icons = useChainIcons(apiKey);
+
   const ordered = useMemo(() => {
     const mainnets = MAINNET_CHAINS.map((c) => c.id);
 
@@ -85,7 +90,7 @@ export function ChainStack({ activeChainId, apiKey }: ChainStackProps) {
               // stack: the alternative is no overlap at all.
               style={{ marginLeft: i === 0 ? 0 : -(ICON - STEP), zIndex: shown.length - i }}
             >
-              <ChainIcon chainId={id} apiKey={apiKey} size={ICON} />
+              <ChainIcon icon={icons[id]} size={ICON} />
             </span>
           </TooltipTrigger>
           <TooltipContent>{chainName(id)}</TooltipContent>

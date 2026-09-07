@@ -75,8 +75,18 @@ export const AddFundsDialog = ({
                 mode (light modules on a dark plate), which is out of spec: the
                 format expects dark on light and plenty of scanners refuse the
                 inverse. `text-black` sets the currentColor the modules paint
-                with, so the code stays standard whatever the surface does. */}
-            <div className="rounded-card border-border border bg-white p-4 text-black">
+                with, so the code stays standard whatever the surface does.
+
+                The padding IS the quiet zone: `buildQrPath` emits no margin and
+                the viewBox is the module matrix exactly, so nothing else
+                supplies one. ISO/IEC 18004 wants 4 modules, and at 196px over
+                41 modules (4.78px each) p-4 gave only 3.35 — p-5 gives 4.18.
+
+                The border stays. It sits outside those 4.18 modules of white,
+                so it takes nothing from the quiet zone, and light mode needs it:
+                `--jaw-color-popover` is pure white there, so an unbordered white
+                plate has no edge at all. */}
+            <div className="rounded-card border-border border bg-white p-5 text-black">
               {/* The account's ENS avatar in the middle when it has one, and a
                   solid code when it does not. Modules are only cleared when
                   something is there to fill them — an empty hole reads as a

@@ -1513,7 +1513,7 @@ export interface UIHandlerOptions {
     timeout?: number;
 }
 
-// @public (undocumented)
+// @public
 export type UIRequest = ConnectUIRequest | SignatureUIRequest | TypedDataUIRequest | TransactionUIRequest | SendTransactionUIRequest | PermissionUIRequest | RevokePermissionUIRequest | WalletSignUIRequest | AddFundsUIRequest;
 
 // @public

@@ -198,9 +198,6 @@ export interface WalletSignUIRequest extends BaseUIRequest {
 }
 
 /**
- * Discriminated union of all UI request types
- */
-/**
  * Add Funds request (wallet_addFunds). The screen is receive-only: the chains
  * the address works on, an EIP-681 QR, and the address itself.
  *
@@ -223,6 +220,9 @@ export interface AddFundsUIRequest extends BaseUIRequest {
     };
 }
 
+/**
+ * Discriminated union of all UI request types
+ */
 export type UIRequest =
     | ConnectUIRequest
     | SignatureUIRequest

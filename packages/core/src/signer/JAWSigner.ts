@@ -19,7 +19,7 @@ import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
 import { handleGetCallsHistoryRequest } from '../rpc/wallet_getCallsHistory.js';
 
 import { logSignature } from '../analytics/index.js';
-import { standardErrors } from '../errors/index.js';
+import { standardErrors, standardErrorCodes } from '../errors/index.js';
 import { RPCResponse } from '../messages/index.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../provider/index.js';
 import { SDKChain, correlationIds, store } from '../store/index.js';
@@ -125,6 +125,30 @@ export abstract class JAWSigner implements Signer {
             // Reporting must never affect the signing flow
         }
         return result;
+    }
+
+    /**
+     * `wallet_addFunds`, whose only outcome is "the user is done".
+     *
+     * The screen has no reject action: the keys host never calls `onReject` for
+     * it, and the AppSpecific handler ignores approval and resolves null. So a
+     * 4001 reaching here cannot be a rejection — it is the popup-close backstop
+     * in `Communicator.awaitResponseOrClosed`, which rejects any in-flight
+     * request when the window dies. Without this, closing the popup window gave
+     * the dapp an error while pressing Done gave it null, for the same intent.
+     *
+     * Scoped to the request deliberately. The connect handshake runs before
+     * this in `JAWProvider`, so closing the popup mid-ceremony is still the
+     * rejection it actually is.
+     */
+    private async dispatchAddFundsRequest(request: RequestArguments): Promise<unknown> {
+        try {
+            return await this.dispatchSigningRequest(request);
+        } catch (error) {
+            const code = (error as { code?: number } | null)?.code;
+            if (code === standardErrorCodes.provider.userRejectedRequest) return null;
+            throw error;
+        }
     }
 
     private validateSigningRequest(request: RequestArguments): NormalizedSigningParams | undefined {
@@ -287,10 +311,12 @@ export abstract class JAWSigner implements Signer {
             case 'wallet_sendCalls':
             case 'wallet_sign':
             case 'wallet_grantPermissions':
-            case 'wallet_revokePermissions':
-            case 'wallet_addFunds': {
+            case 'wallet_revokePermissions': {
                 return this.dispatchSigningRequest(request);
             }
+
+            case 'wallet_addFunds':
+                return this.dispatchAddFundsRequest(request);
 
             default:
                 throw standardErrors.provider.unauthorized();
@@ -396,8 +422,10 @@ export abstract class JAWSigner implements Signer {
             case 'eth_signTypedData_v4':
             case 'wallet_grantPermissions':
             case 'wallet_revokePermissions':
-            case 'wallet_addFunds':
                 return this.dispatchSigningRequest(request);
+
+            case 'wallet_addFunds':
+                return this.dispatchAddFundsRequest(request);
 
             case 'eth_sign':
             case 'eth_ecRecover':
