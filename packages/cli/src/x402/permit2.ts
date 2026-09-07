@@ -1,3 +1,5 @@
+import type { UsdcChainId } from './asset-registry.js';
+
 /**
  * Permit2 declarations for the x402 `upto` scheme.
  *
@@ -60,7 +62,12 @@ export const X402_UPTO_PROXY_ADDRESS = '0x4020A4f3b7b90ccA423B9fabCc0CE57C6C2400
  * guessing lands on the user. Allow what was checked, refuse the rest, and widen
  * this when a deployment is confirmed rather than assumed.
  */
-export const UPTO_VERIFIED_CHAIN_IDS: readonly number[] = [8453, 84532];
+export const UPTO_VERIFIED_CHAIN_IDS: readonly UsdcChainId[] = [8453, 84532];
+
+/** Whether `upto` may be signed for this chain. */
+export function isUptoVerifiedChain(chainId: UsdcChainId): boolean {
+  return UPTO_VERIFIED_CHAIN_IDS.includes(chainId);
+}
 
 /**
  * `WITNESS_TYPE_STRING` from `x402UptoPermit2Proxy.sol`, reproduced verbatim.

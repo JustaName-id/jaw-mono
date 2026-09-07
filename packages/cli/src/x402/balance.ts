@@ -1,6 +1,6 @@
 import { createPublicClient, http, erc20Abi, formatUnits, type Chain, type PublicClient } from 'viem';
-import { base, baseSepolia, polygon, polygonAmoy } from 'viem/chains';
-import { usdcForNetwork, USDC_BY_NETWORK, type UsdcAsset } from './asset-registry.js';
+import { base, baseSepolia, polygon } from 'viem/chains';
+import { usdcForNetwork, type UsdcAsset, type UsdcChainId } from './asset-registry.js';
 import { loadConfig } from '../lib/config.js';
 
 // The JAW proxy RPC endpoint, mirrored from core's JAW_RPC_URL. Kept as a local
@@ -8,24 +8,16 @@ import { loadConfig } from '../lib/config.js';
 // (a static import would pull it into startup); keep in sync if core's URL moves.
 const JAW_RPC_URL = 'https://api.justaname.id/proxy/v1/rpc';
 
-const CHAINS: Record<number, Chain> = {
+// Keyed on the registry's own chain ids, so this map and USDC_BY_NETWORK cannot
+// drift: a registry entry with no viem chain here fails to compile, and a viem
+// chain the registry does not carry fails the same way. This used to be a loop
+// that threw at import time, which caught only the first of those two and only
+// once the process was already running.
+const CHAINS: Record<UsdcChainId, Chain> = {
   [base.id]: base,
   [baseSepolia.id]: baseSepolia,
   [polygon.id]: polygon,
-  [polygonAmoy.id]: polygonAmoy,
 };
-
-// The viem chains here and USDC_BY_NETWORK in asset-registry are two lists that
-// must cover the same chain ids. Assert it at load so adding a USDC entry
-// without its viem chain fails loudly here instead of silently building a
-// client with `chain: undefined` (wrong gas/explorer defaults) at read time.
-for (const chainId of Object.values(USDC_BY_NETWORK).map((a) => a.chainId)) {
-  if (!CHAINS[chainId]) {
-    throw new Error(
-      `x402 balance: USDC registry has chain ${chainId} but no viem chain is mapped for it in balance.ts`
-    );
-  }
-}
 
 // One client per (chain, apiKey) across the process — a fresh transport per read
 // is wasted setup once balance checks run more than once per payment. Keying on
@@ -49,7 +41,10 @@ function rpcTransport(chainId: number, apiKey?: string) {
 
 /** Shared per-(chain, apiKey) public client for the x402 modules (reads only). */
 export function publicClientFor(chainId: number): PublicClient {
-  const chain = CHAINS[chainId];
+  // Widened because a caller may hold any chain id: `permission-onchain.ts` reads
+  // for whatever chain the session was made on, which is a number off a config
+  // file. The throw below is what narrows it.
+  const chain = (CHAINS as Record<number, Chain | undefined>)[chainId];
   if (!chain) throw new Error(`x402: no viem chain configured for chainId ${chainId}`);
   const apiKey = loadConfig().apiKey;
   const key = `${chainId}:${apiKey ?? ''}`;
