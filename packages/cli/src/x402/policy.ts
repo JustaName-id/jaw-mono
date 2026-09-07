@@ -175,10 +175,10 @@ export function resolveX402Policy(configPolicy?: X402Policy, grantPolicy?: X402P
 /**
  * Resolve the policy for a live session. Every front end goes through this, so
  * `jaw x402 pay`, `jaw x402 status` and the MCP tool all enforce and report the
- * same caps. Resolving from config alone is what let them drift: the CLI paid
+ * same caps. Resolving from config alone lets them drift: the CLI would pay
  * under the 10-USDC defaults on every registry network while the MCP tool
- * refused at the granted per-period allowance, and status printed a session cap
- * that the grant had already deleted.
+ * refused at the granted per-period allowance, and status would print a session
+ * cap the grant deletes.
  */
 export function resolveSessionX402Policy(
   configPolicy?: X402Policy,
