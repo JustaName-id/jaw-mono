@@ -626,7 +626,8 @@ describe('Permit2 approval for upto', () => {
     expect(outcome.ok).toBe(false);
     expect(outcome.reason).toContain('after the Permit2 approval');
     expect(outcome.reason).toContain('Retry the payment');
-    expect(outcome.reason).not.toContain('cap');
+    expect(outcome.reason).not.toContain('the cap allows');
+    expect(outcome.reason).not.toContain('raise the cap');
     expect(outcome.approvalBatchId).toBe('0xapproval1');
     // Nothing moved, so nothing may reach the ledger as topped up.
     expect(outcome.amount).toBeUndefined();

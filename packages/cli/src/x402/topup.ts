@@ -343,12 +343,12 @@ function pollClock(opts: TopUpOptions) {
 }
 
 /**
- * How many times to look for a balance that has moved before giving up. The
- * userOp is confirmed by the bundler by then, so this waits out replica lag and
- * not a settlement, the same bound and for the same reason as
- * `ALLOWANCE_VISIBILITY_ATTEMPTS`.
+ * How many times to look for something a confirmed userOp should already have
+ * changed, before giving up on the node catching up. The bundler has confirmed
+ * it by then, so both loops that use this are waiting out replica lag and not a
+ * settlement: a few polls, or it is something else that is wrong.
  */
-const POST_OP_BALANCE_ATTEMPTS = 3;
+const LAG_POLL_ATTEMPTS = 3;
 
 /**
  * What the payer was charged for since the balance above it was read, and what
@@ -416,7 +416,7 @@ async function payerStillShort(
 ): Promise<string | null> {
   const { sleep, pollMs } = pollClock(opts);
 
-  for (let attempt = 0; attempt < POST_OP_BALANCE_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < LAG_POLL_ATTEMPTS; attempt++) {
     if (attempt > 0) await sleep(pollMs);
     let balance: bigint;
     try {
@@ -555,13 +555,6 @@ async function grantPermit2Allowance(
   return { ok: true, batchId, allowance: visible };
 }
 
-/**
- * How many times to look for a freshly granted allowance before giving up. The
- * approval is already confirmed by then, so this is waiting out replica lag and
- * not a settlement: a few polls or it is something else that is wrong.
- */
-const ALLOWANCE_VISIBILITY_ATTEMPTS = 3;
-
 async function allowanceVisible(
   asset: UsdcAsset,
   payerAddress: `0x${string}`,
@@ -571,7 +564,7 @@ async function allowanceVisible(
   const read = opts.allowanceReader ?? readAllowance;
   const { sleep, pollMs } = pollClock(opts);
 
-  for (let attempt = 0; attempt < ALLOWANCE_VISIBILITY_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < LAG_POLL_ATTEMPTS; attempt++) {
     if (attempt > 0) await sleep(pollMs);
     try {
       const seen = await read(asset, payerAddress, PERMIT2_ADDRESS);
