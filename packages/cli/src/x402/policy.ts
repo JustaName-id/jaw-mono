@@ -240,7 +240,7 @@ export function sameLimit(
  * usage nobody managed to compute has its whole width left, since a figure
  * nobody read is not a measurement of zero.
  */
-export function remainingOnLimit(limit: GrantedPeriodLimit, usage?: LimitUsage[]): bigint | null {
+function remainingOnLimit(limit: GrantedPeriodLimit, usage?: LimitUsage[]): bigint | null {
   const cap = parseNonNegativeBigInt(limit.allowance);
   if (cap === undefined) return null;
   const toppedUp = (usage ?? []).find((entry) => sameLimit(entry, limit))?.toppedUp ?? 0n;
