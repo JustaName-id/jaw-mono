@@ -23,6 +23,18 @@ const writeLock = (o: Record<string, unknown>) =>
     JSON.stringify({ pid: process.pid, token: 'other', at: Date.now(), beatMs: 30_000, ...o })
   );
 
+/**
+ * Waits for something the heartbeat does, instead of sleeping long enough that
+ * it probably happened. A loaded runner stretches a 20ms interval, and a fixed
+ * sleep turns that into a flake.
+ */
+const isNotLanding = (line: string) => line.includes('heartbeat is not landing');
+
+const waitFor = async (done: () => boolean, timeoutMs = 2_000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (!done() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 2));
+};
+
 beforeEach(() => {
   if (fs.existsSync(TEST_ROOT)) fs.rmSync(TEST_ROOT, { recursive: true });
   fs.mkdirSync(TEST_ROOT, { recursive: true });
@@ -220,8 +232,9 @@ describe('withPaymentLock heartbeat', () => {
           await new Promise((r) => setTimeout(r, 50));
           fs.writeFileSync(PATHS.paymentLock, mine);
 
-          await new Promise((r) => setTimeout(r, 60));
-          expect(JSON.parse(fs.readFileSync(PATHS.paymentLock, 'utf-8')).at).toBeGreaterThan(before);
+          const at = () => JSON.parse(fs.readFileSync(PATHS.paymentLock, 'utf-8')).at;
+          await waitFor(() => at() > before);
+          expect(at()).toBeGreaterThan(before);
         },
         { heartbeatMs: 20 }
       );
@@ -253,12 +266,8 @@ describe('withPaymentLock heartbeat', () => {
   // to be told the holder had been running for one interval, which also undercut
   // the "remove the file if that process is gone" advice next to it.
   it('reports how long the holder has really held it, not the last beat', async () => {
-    const holder = withPaymentLock(async () => new Promise((r) => setTimeout(r, 1_200)), { heartbeatMs: 20 });
-    await new Promise((r) => setTimeout(r, 500));
-
-    // Gives up ~800ms in, which rounds to 1s. The last beat is 20ms old.
-    await expect(withPaymentLock(async () => 'x', { timeoutMs: 300 })).rejects.toThrow(/running for [1-9]\d*s/);
-    await holder;
+    writeLock({ startedAt: Date.now() - 8_000, at: Date.now() }); // held for 8s, beat a moment ago
+    await expect(withPaymentLock(async () => 'x', { timeoutMs: 100 })).rejects.toThrow(/running for 8s/);
   });
 
   it('falls back to `at` for a holder that has no `startedAt`', async () => {
@@ -281,7 +290,8 @@ describe('withPaymentLock heartbeat', () => {
       await withPaymentLock(
         async () => {
           fs.chmodSync(TEST_ROOT, 0o500); // no new files in the directory
-          await new Promise((r) => setTimeout(r, 90));
+          await waitFor(() => warnings.some(isNotLanding));
+          await new Promise((r) => setTimeout(r, 60)); // a few more beats, none of which may warn again
           fs.chmodSync(TEST_ROOT, 0o700);
         },
         { heartbeatMs: 20 }
@@ -291,7 +301,7 @@ describe('withPaymentLock heartbeat', () => {
       written.mockRestore();
     }
 
-    const notLanding = warnings.filter((line) => line.includes('heartbeat is not landing'));
+    const notLanding = warnings.filter(isNotLanding);
     expect(notLanding).toHaveLength(1); // once, not once per beat
     expect(notLanding[0]).toMatch(/EACCES[\s\S]*another payment may start alongside this one/);
   });
@@ -309,7 +319,8 @@ describe('withPaymentLock heartbeat', () => {
       await withPaymentLock(
         async () => {
           fs.writeFileSync(PATHS.paymentLock, 'not json, so every read comes back null');
-          await new Promise((r) => setTimeout(r, 90));
+          await waitFor(() => warnings.some(isNotLanding));
+          await new Promise((r) => setTimeout(r, 60)); // a few more beats, none of which may warn again
         },
         { heartbeatMs: 20 }
       );
@@ -317,7 +328,7 @@ describe('withPaymentLock heartbeat', () => {
       written.mockRestore();
     }
 
-    const notLanding = warnings.filter((line) => line.includes('heartbeat is not landing'));
+    const notLanding = warnings.filter(isNotLanding);
     expect(notLanding).toHaveLength(1);
     expect(notLanding[0]).toMatch(/the lock cannot be read/);
   });
@@ -421,8 +432,7 @@ describe('withPaymentLock heartbeat staging file', () => {
       async () => {
         const at = () => JSON.parse(fs.readFileSync(PATHS.paymentLock, 'utf-8')).at;
         const before = at();
-        const until = Date.now() + 1_000;
-        while (at() === before && Date.now() < until) await new Promise((r) => setTimeout(r, 2));
+        await waitFor(() => at() !== before);
         expect(at()).not.toBe(before); // otherwise the mode below is just the one we created
         mode = fs.statSync(PATHS.paymentLock).mode & 0o777;
       },
