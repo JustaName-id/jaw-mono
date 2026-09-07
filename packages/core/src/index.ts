@@ -59,6 +59,7 @@ export {
     handleGetCapabilitiesRequest,
     clearCapabilitiesCache,
     type CapabilitiesResult,
+    type ChainCapabilities,
     type ChainMetadataCapability,
     // Permission selector constants
     ANY_TARGET,

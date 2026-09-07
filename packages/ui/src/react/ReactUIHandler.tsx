@@ -29,7 +29,6 @@ import {
   type Chain,
   type SignInWithEthereumCapabilityRequest,
   type PaymasterConfig,
-  type FeeTokenCapability,
   ensureIntNumber,
   standardErrorCodes,
 } from '@jaw.id/core';
@@ -1580,7 +1579,7 @@ function TransactionDialogWrapper({
         );
 
         const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
-        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken;
 
         if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
           if (isMounted) setFeeTokensLoading(false);
@@ -1941,7 +1940,7 @@ function SendTransactionDialogWrapper({
         );
 
         const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
-        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken;
 
         if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
           if (isMounted) setFeeTokensLoading(false);
@@ -2383,7 +2382,7 @@ function PermissionDialogWrapper({
         );
 
         const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
-        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken;
 
         if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
           if (isMounted) setFeeTokensLoading(false);
@@ -3004,7 +3003,7 @@ function RevokePermissionDialogWrapper({
         );
 
         const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
-        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken;
 
         if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
           if (isMounted) setFeeTokensLoading(false);
