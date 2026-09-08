@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { sepolia, optimismSepolia, arbitrumSepolia } from 'viem/chains';
 
 import { ChainClients } from './store.js';
-import { createClients, getClient, getBundlerClient } from './utils.js';
+import { createClients, createInitialChains, getClient, getBundlerClient } from './utils.js';
+import { JAW_RPC_URL } from '../../constants.js';
 
 describe('chain-clients/utils', () => {
     beforeEach(() => {
@@ -295,5 +296,28 @@ describe('chain-clients/utils', () => {
         // Should still only have one chain in state
         const state = ChainClients.getState();
         expect(Object.keys(state).length).toBe(1);
+    });
+});
+
+describe('createInitialChains api-key in the rpc url', () => {
+    it('appends the api-key when the caller has one', () => {
+        const chains = createInitialChains('a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6');
+
+        expect(chains.length).toBeGreaterThan(0);
+        for (const chain of chains) {
+            expect(chain.rpcUrl).toBe(`${JAW_RPC_URL}?chainId=${chain.id}&api-key=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6`);
+        }
+    });
+
+    // Dropped rather than sent empty, which would read as a malformed key
+    // instead of as no key at all.
+    it('omits the parameter entirely when there is no key', () => {
+        const chains = createInitialChains();
+
+        expect(chains.length).toBeGreaterThan(0);
+        for (const chain of chains) {
+            expect(chain.rpcUrl).toBe(`${JAW_RPC_URL}?chainId=${chain.id}`);
+            expect(chain.rpcUrl).not.toContain('api-key');
+        }
     });
 });

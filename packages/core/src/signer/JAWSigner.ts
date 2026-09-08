@@ -328,47 +328,26 @@ export abstract class JAWSigner implements Signer {
             case 'wallet_getCallsStatus':
                 return await handleGetCallsStatusRequest(request);
 
-            case 'wallet_getCallsHistory': {
-                const config = store.config.get();
-                const apiKey = config.apiKey;
-
-                if (!apiKey) {
-                    throw standardErrors.rpc.internal('No API key configured');
-                }
-
-                return await handleGetCallsHistoryRequest(request, apiKey, this.accounts[0]);
-            }
+            // These four reach the JAW proxy, which decides whether to serve
+            // them. The key is forwarded as it is rather than demanded here.
+            case 'wallet_getCallsHistory':
+                return await handleGetCallsHistoryRequest(request, store.config.get().apiKey, this.accounts[0]);
 
             case 'wallet_getAssets': {
                 const config = store.config.get();
-                const apiKey = config.apiKey;
-                const showTestnets = config.preference?.showTestnets ?? false;
-
-                if (!apiKey) {
-                    throw standardErrors.rpc.internal('No API key configured');
-                }
-
-                return await handleGetAssetsRequest(request, apiKey, showTestnets);
+                return await handleGetAssetsRequest(request, config.apiKey, config.preference?.showTestnets ?? false);
             }
 
-            case 'wallet_getPermissions': {
-                const config = store.config.get();
-                const apiKey = config.apiKey;
-
-                if (!apiKey) {
-                    throw standardErrors.rpc.internal('No API key configured');
-                }
-
-                return await handleGetPermissionsRequest(request, apiKey, this.accounts[0]);
-            }
+            case 'wallet_getPermissions':
+                return await handleGetPermissionsRequest(request, store.config.get().apiKey, this.accounts[0]);
 
             case 'wallet_getCapabilities': {
-                const apiKey = store.getState().config.apiKey;
-                if (!apiKey) {
-                    throw standardErrors.rpc.internal('No API key configured');
-                }
-                const showTestnets = store.getState().config.preference?.showTestnets ?? false;
-                return await handleGetCapabilitiesRequest(request, apiKey, showTestnets);
+                const config = store.config.get();
+                return await handleGetCapabilitiesRequest(
+                    request,
+                    config.apiKey,
+                    config.preference?.showTestnets ?? false
+                );
             }
 
             case 'wallet_switchEthereumChain':

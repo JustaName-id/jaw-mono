@@ -51,13 +51,13 @@ export function clearCapabilitiesCache(): void {
  * Failures are never cached, and every caller gets its own copy of the response.
  *
  * @param request - The wallet_getCapabilities request
- * @param apiKey - API key for authentication
+ * @param apiKey - API key for authentication, if the caller has one
  * @param showTestnets - Whether to include testnet chains (default: false)
  * @returns Capabilities for all or filtered chains
  */
 export async function handleGetCapabilitiesRequest(
     request: RequestArguments,
-    apiKey: string,
+    apiKey: string | undefined,
     showTestnets = false
 ): Promise<CapabilitiesResult> {
     const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL, apiKey);

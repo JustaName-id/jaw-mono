@@ -2,13 +2,15 @@ import { standardErrors } from '../errors/index.js';
 import { RequestArguments } from '../provider/index.js';
 
 /**
- * Constructs the JAW RPC URL with the provided API key as a query parameter
+ * Constructs the JAW RPC URL, appending the API key as a query parameter when
+ * there is one. The parameter is dropped rather than sent empty, since
+ * `api-key=` with nothing after it reaches the proxy as a malformed key.
  * @param baseUrl The base RPC URL
- * @param apiKey The API key to append to the URL
- * @returns The constructed URL with the API key query parameter
+ * @param apiKey The API key to append to the URL, if the caller has one
+ * @returns The constructed URL
  */
-export function buildHandleJawRpcUrl(baseUrl: string, apiKey: string): string {
-    return `${baseUrl}/handle?api-key=${apiKey}`;
+export function buildHandleJawRpcUrl(baseUrl: string, apiKey?: string): string {
+    return apiKey ? `${baseUrl}/handle?api-key=${apiKey}` : `${baseUrl}/handle`;
 }
 
 export async function fetchRPCRequest(request: RequestArguments, rpcUrl: string) {
@@ -25,6 +27,19 @@ export async function fetchRPCRequest(request: RequestArguments, rpcUrl: string)
             'Content-Type': 'application/json',
         },
     });
+
+    // A refusal from the proxy is not a JSON-RPC envelope, so destructuring it
+    // hands back two undefineds and the call resolves to `undefined` instead of
+    // failing. Callers that memoize their result then cache that silence, which
+    // is how a rejected wallet_getCapabilities reads as "no capabilities".
+    if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        const message = `JAW RPC request failed with ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`;
+        throw res.status === 401 || res.status === 403
+            ? standardErrors.provider.unauthorized(message)
+            : standardErrors.rpc.internal(message);
+    }
+
     const { result, error } = await res.json();
     if (error) throw error;
     return result;
