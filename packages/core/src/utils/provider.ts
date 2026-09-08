@@ -1,5 +1,6 @@
 import { standardErrors } from '../errors/index.js';
 import { RequestArguments } from '../provider/index.js';
+import { store } from '../store/index.js';
 
 /**
  * Constructs the JAW RPC URL, appending the API key as a query parameter when
@@ -19,12 +20,17 @@ export async function fetchRPCRequest(request: RequestArguments, rpcUrl: string)
         jsonrpc: '2.0',
         id: crypto.randomUUID(),
     };
+    // Calls made from the keys origin all carry the same `Origin`, so the caller
+    // they act on behalf of travels alongside instead of in it.
+    const dappOrigin = store.config.get().dappOrigin;
+
     const res = await fetch(rpcUrl, {
         method: 'POST',
         body: JSON.stringify(requestBody),
         mode: 'cors',
         headers: {
             'Content-Type': 'application/json',
+            ...(dappOrigin ? { 'x-dapp-origin': dappOrigin } : {}),
         },
     });
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 
 import { buildHandleJawRpcUrl, fetchRPCRequest } from './provider.js';
+import { setDappOrigin } from '../dappOrigin.js';
 
 describe('buildHandleJawRpcUrl', () => {
     it('appends the api-key when the caller has one', () => {
@@ -82,5 +83,51 @@ describe('fetchRPCRequest', () => {
         await expect(fetchRPCRequest({ method: 'wallet_getPermissions' }, 'https://rpc.example')).rejects.toThrow(
             /403/
         );
+    });
+});
+
+describe('fetchRPCRequest and the calling dApp', () => {
+    afterEach(() => {
+        setDappOrigin(undefined);
+        vi.unstubAllGlobals();
+    });
+
+    function captureHeaders() {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            json: async () => ({ result: '0x1' }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        return () => fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    }
+
+    // A dApp's own page never sets one: the browser already puts the right
+    // Origin on the request, so a value here would be a claim it did not make.
+    it('sends no dApp header when none was set', async () => {
+        const headers = captureHeaders();
+
+        await fetchRPCRequest({ method: 'eth_chainId' }, 'https://rpc.example');
+
+        expect(headers()).not.toHaveProperty('x-dapp-origin');
+    });
+
+    it('sends the dApp it was told it is acting for', async () => {
+        const headers = captureHeaders();
+        setDappOrigin('https://dapp.example');
+
+        await fetchRPCRequest({ method: 'eth_chainId' }, 'https://rpc.example');
+
+        expect(headers()['x-dapp-origin']).toBe('https://dapp.example');
+    });
+
+    it('stops sending it once it is cleared', async () => {
+        setDappOrigin('https://dapp.example');
+        setDappOrigin(undefined);
+        const headers = captureHeaders();
+
+        await fetchRPCRequest({ method: 'eth_chainId' }, 'https://rpc.example');
+
+        expect(headers()).not.toHaveProperty('x-dapp-origin');
     });
 });

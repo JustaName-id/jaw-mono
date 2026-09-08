@@ -1197,6 +1197,9 @@ export interface ServerErrorOptions<T> extends EthereumErrorOptions<T> {
 }
 
 // @public
+export function setDappOrigin(origin: string | undefined): void;
+
+// @public
 export interface SignatureUIRequest extends BaseUIRequest {
     // (undocumented)
     data: {
