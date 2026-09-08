@@ -22,7 +22,9 @@ export interface PermissionsRoutes {
     GET_PERMISSION: {
         request: Record<string, never>;
         response: StorePermissionApiResponse;
-        headers: { 'x-api-key': string };
+        // Optional here and required on its siblings: this is the only relay read
+        // a dApp makes for itself. The writes are made where a key is always present.
+        headers: { 'x-api-key'?: string };
         pathParams: { hash: string };
     };
     DELETE_PERMISSION: {

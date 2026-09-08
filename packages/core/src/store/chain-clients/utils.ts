@@ -198,9 +198,10 @@ export function getBundlerClient(chainId: number): BundlerClient | undefined {
 
 /**
  * Creates initial chains with RPC URLs for all supported chains.
- * RPC URLs are constructed as: {JAW_RPC_URL}?chainId={chainId}&api-key={apiKey}
+ * RPC URLs are constructed as: {JAW_RPC_URL}?chainId={chainId}&api-key={apiKey},
+ * dropping the parameter when there is no key rather than sending it empty.
  *
- * @param apiKey - API key for authentication
+ * @param apiKey - API key for authentication, if the caller has one
  * @param paymasters - Optional mapping of chain IDs to paymaster configuration
  * @param showTestnets - Whether to include testnet chains (default: false)
  * @returns Array of SDKChain objects with constructed RPC URLs for supported chains
@@ -220,14 +221,14 @@ export function getBundlerClient(chainId: number): BundlerClient | undefined {
  * ```
  */
 export function createInitialChains(
-    apiKey: string,
+    apiKey?: string,
     paymasters?: Record<number, PaymasterConfig>,
     showTestnets = false
 ): SDKChain[] {
     const chains = getSupportedChains(showTestnets);
     return chains.map((chain) => ({
         id: chain.id,
-        rpcUrl: `${JAW_RPC_URL}?chainId=${chain.id}&api-key=${apiKey}`,
+        rpcUrl: apiKey ? `${JAW_RPC_URL}?chainId=${chain.id}&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=${chain.id}`,
         ...(paymasters?.[chain.id] ? { paymaster: paymasters[chain.id] } : {}),
     }));
 }

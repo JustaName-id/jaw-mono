@@ -16,7 +16,7 @@ export function createSigner(params: {
     communicator?: Communicator;
     uiHandler?: UIHandler;
     callback: ProviderEventCallback;
-    apiKey: string;
+    apiKey?: string;
     paymasters?: Record<number, PaymasterConfig>;
     ens?: string;
     theme?: JawTheme;
@@ -38,6 +38,12 @@ export function createSigner(params: {
         case 'appSpecific': {
             if (!uiHandler) {
                 throw new Error('UIHandler is required for appSpecific signer');
+            }
+            // App-specific mode hands the key to the dApp's own UIHandler, which has
+            // nowhere to get one, so it stays required even though the type allows it
+            // to be absent.
+            if (!apiKey) {
+                throw new Error('API key is required for appSpecific signer');
             }
             return new AppSpecificSigner({
                 metadata,
