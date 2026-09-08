@@ -5,7 +5,6 @@ import { ChainClients } from './store.js';
 import { createClients, createInitialChains, getClient, getBundlerClient } from './utils.js';
 import { JAW_RPC_URL } from '../../constants.js';
 import { setDappOrigin } from '../../dappOrigin.js';
-import { getClient } from './utils.js';
 
 describe('chain-clients/utils', () => {
     beforeEach(() => {
@@ -367,14 +366,16 @@ describe('naming the calling dApp on the wire', () => {
         expect(headers().get('x-dapp-origin')).toBe('https://dapp.example');
     });
 
-    // A third-party paymaster is another company's server. Which dApp the user is
-    // on is not theirs to learn.
-    it('says nothing to a host that is not ours', async () => {
+    // The rpc url is ours whatever host it points at, so the header cannot hang off
+    // matching the production one: a staging or local backend would silently stop
+    // being told which dApp is calling. The one url that may belong to somebody
+    // else is the paymaster's, and that is where the check lives.
+    it('names the dApp on a backend that is not the production one', async () => {
         const headers = stubFetch();
         setDappOrigin('https://dapp.example');
 
-        await callThrough('https://api.pimlico.io/v2/1/rpc');
+        await callThrough('http://localhost:3013/proxy/v1/rpc?chainId=1');
 
-        expect(headers().has('x-dapp-origin')).toBe(false);
+        expect(headers().get('x-dapp-origin')).toBe('https://dapp.example');
     });
 });

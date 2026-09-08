@@ -12,15 +12,8 @@ import { store } from '../store.js';
  * An http transport that names the dApp this instance acts for, when it was told
  * one. Read per request rather than baked into the transport, because the clients
  * are built before the dApp is known.
- *
- * Only for our own proxy. A third-party paymaster is a different company's server
- * and has no business learning which dApp the user is on.
  */
 function jawHttp(url: string) {
-    if (!url.startsWith(JAW_PROXY_URL)) {
-        return http(url);
-    }
-
     return http(url, {
         onFetchRequest: (_request, init) => {
             const dappOrigin = store.config.get().dappOrigin;
@@ -125,7 +118,11 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
 
     // Create paymaster client and wrap with custom functions that handle gas price fetching and v0.8 gas limits
     const paymasterClient = createPaymasterClient({
-        transport: jawHttp(chain.paymaster.url),
+        // A paymaster can be another company's server, and which dApp the user is
+        // on is not theirs to learn. Ours is the only one told.
+        transport: chain.paymaster.url.startsWith(JAW_PROXY_URL)
+            ? jawHttp(chain.paymaster.url)
+            : http(chain.paymaster.url),
     });
 
     const bundlerClient = createBundlerClient({
