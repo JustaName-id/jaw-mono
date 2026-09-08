@@ -3,10 +3,35 @@ import { BundlerClient, createBundlerClient, createPaymasterClient } from 'viem/
 
 import { ChainClients } from './store.js';
 import { RPCResponseNativeCurrency } from '../../messages/rpcMessage.js';
-import { JAW_RPC_URL } from '../../constants.js';
+import { JAW_PROXY_URL, JAW_RPC_URL } from '../../constants.js';
 import { getSupportedChains, SUPPORTED_CHAINS } from '../../account/smartAccount.js';
 import { createPaymasterFunctions } from '../../account/paymaster.js';
 import { store } from '../store.js';
+
+/**
+ * An http transport that names the dApp this instance acts for, when it was told
+ * one. Read per request rather than baked into the transport, because the clients
+ * are built before the dApp is known.
+ *
+ * Only for our own proxy. A third-party paymaster is a different company's server
+ * and has no business learning which dApp the user is on.
+ */
+function jawHttp(url: string) {
+    if (!url.startsWith(JAW_PROXY_URL)) {
+        return http(url);
+    }
+
+    return http(url, {
+        onFetchRequest: (_request, init) => {
+            const dappOrigin = store.config.get().dappOrigin;
+            if (!dappOrigin) return undefined;
+
+            // viem uses whatever comes back here in place of `init` rather than
+            // merging it, so it goes back whole.
+            return { ...init, headers: { ...init.headers, 'x-dapp-origin': dappOrigin } };
+        },
+    });
+}
 
 /**
  * Paymaster configuration for a chain
@@ -69,7 +94,7 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
 
     const client = createPublicClient({
         chain: viemchain,
-        transport: http(chain.rpcUrl),
+        transport: jawHttp(chain.rpcUrl),
         // Fold eth_calls issued in the same tick into a single Multicall3
         // aggregate3 — callers that fan out over N tokens (balances, decimals,
         // symbols) pay one round-trip instead of N. aggregate3 sets
@@ -93,21 +118,21 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
         const bundlerClient = createBundlerClient({
             chain: viemchain,
             client,
-            transport: http(chain.rpcUrl),
+            transport: jawHttp(chain.rpcUrl),
         });
         return { client, bundlerClient };
     }
 
     // Create paymaster client and wrap with custom functions that handle gas price fetching and v0.8 gas limits
     const paymasterClient = createPaymasterClient({
-        transport: http(chain.paymaster.url),
+        transport: jawHttp(chain.paymaster.url),
     });
 
     const bundlerClient = createBundlerClient({
         chain: viemchain,
         client,
         paymaster: createPaymasterFunctions(client, paymasterClient, chain.id, chain.paymaster.context),
-        transport: http(chain.rpcUrl),
+        transport: jawHttp(chain.rpcUrl),
     });
 
     return { client, bundlerClient };

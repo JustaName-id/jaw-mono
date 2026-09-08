@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { sepolia, optimismSepolia, arbitrumSepolia } from 'viem/chains';
 
 import { ChainClients } from './store.js';
 import { createClients, createInitialChains, getClient, getBundlerClient } from './utils.js';
 import { JAW_RPC_URL } from '../../constants.js';
+import { setDappOrigin } from '../../dappOrigin.js';
+import { getClient } from './utils.js';
 
 describe('chain-clients/utils', () => {
     beforeEach(() => {
@@ -319,5 +321,60 @@ describe('createInitialChains api-key in the rpc url', () => {
             expect(chain.rpcUrl).toBe(`${JAW_RPC_URL}?chainId=${chain.id}`);
             expect(chain.rpcUrl).not.toContain('api-key');
         }
+    });
+});
+
+describe('naming the calling dApp on the wire', () => {
+    afterEach(() => {
+        setDappOrigin(undefined);
+        vi.unstubAllGlobals();
+        ChainClients.setState({}, true);
+    });
+
+    function stubFetch() {
+        const fetchMock = vi.fn().mockResolvedValue(
+            new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x1' }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            })
+        );
+        vi.stubGlobal('fetch', fetchMock);
+        return () => new Headers(fetchMock.mock.calls[0][1].headers);
+    }
+
+    async function callThrough(rpcUrl: string) {
+        ChainClients.setState({}, true);
+        createClients([{ id: 1, rpcUrl }]);
+        await getClient(1)?.getChainId();
+    }
+
+    // A dApp's own page never names one, and the browser is already putting the
+    // right Origin on the request.
+    it('sends no dApp header when this instance was told nothing', async () => {
+        const headers = stubFetch();
+
+        await callThrough(`${JAW_RPC_URL}?chainId=1`);
+
+        expect(headers().has('x-dapp-origin')).toBe(false);
+    });
+
+    it('names the dApp on our own proxy', async () => {
+        const headers = stubFetch();
+        setDappOrigin('https://dapp.example');
+
+        await callThrough(`${JAW_RPC_URL}?chainId=1`);
+
+        expect(headers().get('x-dapp-origin')).toBe('https://dapp.example');
+    });
+
+    // A third-party paymaster is another company's server. Which dApp the user is
+    // on is not theirs to learn.
+    it('says nothing to a host that is not ours', async () => {
+        const headers = stubFetch();
+        setDappOrigin('https://dapp.example');
+
+        await callThrough('https://api.pimlico.io/v2/1/rpc');
+
+        expect(headers().has('x-dapp-origin')).toBe(false);
     });
 });
