@@ -34,21 +34,36 @@ export async function fetchRPCRequest(request: RequestArguments, rpcUrl: string)
         },
     });
 
+    // Read the body before looking at the status: an error status can still carry
+    // a JSON-RPC envelope, and that envelope is the only place a revert reason
+    // reaches the dApp. viem's own http transport does the same.
+    const body = await res.text().catch(() => '');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the result is whatever the method returns, as before
+    let envelope: { result?: any; error?: { code?: unknown; message?: unknown } } | undefined;
+    try {
+        envelope = JSON.parse(body);
+    } catch {
+        envelope = undefined;
+    }
+
+    const rpcError = envelope?.error;
+    if (rpcError && typeof rpcError.code === 'number' && typeof rpcError.message === 'string') {
+        throw rpcError;
+    }
+
     // A refusal from the proxy is not a JSON-RPC envelope, so destructuring it
     // hands back two undefineds and the call resolves to `undefined` instead of
     // failing. Callers that memoize their result then cache that silence, which
     // is how a rejected wallet_getCapabilities reads as "no capabilities".
     if (!res.ok) {
-        const detail = await res.text().catch(() => '');
-        const message = `JAW RPC request failed with ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`;
+        const message = `JAW RPC request failed with ${res.status}${body ? `: ${body.slice(0, 200)}` : ''}`;
         throw res.status === 401 || res.status === 403
             ? standardErrors.provider.unauthorized(message)
             : standardErrors.rpc.internal(message);
     }
 
-    const { result, error } = await res.json();
-    if (error) throw error;
-    return result;
+    if (rpcError) throw rpcError;
+    return envelope?.result;
 }
 /**
  * Validates the arguments for an invalid request and returns an error if any validation fails.

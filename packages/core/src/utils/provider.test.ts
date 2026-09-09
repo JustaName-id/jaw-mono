@@ -68,6 +68,19 @@ describe('fetchRPCRequest', () => {
         await expect(fetchRPCRequest({ method: 'wallet_getAssets' }, 'https://rpc.example')).rejects.toThrow(/502/);
     });
 
+    // An error status can still carry a JSON-RPC envelope, and that envelope is the
+    // only place a revert reason reaches the dApp: a 200-char slice of the body
+    // would drop both the code and the ABI-encoded data.
+    it('throws the JSON-RPC error even when the status says failure', async () => {
+        stubResponse(400, JSON.stringify({ error: { code: 3, message: 'execution reverted', data: '0x08c379a0' } }));
+
+        await expect(fetchRPCRequest({ method: 'eth_call' }, 'https://rpc.example')).rejects.toMatchObject({
+            code: 3,
+            message: 'execution reverted',
+            data: '0x08c379a0',
+        });
+    });
+
     it('still fails when the rejection body cannot be read', async () => {
         vi.stubGlobal(
             'fetch',
@@ -96,7 +109,7 @@ describe('fetchRPCRequest and the calling dApp', () => {
         const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
             status: 200,
-            json: async () => ({ result: '0x1' }),
+            text: async () => JSON.stringify({ result: '0x1' }),
         });
         vi.stubGlobal('fetch', fetchMock);
         return () => fetchMock.mock.calls[0][1].headers as Record<string, string>;
