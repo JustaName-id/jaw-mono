@@ -137,8 +137,8 @@ describe('Eip3009EoaPayer delegation awareness', () => {
     expect(readContractMock).toHaveBeenCalledTimes(2);
   });
 
-  // Guessing raw here used to be the fallback. A delegated account refuses that
-  // signature, the refusal reads as a failed payment, and a failed payment is
+  // Guessing raw here would be the cheap fallback. A delegated account refuses
+  // that signature, the refusal reads as a failed payment, and a failed payment is
   // counted against the session cap on the grounds the facilitator may have
   // broadcast it. It cannot have, so the guess spends budget on a payment that
   // could never settle. Refusing before signing costs a retry instead.
