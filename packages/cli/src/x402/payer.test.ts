@@ -137,6 +137,18 @@ describe('Eip3009EoaPayer delegation awareness', () => {
     expect(readContractMock).toHaveBeenCalledTimes(2);
   });
 
+  // The fourth read the bounded transport covers. A delegated account signs a
+  // wrapped envelope carrying its own domain, so a domain that cannot be read is
+  // a signature that cannot be built. Refuse, rather than fall back to the raw
+  // one the account would reject anyway.
+  it('refuses to sign when the account domain cannot be read', async () => {
+    getCodeMock.mockResolvedValue('0xef0100bb4f7d5418cd8dadb61bb95561179e517572cbcd');
+    readContractMock.mockRejectedValue(new Error('rpc timed out'));
+    const payer = Eip3009EoaPayer.fromSessionKey();
+
+    await expect(payer.pay(requirement)).rejects.toThrow(/rpc timed out/);
+  });
+
   // Guessing raw here used to be the fallback. A delegated account refuses that
   // signature, the refusal reads as a failed payment, and a failed payment is
   // counted against the session cap on the grounds the facilitator may have
@@ -171,6 +183,18 @@ describe('Eip3009EoaPayer paying upto', () => {
     const payer = Eip3009EoaPayer.fromSessionKey();
 
     await expect(payer.pay(uptoRequirement)).rejects.toThrow(/approved Permit2/);
+  });
+
+  // The bounded transport turns a hung node into an error sooner, so this path
+  // fires more often than it used to. An unreadable allowance must refuse the
+  // same way an unreadable delegation does: signing a Permit2 authorization the
+  // proxy cannot execute reserves its whole ceiling against the cap for nothing.
+  it('refuses before signing when the allowance cannot be read', async () => {
+    getCodeMock.mockResolvedValue('0x');
+    readContractMock.mockRejectedValue(new Error('rpc timed out'));
+    const payer = Eip3009EoaPayer.fromSessionKey();
+
+    await expect(payer.pay(uptoRequirement)).rejects.toThrow(/rpc timed out/);
   });
 
   it('refuses when the allowance is smaller than the ceiling it would authorize', async () => {

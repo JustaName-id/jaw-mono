@@ -83,19 +83,23 @@ export function registerPayTool(server: McpServer): void {
             // Seed the policy from the on-chain grant captured at setup (caps +
             // allowlists agree with what the user approved); config still wins.
             const policy = resolveSessionX402Policy(config.x402, session);
+            // One read for the whole payment, taken inside the lock and never
+            // cached across payments: a process that held the lock before us may
+            // have spent, and a stale total waves through a payment the cap
+            // should have stopped. Nothing can append while we hold it, so the
+            // session total and every period window count against the same rows.
+            const ledger = readX402Log();
+
             // Scoped to the session so a new grant starts a fresh budget; the
             // payer's whole history when there is no session to scope by.
-            // Read inside the lock, every time. Caching this across calls was
-            // safe while one process did all the paying; with the lock admitting
-            // other processes, a memoised total would miss what they spent and
-            // wave through a payment the cap should have stopped.
-            const sessionSpent = sumSpentSince(payer.address, session?.createdAt);
+            // Payer only: the session total is the user's ceiling and spans
+            // permissions. See the same scope in `commands/x402/pay.ts`.
+            const scope = { payer: payer.address };
+            const sessionSpent = sumSpentSince(ledger, scope, session?.createdAt);
 
             // Locate the grant period containing now, and count spend inside it.
-            // Recomputed per payment because the window moves on its own, and
-            // re-read from the ledger for the same reason sessionSpent is: a
-            // payment made by another process falls inside this window too.
-            const periodUsage = await currentLimitUsageOnChain(policy, payer.address, session);
+            // Recomputed per payment because the window moves on its own.
+            const periodUsage = await currentLimitUsageOnChain(ledger, policy, payer.address, session);
 
             // Flow 2b: when a session (and its on-chain permission) exists, refill
             // the payer EOA through the permission whenever it can't cover a price.
@@ -149,6 +153,7 @@ export function registerPayTool(server: McpServer): void {
                 at: new Date().toISOString(),
                 url: params.url,
                 payer: result.payer,
+                permissionId: session?.permissionId,
                 status: result.paid ? 'paid' : result.attemptedPayment ? 'failed' : 'refused',
                 amount: settled?.amount,
                 authorized: settled?.authorized,

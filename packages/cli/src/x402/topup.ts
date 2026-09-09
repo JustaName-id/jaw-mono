@@ -211,27 +211,42 @@ export async function ensurePayerFunds(
       // `skipped` says no principal moved, which stays true, but the approval
       // is a userOp the user paid for and it belongs in the trace either way.
       if (!granted.ok) return { ok: false, reason: granted.reason, approvalBatchId: granted.batchId };
+      // No principal moved, but the approval is a userOp the payer was charged
+      // for, so its balance is not what the branch above checked any more.
+      const short = await payerStillShort(
+        asset,
+        payerAddress,
+        price,
+        requirement.network,
+        balance,
+        opts,
+        AFTER_APPROVAL
+      );
+      if (short) return { ok: false, reason: short, approvalBatchId: granted.batchId };
       return { ok: true, skipped: true, approvalBatchId: granted.batchId, permit2Allowance: granted.allowance };
     }
     return { ok: true, skipped: true, permit2Allowance };
   }
 
   const shortfall = needed - balance;
-  const feePerOp = firstOperationCost(asset);
+  const headroom = firstOperationCost(asset);
   // The payer pays the fee for the very transfer that refills it, so a refill
   // clamped to exactly the shortfall lands short by that fee: the payment is
   // then signed for more than the payer holds and fails, with the cap already
-  // spent on it. Below one operation over the shortfall there is no amount
-  // worth pulling, so refuse here, while nothing has moved. Measured against
+  // spent on it. Below one operation over the shortfall there is no amount worth
+  // pulling, so refuse here, while nothing has moved. It stays at one operation
+  // and not a multiple of it: what the fee actually turns out to be is read back
+  // after the refill lands, and a wider bar here would only refuse payments that
+  // settle, leaving the tail of every period cap unspendable. Measured against
   // `needed` rather than the price, so an upto payment that still owes Permit2
   // an approval is judged with that operation counted in.
-  if (opts.maxTopUp !== undefined && opts.maxTopUp < shortfall + feePerOp) {
+  if (opts.maxTopUp !== undefined && opts.maxTopUp < shortfall + headroom) {
     return {
       ok: false,
       reason:
         `the tightest spend cap has ${opts.maxTopUp} base units left and this payment needs ` +
-        `${shortfall + feePerOp} topped up (${shortfall} short, plus the fee the payer is charged for the ` +
-        `refill itself); wait for the period to reset, or raise the cap.`,
+        `${shortfall + headroom} topped up: ${shortfall} short, plus ${headroom} of headroom for the fee the ` +
+        'payer is charged for the refill itself. Wait for the period to reset, or raise the cap.',
     };
   }
 
@@ -309,7 +324,123 @@ export async function ensurePayerFunds(
     permit2Allowance = granted.allowance;
   }
 
+  const short = await payerStillShort(asset, payerAddress, price, requirement.network, balance, opts, AFTER_REFILL);
+  if (short) return { ok: false, reason: short, amount: amount.toString(), batchId, approvalBatchId };
+
   return { ok: true, amount: amount.toString(), batchId, approvalBatchId, permit2Allowance };
+}
+
+/**
+ * The poll clock the funder waits on, with its defaults in one place. Three
+ * loops wait out the same two things, a confirmation and replica lag, and each
+ * kept its own copy of the interval.
+ */
+function pollClock(opts: TopUpOptions) {
+  return {
+    sleep: opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))),
+    pollMs: opts.pollMs ?? 2_000,
+  };
+}
+
+/**
+ * How many times to look for something a confirmed userOp should already have
+ * changed, before giving up on the node catching up. The bundler has confirmed
+ * it by then, so both loops that use this are waiting out replica lag and not a
+ * settlement: a few polls, or it is something else that is wrong.
+ */
+const LAG_POLL_ATTEMPTS = 3;
+
+/**
+ * What the payer was charged for since the balance above it was read, and what
+ * an operator should do about a payer left short by it.
+ *
+ * Two paths reach the same check and only one of them refills: the other sends
+ * the Permit2 approval on a payer that already covered the price. Blaming the
+ * permission cap there would send an operator to raise a cap no refill drew
+ * from, so the subject is passed in rather than assumed.
+ */
+interface ChargedFor {
+  /** Names the userOp the payer was charged for, in the refusal and the warnings. */
+  moment: string;
+  /** Why the payer can be short of it, and what to do. */
+  cause: string;
+}
+
+const AFTER_REFILL: ChargedFor = {
+  moment: 'the refill',
+  cause:
+    'the fee it was charged for the refill came to more than the headroom left for it. Retry once the cap allows ' +
+    'a larger one.',
+};
+
+const AFTER_APPROVAL: ChargedFor = {
+  moment: 'the Permit2 approval',
+  cause:
+    'the gas for that approval came to more than the reserve the payer held over the price. Retry the payment: ' +
+    'the next attempt refills the payer through the permission.',
+};
+
+/**
+ * Whether the payer can actually pay, read after the userOps it was charged for.
+ *
+ * The bar before the refill is a prediction: it guesses the fee the payer is
+ * about to be charged for the transfer that refills it. This is the measurement,
+ * and it needs no constant at all. Whatever the fee turned out to be, at any gas
+ * price on any chain, the balance says so.
+ *
+ * Refusing here still costs the caps what already moved, so the refusal carries
+ * the trace for the audit row. It costs a retry; signing a payment the payer
+ * cannot cover costs the whole ceiling, because a failed attempt reserves it.
+ *
+ * That makes a false refusal expensive, and the confirmation does not rule one
+ * out: the bundler confirmed the userOp, this reads `balanceOf` through a
+ * different provider, and a replica a block behind still answers with the
+ * pre-refill figure. So `before` is passed in. A balance that has not moved at
+ * all is a lag signature and not a fee, since the refill credited the payer and
+ * the fee then debited it. Only a balance observed to have moved is judged; one
+ * that never moves polls, and then goes on with a warning rather than refusing a
+ * payment whose funds have already landed.
+ *
+ * A read that fails proceeds for the same reason. The transfer has landed and
+ * drawn the cap either way, so refusing on an unreachable node buys a certain
+ * non-payment where going on still has a chance of settling.
+ */
+async function payerStillShort(
+  asset: UsdcAsset,
+  payerAddress: `0x${string}`,
+  price: bigint,
+  network: string,
+  before: bigint,
+  opts: TopUpOptions,
+  charged: ChargedFor
+): Promise<string | null> {
+  const { sleep, pollMs } = pollClock(opts);
+
+  for (let attempt = 0; attempt < LAG_POLL_ATTEMPTS; attempt++) {
+    if (attempt > 0) await sleep(pollMs);
+    let balance: bigint;
+    try {
+      const read = opts.balanceReader;
+      balance = read ? await read(asset, payerAddress) : BigInt((await usdcBalance(network, payerAddress)).raw);
+    } catch (err) {
+      // Said out loud rather than swallowed: the payment goes on, and the operator
+      // needs to know the one check that would have caught a short payer never ran.
+      console.warn(
+        `[jaw] Could not re-read the payer balance after ${charged.moment} (${errorMessage(err)}); paying anyway.`
+      );
+      return null;
+    }
+    if (balance >= price) return null;
+    if (balance !== before) {
+      return `the payer holds ${balance} base units after ${charged.moment} and this payment needs ${price}: ${charged.cause}`;
+    }
+  }
+
+  console.warn(
+    `[jaw] The payer balance still reads ${before} base units after ${charged.moment}, unchanged from before it, ` +
+      'so the node read here has not caught up; paying anyway.'
+  );
+  return null;
 }
 
 /**
@@ -424,13 +555,6 @@ async function grantPermit2Allowance(
   return { ok: true, batchId, allowance: visible };
 }
 
-/**
- * How many times to look for a freshly granted allowance before giving up. The
- * approval is already confirmed by then, so this is waiting out replica lag and
- * not a settlement: a few polls or it is something else that is wrong.
- */
-const ALLOWANCE_VISIBILITY_ATTEMPTS = 3;
-
 async function allowanceVisible(
   asset: UsdcAsset,
   payerAddress: `0x${string}`,
@@ -438,10 +562,9 @@ async function allowanceVisible(
   opts: TopUpOptions
 ): Promise<bigint | null> {
   const read = opts.allowanceReader ?? readAllowance;
-  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const pollMs = opts.pollMs ?? 2_000;
+  const { sleep, pollMs } = pollClock(opts);
 
-  for (let attempt = 0; attempt < ALLOWANCE_VISIBILITY_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < LAG_POLL_ATTEMPTS; attempt++) {
     if (attempt > 0) await sleep(pollMs);
     try {
       const seen = await read(asset, payerAddress, PERMIT2_ADDRESS);
@@ -470,8 +593,7 @@ async function awaitCall(
   labels: { subject: string; onChainFailure: string }
 ): Promise<{ ok: boolean; reason?: string }> {
   const now = opts.now ?? Date.now;
-  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const pollMs = opts.pollMs ?? 2_000;
+  const { sleep, pollMs } = pollClock(opts);
   const timeoutMs = opts.timeoutMs ?? 90_000;
   const deadline = now() + timeoutMs;
 
