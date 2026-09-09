@@ -1,4 +1,5 @@
 import { SignerType } from '../messages/index.js';
+import { standardErrors } from '../errors/index.js';
 import { AppMetadata, ProviderEventCallback, PaymasterConfig } from '../provider/index.js';
 import { Communicator } from '../communicator/index.js';
 import { Signer } from './interface.js';
@@ -26,7 +27,7 @@ export function createSigner(params: {
     switch (signerType) {
         case 'crossPlatform': {
             if (!communicator) {
-                throw new Error('Communicator is required for crossPlatform signer');
+                throw standardErrors.rpc.internal('Communicator is required for crossPlatform signer');
             }
             return new CrossPlatformSigner({
                 metadata,
@@ -37,13 +38,12 @@ export function createSigner(params: {
 
         case 'appSpecific': {
             if (!uiHandler) {
-                throw new Error('UIHandler is required for appSpecific signer');
+                throw standardErrors.rpc.internal('UIHandler is required for appSpecific signer');
             }
-            // App-specific mode hands the key to the dApp's own UIHandler, which has
-            // nowhere to get one, so it stays required even though the type allows it
-            // to be absent.
+            // Already refused at config time in create(); kept as the last word on
+            // the type, which allows the key to be absent for the other mode.
             if (!apiKey) {
-                throw new Error('API key is required for appSpecific signer');
+                throw standardErrors.rpc.internal('API key is required for appSpecific signer');
             }
             return new AppSpecificSigner({
                 metadata,

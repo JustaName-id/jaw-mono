@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { create } from './createJAWSDK.js';
+import { Mode } from '../provider/interface.js';
 import { sdkstore, store } from '../store/index.js';
 import { SDK_VERSION } from '../sdk-info.js';
 import { JAW_RPC_URL } from '../constants.js';
@@ -35,6 +36,13 @@ describe('create() chain registration', () => {
         for (const chain of chains) {
             expect(chain.rpcUrl).toBe(`${JAW_RPC_URL}?chainId=${chain.id}`);
         }
+    });
+
+    // App-specific mode hands the key to the dApp's own UIHandler, which has nowhere
+    // to get one. It used to be caught in createSigner, so a misconfigured app got
+    // an SDK that built fine and failed on its first request instead.
+    it('refuses app-specific mode with no api-key, at config time', () => {
+        expect(() => create({ appName: 'Test', preference: { mode: Mode.AppSpecific } })).toThrow(/API key/i);
     });
 
     it('honours defaultChainId without an api-key', () => {

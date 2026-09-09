@@ -17,6 +17,14 @@ describe('createSigner api-key requirement', () => {
         ).toThrow('API key is required for appSpecific signer');
     });
 
+    // This refusal comes back out of provider.request, where a dApp classifies by
+    // error.code. A bare Error carries none, so it read as an unknown failure.
+    it('refuses with a numeric code, like every other refusal on this path', () => {
+        expect(() => createSigner({ signerType: 'appSpecific', metadata, uiHandler, callback: vi.fn() })).toThrow(
+            expect.objectContaining({ code: expect.any(Number) })
+        );
+    });
+
     it('builds a crossPlatform signer with no key', () => {
         const communicator = { onMessage: vi.fn(), postMessage: vi.fn() } as never;
 
