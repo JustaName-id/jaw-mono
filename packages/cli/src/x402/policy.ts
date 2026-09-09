@@ -13,7 +13,7 @@ import type { GrantedPermission } from '../lib/session-config.js';
  * `_checkAndIncrementSpend` charges every limit whose token matches and does
  * not stop at the first. Which one refuses depends on the amount and on the
  * moment, so a single pair cannot answer it, and picking one on the caller's
- * behalf is what reported a month's budget as a day's.
+ * behalf would report a month's budget as a day's.
  */
 export interface GrantedPeriodLimit {
   /** Base units, decimal string. */
@@ -189,9 +189,9 @@ export function resolveSessionX402Policy(
 
 /**
  * The most a single top-up may move into the payer: the smallest cap that
- * actually binds, never a preferred one. Preferring the per-period cap let a
- * 5-USDC/day grant pre-fund 5 USDC into a session the user had explicitly capped
- * at 1, which is the idle-funds-at-risk case `TopUpOptions.maxTopUp` exists to
+ * actually binds, never a preferred one. Preferring the per-period cap would let
+ * a 5-USDC/day grant pre-fund 5 USDC into a session the user explicitly capped at
+ * 1, which is the idle-funds-at-risk case `TopUpOptions.maxTopUp` exists to
  * prevent. Undefined when neither cap is set, meaning the on-chain permission is
  * the only bound.
  *

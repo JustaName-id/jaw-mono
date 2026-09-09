@@ -102,11 +102,11 @@ export default class X402Status extends BaseCommand {
     const decimals = asset?.decimals ?? 6;
 
     // The cap that actually mirrors the permission, and what is left of it right
-    // now. Without this the report was silent about the only cap a grant-seeded
-    // session enforces. Asked of the chain first, which knows about pulls this
-    // CLI's ledger never saw.
+    // now. Without it the report would be silent about the only cap a
+    // grant-seeded session enforces. Asked of the chain first, which knows about
+    // pulls this CLI's ledger never saw.
     // Every limit on the payment token, each with its own window and its own
-    // usage. Reducing them to one reports a month's budget as a day's.
+    // usage. Reducing them to one would report a month's budget as a day's.
     const usage = await currentLimitUsageOnChain(policy, payer, current);
     // Joined onto the limits the policy holds, not read off the usage list. A
     // limit whose usage could not be computed is still enforced by
@@ -225,7 +225,7 @@ export default class X402Status extends BaseCommand {
     }
     this.log(`  caps    ${formatUsdc(policy.maxAmountPerPayment, decimals)} per payment`);
     // Every limit, each with its own window and reset: one of them standing for
-    // all reports a 100-a-month cap as 50 a day.
+    // all would report a 100-a-month cap as 50 a day.
     for (const limit of limits) {
       const floor = limit.source === 'chain' ? '' : 'at least ';
       // A limit with no window is one whose usage could not be computed. It

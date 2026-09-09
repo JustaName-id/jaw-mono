@@ -105,10 +105,9 @@ export function readX402Log(limit?: number): X402LogEntry[] {
 /**
  * What one row contributes to a spend cap.
  *
- * The single definition of the rule, exported because more than one place needs
- * it. `jaw x402 log` reports against it, and the caps enforce against it, so the
- * number a user reads and the number that refuses their next payment are the
- * same number.
+ * Exported because two readers need the same answer: `jaw x402 log` reports
+ * against it, and the caps enforce against it, so the number a user reads and
+ * the number that refuses their next payment are the same number.
  *
  * A settled payment costs what settled. A failed one costs the ceiling it
  * authorized, because an authorization that was signed and sent stays spendable

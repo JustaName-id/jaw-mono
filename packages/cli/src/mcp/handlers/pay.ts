@@ -226,8 +226,8 @@ export function registerPayTool(server: McpServer): void {
         const payer = sessionPayerAddress();
         const session = tryLoadSessionConfig();
         // The payer's float lives where the session does: a top-up refuses to
-        // run on any other chain, so a network read off config answers for the
-        // wrong chain and reports a funded payer as empty.
+        // run on any other chain, so a network read off config would answer for
+        // the wrong chain and report a funded payer as empty.
         //
         // With no session there is nothing to default to, and this tool's own
         // description says it needs one, so it refuses and says which two ways

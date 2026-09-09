@@ -202,8 +202,8 @@ export default class SessionSetup extends BaseCommand {
         // after this one is granted. The key that could use it does not survive
         // here (this path always generates a fresh one, and `saveKeystore`
         // overwrites), but the grant does, and it is the grant that has to be
-        // revocable. Before this, the warning below was the only trace and the
-        // id went away with the overwritten config.
+        // revocable, so its id is carried onto the new session rather than
+        // going away with the config this overwrites.
         orphaned = [orphanOf(existing), ...orphaned];
         this.logToStderr(
           `Warning: overwriting active session without revoking. ` +
@@ -307,8 +307,9 @@ export default class SessionSetup extends BaseCommand {
       }
 
       const grantResponse = granted as { permissionId: string; account: string };
-      // Undefined from a wallet whose response does not carry the struct, which
-      // leaves the session behaving exactly as sessions did before this field.
+      // Undefined from a wallet whose response does not carry the struct. The
+      // session is then saved without it, and its policy falls back to the
+      // config defaults instead of the grant's own caps.
       const permission = parseGrantedPermission(granted);
 
       // 7. Save keystore
