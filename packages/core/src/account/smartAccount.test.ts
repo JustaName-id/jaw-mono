@@ -41,6 +41,7 @@ vi.mock('./toJustanAccount.js', () => ({
 vi.mock('../constants.js', () => ({
     PERMISSIONS_MANAGER_ADDRESS: '0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8',
     FACTORY_ADDRESS: '0x0000000000000000000000000000000000factory',
+    JAW_PROXY_URL: 'https://proxy.jaw.example',
 }));
 
 vi.mock('../errors/errors.js', async () => {

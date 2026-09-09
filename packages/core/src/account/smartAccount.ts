@@ -56,7 +56,8 @@ import {
     robinhood,
     soneium,
 } from 'viem/chains';
-import { PERMISSIONS_MANAGER_ADDRESS, FACTORY_ADDRESS } from '../constants.js';
+import { PERMISSIONS_MANAGER_ADDRESS, FACTORY_ADDRESS, JAW_PROXY_URL } from '../constants.js';
+import { jawHttp } from '../utils/jawHttp.js';
 import { standardErrors } from '../errors/errors.js';
 import {
     getPermissionFromRelay,
@@ -175,7 +176,7 @@ export const getBundlerClient = (
     // unlisted chain resolves to `undefined` here.
     const publicClient = createPublicClient({
         chain: viemChain,
-        transport: http(chain.rpcUrl),
+        transport: jawHttp(chain.rpcUrl),
     });
 
     // Priority: overrides (from capabilities) > chain config (from SDK config).
@@ -191,19 +192,23 @@ export const getBundlerClient = (
     if (!effectivePaymasterUrl) {
         return createBundlerClient({
             client: publicClient,
-            transport: http(chain.rpcUrl),
+            transport: jawHttp(chain.rpcUrl),
         });
     }
 
     const paymasterClient = createPaymasterClient({
-        transport: http(effectivePaymasterUrl),
+        // A paymaster can be another company's server, and which dApp the user is
+        // on is not theirs to learn. Ours is the only one told.
+        transport: effectivePaymasterUrl.startsWith(JAW_PROXY_URL)
+            ? jawHttp(effectivePaymasterUrl)
+            : http(effectivePaymasterUrl),
     });
 
     // Use shared paymaster functions that handle gas price fetching and v0.8 gas limits
     return createBundlerClient({
         client: publicClient,
         paymaster: createPaymasterFunctions(publicClient, paymasterClient, chain.id, effectivePaymasterContext),
-        transport: http(chain.rpcUrl),
+        transport: jawHttp(chain.rpcUrl),
     });
 };
 
@@ -226,7 +231,7 @@ async function prepareEip7702Calls(
     // gates the next), so there is never more than one eth_call in flight to fold.
     const publicClient = createPublicClient({
         chain: SUPPORTED_CHAINS.find((c) => c.id === chain.id),
-        transport: http(chain.rpcUrl),
+        transport: jawHttp(chain.rpcUrl),
     });
 
     const implementationAddress = await readContract(publicClient, {

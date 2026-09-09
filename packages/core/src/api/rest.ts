@@ -1,5 +1,7 @@
 import { backendInstance, controlledAxiosPromise } from './axiosController.js';
 import { Routes, ROUTES } from './routes/index.js';
+import { store } from '../store/index.js';
+import { JAW_PROXY_URL } from '../constants.js';
 import qs from 'qs';
 
 /**
@@ -48,6 +50,11 @@ export const restCall = <
     // POST/DELETE: request goes to data
     const params = method === 'GET' ? request : method === 'PATCH' && queryParams ? queryParams : undefined;
 
+    // Only on the proxy, which is where a caller with no key has to be identified.
+    // `x-dapp-origin` is not CORS-safelisted, so sending it to the wallet API would
+    // make every passkey and analytics call depend on that service allowing it too.
+    const dappOrigin = serverUrl?.startsWith(JAW_PROXY_URL) ? store.config.get().dappOrigin : undefined;
+
     return controlledAxiosPromise<ROUTES[T]['response']>(
         backendInstance(dev, serverUrl).request({
             url,
@@ -57,7 +64,9 @@ export const restCall = <
                 return qs.stringify(params, { arrayFormat: 'repeat' });
             },
             data: method === 'POST' || method === 'PATCH' ? request : undefined,
-            headers: headers || {},
+            // Calls made from the keys origin all carry the same `Origin`, so the
+            // caller they act on behalf of travels alongside instead of in it.
+            headers: { ...(headers ?? {}), ...(dappOrigin ? { 'x-dapp-origin': dappOrigin } : {}) },
         })
     );
 };

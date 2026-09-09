@@ -3,6 +3,7 @@ import type { RequestArguments } from '../provider/index.js';
 import { JAW_RPC_URL } from '../constants.js';
 import { buildHandleJawRpcUrl, fetchRPCRequest, hexStringFromNumber } from '../utils/index.js';
 import { MAINNET_CHAINS } from '../account/smartAccount.js';
+import { store } from '../store/index.js';
 
 /**
  * Chain metadata capability returned by wallet_getCapabilities
@@ -51,13 +52,13 @@ export function clearCapabilitiesCache(): void {
  * Failures are never cached, and every caller gets its own copy of the response.
  *
  * @param request - The wallet_getCapabilities request
- * @param apiKey - API key for authentication
+ * @param apiKey - API key for authentication, if the caller has one
  * @param showTestnets - Whether to include testnet chains (default: false)
  * @returns Capabilities for all or filtered chains
  */
 export async function handleGetCapabilitiesRequest(
     request: RequestArguments,
-    apiKey: string,
+    apiKey: string | undefined,
     showTestnets = false
 ): Promise<CapabilitiesResult> {
     const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL, apiKey);
@@ -83,7 +84,9 @@ export async function handleGetCapabilitiesRequest(
 
     // Key on the *effective* params, after the chain filter above is injected — two
     // callers that differ only in `showTestnets` resolve to different requests.
-    const cacheKey = `${apiKey}|${JSON.stringify(requestArgs.params ?? [])}`;
+    // The dApp is part of the key: with no api-key the proxy answers on the origin
+    // we name instead, so two of them would otherwise share the `undefined|...` entry.
+    const cacheKey = `${apiKey}|${store.config.get().dappOrigin ?? ''}|${JSON.stringify(requestArgs.params ?? [])}`;
 
     // Every exit hands back a copy, never the cache entry itself. `JAWProvider` forwards
     // this result straight to the dApp, and the internal UI call sites all key on the same

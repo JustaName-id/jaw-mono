@@ -1,5 +1,5 @@
 import type { Address, Hash, Hex, TypedDataDefinition, TypedData, LocalAccount } from 'viem';
-import { isHex, encodeFunctionData, erc20Abi, createPublicClient, http, numberToHex } from 'viem';
+import { isHex, encodeFunctionData, erc20Abi, createPublicClient, numberToHex } from 'viem';
 import { toWebAuthnAccount, type SmartAccount } from 'viem/account-abstraction';
 import {
     createSmartAccount,
@@ -23,6 +23,7 @@ import {
     type CallStatusResponse,
 } from '../rpc/wallet_sendCalls.js';
 import type { JustanAccountImplementation } from './toJustanAccount.js';
+import { jawHttp } from '../utils/jawHttp.js';
 import {
     PasskeyManager,
     type PasskeyAccount,
@@ -1192,7 +1193,7 @@ export class Account {
     ): Promise<{ to: Address; value: bigint; data: Hex } | null> {
         const publicClient = createPublicClient({
             chain: { id: this._chain.id } as Parameters<typeof createPublicClient>[0]['chain'],
-            transport: http(this._chain.rpcUrl),
+            transport: jawHttp(this._chain.rpcUrl),
         });
 
         const read = {
@@ -1640,7 +1641,7 @@ export class Account {
         // Check current allowance
         const publicClient = createPublicClient({
             chain: { id: this._chain.id } as Parameters<typeof createPublicClient>[0]['chain'],
-            transport: http(this._chain.rpcUrl),
+            transport: jawHttp(this._chain.rpcUrl),
         });
 
         const currentAllowance = await publicClient.readContract({
