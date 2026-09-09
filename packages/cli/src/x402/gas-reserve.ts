@@ -37,6 +37,15 @@ export function gasReserve(asset: UsdcAsset): bigint {
  * the floor a session has to clear to be able to send anything at all, which is
  * a different question from `gasReserve`: that one decides how much to leave
  * behind, this one decides whether there is enough to act.
+ *
+ * It is also the bar a clamped refill has to clear, for the same reason: below
+ * one operation there is no amount worth pulling, because the transfer cannot
+ * pay for itself. Above it the fee is no longer predicted at all, since
+ * `ensurePayerFunds` reads the payer balance back once the refill lands and
+ * refuses there on whatever the fee turned out to be. Widening this bar past one
+ * operation only buys a guess the measurement already covers, and it costs the
+ * tail of every period cap: a cap holding the price and a cent is a payment that
+ * settles, and a wider bar refuses it with nothing moved.
  */
 export function firstOperationCost(asset: UsdcAsset): bigint {
   return 10n ** BigInt(asset.decimals) / 100n;

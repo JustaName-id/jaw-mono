@@ -498,13 +498,16 @@ describe('jaw_pay_and_fetch', () => {
       expiry: Math.floor(Date.now() / 1000) + 3600,
     });
 
-    // Empty payer -> the funder must refill through the permission first.
-    usdcBalanceMock.mockResolvedValue({
+    // Empty payer -> the funder must refill through the permission first, and
+    // funded on the read after it, which is what the funder now checks before
+    // letting the payment be signed.
+    const balance = (raw: string) => ({
       network: 'eip155:84532',
       asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-      raw: '0',
-      formatted: '0',
+      raw,
+      formatted: raw,
     });
+    usdcBalanceMock.mockResolvedValueOnce(balance('0')).mockResolvedValue(balance('10000000'));
     sessionRequestMock.mockImplementation(async (method: string) => {
       if (method === 'wallet_sendCalls') return { id: '0xtopupbatch', chainId: 84532 };
       if (method === 'wallet_getCallsStatus') return { status: 200 };
@@ -529,6 +532,15 @@ describe('jaw_pay_and_fetch', () => {
       // The transfer went through the session bridge with the granted permission.
       const send = sessionRequestMock.mock.calls.find((c) => c[0] === 'wallet_sendCalls');
       expect(send).toBeTruthy();
+
+      // The ledger row carries the permission it was charged against. The sums
+      // fall back to the payer when a row has none, which is what keeps a live
+      // cap from resetting, and which also means a dropped write here would look
+      // like nothing at all: the totals would quietly go back to counting per
+      // spender, which is the defect this field exists to fix.
+      const { readX402Log } = await import('../x402/ledger.js');
+      const row = readX402Log().at(-1);
+      expect(row?.permissionId).toBe('0xperm1');
     } finally {
       vi.unstubAllGlobals();
       sessionRequestMock.mockReset();
