@@ -727,6 +727,10 @@ function KeysJawIdAppContent({
 
       // Update React state with current origin (needed for useAuth hook)
       setCurrentOrigin(origin);
+      // Set again rather than relying on the handshake having run in this
+      // document: the origin the backend is told comes from the request being
+      // served, not from an earlier one.
+      setDappOrigin(origin);
 
       // Reply to the SDK with a reconnect-required sentinel (tied to this
       // request id, carries no secret) so it re-establishes a session against
