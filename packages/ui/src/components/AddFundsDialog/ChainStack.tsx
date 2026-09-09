@@ -27,7 +27,7 @@ const ICON = 20;
 const STEP = 14;
 
 export interface ChainStackProps {
-  /** The chain the QR pins. Leads the stack, and is included even if it is a testnet. */
+  /** The chain the QR pins. Leads the stack when it is a mainnet; a testnet is left out (see below). */
   activeChainId: number;
   apiKey?: string;
 }
@@ -64,8 +64,6 @@ export function ChainStack({ activeChainId, apiKey }: ChainStackProps) {
 
   const shown = ordered.slice(0, MAX_SHOWN);
   const overflow = ordered.length - shown.length;
-
-  if (ordered.length === 0) return null;
 
   return (
     // The list carries the full names so a screen reader gets "Base, Optimism"

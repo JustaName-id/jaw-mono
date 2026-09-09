@@ -47,7 +47,11 @@ export const AddFundsDialog = ({
   // The address renders immediately and the name replaces it if it resolves.
   // Never gated on resolution: a slow or failing lookup must not hold up the
   // one thing the user came here for.
-  const { name, avatar } = useReverseIdentity(address, chainId, mainnetRpcUrl);
+  //
+  // `plainName` for the clipboard, `name` for the screen: off mainnet the hook
+  // suffixes the display name with `@<chainlabel>`, and `alice.eth@base`
+  // resolves nowhere for a sender pasting it into a send field.
+  const { name, plainName, avatar } = useReverseIdentity(address, chainId, mainnetRpcUrl);
 
   // ENS records are attacker-controlled, so the scheme is checked before the URL
   // reaches an <img src>: `isSafeImageUrl` allows only https and data:image.
@@ -106,32 +110,35 @@ export const AddFundsDialog = ({
                 renderCenter={
                   safeAvatar
                     ? (px) => (
-                        <span
-                          // A white plate wider than the avatar, so the padding
-                          // reads as a quiet ring between the image and the
-                          // modules. Without it the avatar sits edge to edge on
-                          // the code and looks pasted on rather than placed.
-                          // The plate is also what hides the modules behind a
-                          // transparent avatar.
+                        <IdentityAvatar
+                          src={safeAvatar}
+                          // No fallback, and the white plate belongs to the
+                          // image rather than to a wrapper: if the image fails
+                          // the centre must be empty rather than showing an
+                          // identicon that looks like part of the code, and a
+                          // wrapper carrying `bg-white` left a blank white
+                          // square sitting on the code instead.
+                          fallback={null}
+                          // The white border IS the plate: it reads as a quiet
+                          // ring between the avatar and the modules, and it is
+                          // what hides the modules behind a transparent avatar.
+                          // Without it the avatar sits edge to edge on the code
+                          // and looks pasted on rather than placed. `bg-white`
+                          // covers the same area while the image is loading.
+                          //
+                          // A border rather than padding because CSS tightens
+                          // the radius across it: the image's own corners curve
+                          // inside the plate's, which is the nested-radius pair,
+                          // on one element. `border-solid` is explicit because
+                          // preflight is disabled here, so an unstyled border
+                          // would be invisible in a non-Tailwind host.
                           //
                           // Square-ish, not round: the plate sits on a grid of
                           // squares, so a rounded square belongs to the code's
-                          // own geometry where a circle fights it. `chip`
-                          // outside and `xs` inside is the nested-radius pair —
-                          // the inner curve has to be tighter than the outer or
-                          // the ring looks thicker at the corners.
-                          className="rounded-chip flex items-center justify-center bg-white"
-                          style={{ width: px, height: px, padding: Math.max(3, Math.round(px * 0.12)) }}
-                        >
-                          <IdentityAvatar
-                            src={safeAvatar}
-                            // No fallback: if the image fails, the centre must be
-                            // empty rather than showing an identicon that looks
-                            // like part of the code.
-                            fallback={null}
-                            className="rounded-xs h-full w-full object-cover"
-                          />
-                        </span>
+                          // own geometry where a circle fights it.
+                          className="rounded-chip border-solid border-white bg-white object-cover"
+                          style={{ width: px, height: px, borderWidth: Math.max(3, Math.round(px * 0.12)) }}
+                        />
                       )
                     : undefined
                 }
@@ -159,7 +166,7 @@ export const AddFundsDialog = ({
                   {/* Copies the name, not the address. A sender pasting into a
                       wallet that resolves ENS wants the name; one pasting into
                       an exchange wants the hex below. Both are one tap. */}
-                  <CopyButton value={name} size={13} className="flex-none" label="Copy name" />
+                  <CopyButton value={plainName ?? name} size={13} className="flex-none" label="Copy name" />
                 </p>
               )}
               {/* The full address, not a truncated one. Truncation is fine

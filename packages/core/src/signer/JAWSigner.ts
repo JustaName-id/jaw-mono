@@ -201,23 +201,21 @@ export abstract class JAWSigner implements Signer {
                 // `optionalChainId` only proves "positive integer or hex", and
                 // nothing downstream checks the value: addFunds is absent from
                 // CrossPlatformSigner.resolveChainFromRequest, so `resolveChain`
-                // and its 5710 are never reached, and AppSpecific just converts
-                // it. `{ chainId: 1337 }` therefore drew a screen headed
+                // is never reached, and AppSpecific just converts it.
+                // `{ chainId: 1337 }` therefore drew a screen headed
                 // "Chain 1337" with a QR encoding `@1337` — a chain the wallet
                 // knows nothing about and where the account is not deployed —
                 // while wallet_sendCalls refuses the same value.
                 //
-                // Same check and same message as wallet_switchEthereumChain, so
-                // an unconfigured chain reads identically wherever it is asked for.
-                if (addFunds.chainId !== undefined) {
-                    const chainId = ensureIntNumber(addFunds.chainId);
-                    const configured = (store.getState().chains ?? []).some((c) => c.id === chainId);
-                    if (!configured) {
-                        throw standardErrors.provider.unsupportedChain(
-                            `Chain ${chainId} is not configured. If this is a testnet, set preference.showTestnets to true.`
-                        );
-                    }
-                }
+                // `resolveChain` IS that check, so it is reused rather than
+                // rewritten: it throws 5710 with the showTestnets hint for
+                // exactly this condition. Its chain is dropped because this
+                // method needs the id alone. 4902 would be wrong here even
+                // though wallet_switchEthereumChain uses it: that is the
+                // EIP-3326 code whose whole point is telling a library to offer
+                // `wallet_addEthereumChain`, which this wallet does not
+                // implement, so it would point at a dead end.
+                if (addFunds.chainId !== undefined) this.resolveChain(addFunds.chainId);
 
                 return { method: 'wallet_addFunds', params: addFunds };
             }

@@ -572,10 +572,14 @@ describe('CrossPlatformSigner', () => {
         // `optionalChainId` only proves the shape. Without this the QR pinned a
         // chain the wallet knows nothing about and where the account is not
         // deployed, while wallet_sendCalls refused the same value.
+        //
+        // 5710, from `resolveChain`: the same code and message every other
+        // method gives for an unconfigured chain, rather than one written for
+        // this method alone.
         it('refuses an unconfigured chainId before the popup opens', async () => {
-            await expect(signer.request({ method: 'wallet_addFunds', params: [{ chainId: 1337 }] })).rejects.toThrow(
-                /Chain 1337 is not configured/
-            );
+            await expect(
+                signer.request({ method: 'wallet_addFunds', params: [{ chainId: 1337 }] })
+            ).rejects.toMatchObject({ code: standardErrorCodes.eip5792.unsupportedChainId });
 
             expect(mockCommunicator.postRequestAndWaitForResponse).not.toHaveBeenCalled();
         });

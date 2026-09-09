@@ -394,7 +394,12 @@ export function RequestModals({
         params={pendingRequest.params}
         chain={pendingRequest.chain as chain}
         apiKey={apiKey}
-        origin={pendingRequest.origin}
+        // `currentOrigin`, like every other modal here. This screen feeds its
+        // origin to `useAuth`, and the page holds that query under
+        // `currentOrigin` — a different string is a different query key, so a
+        // per-request origin meant a cold cache and a null address on the first
+        // render of every request.
+        origin={currentOrigin || undefined}
         appName={pendingRequest.metadata?.appName}
         appLogoUrl={pendingRequest.metadata?.appLogoUrl}
         // The only failure this screen has: it cannot show an address at all.

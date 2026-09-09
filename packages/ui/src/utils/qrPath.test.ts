@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import qrcode from 'qrcode-generator';
 import { buildQrPath } from './qrPath';
 import { eip681Uri } from './eip681';
 
@@ -52,6 +53,42 @@ describe('buildQrPath', () => {
   it('is complete: the same payload always gives the same code', () => {
     const value = eip681Uri(ADDRESS, 8453);
     expect(buildQrPath(value)).toEqual(buildQrPath(value));
+  });
+
+  // Everything above is symmetric under a transpose or a mirror: corners, a
+  // count, a module total, and a central band all survive swapping the axes, so
+  // `M${row},${col}` in place of `M${col},${row}` passed the whole file while
+  // producing an unscannable code. The matrix itself is the only oracle, so it
+  // is re-encoded here and compared cell by cell.
+  it('draws each module at its own coordinate, x then y', () => {
+    const value = eip681Uri(ADDRESS, 8453);
+    const { path, count } = buildQrPath(value);
+    const drawn = modules(path);
+
+    const qr = qrcode(0, 'H');
+    qr.addData(value);
+    qr.make();
+    expect(qr.getModuleCount()).toBe(count);
+
+    // The teeth: a matrix that happened to equal its own transpose would make
+    // the comparison below pass either way round.
+    let asymmetric = 0;
+    for (let row = 0; row < count; row++) {
+      for (let col = 0; col < count; col++) {
+        if (qr.isDark(row, col) !== qr.isDark(col, row)) asymmetric++;
+      }
+    }
+    expect(asymmetric).toBeGreaterThan(0);
+
+    const wrong: string[] = [];
+    for (let row = 0; row < count; row++) {
+      for (let col = 0; col < count; col++) {
+        // `M<col>,<row>`: the path is in SVG coordinates, where x comes first,
+        // and `isDark` takes the row first.
+        if (drawn.has(`${col},${row}`) !== qr.isDark(row, col)) wrong.push(`${col},${row}`);
+      }
+    }
+    expect(wrong).toEqual([]);
   });
 
   it('leaves no gap in the middle', () => {

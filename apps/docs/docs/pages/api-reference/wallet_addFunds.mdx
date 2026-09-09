@@ -66,10 +66,12 @@ A resolved call means the screen was shown and closed, **not** that funds arrive
 
 ## Errors
 
-| Code   | Description                                                        |
-| ------ | ------------------------------------------------------------------ |
-| 4100   | Unauthorized (no connected account to receive funds at)            |
-| -32602 | Invalid params (chainId is not a positive integer or hex quantity) |
+| Code   | Description                                                          |
+| ------ | -------------------------------------------------------------------- |
+| 4100   | Unauthorized (no connected account to receive funds at)              |
+| 5710   | The chain isn't configured (testnets need `preference.showTestnets`) |
+| -32602 | Invalid params (chainId is not a positive integer or hex quantity)   |
+| -32603 | The wallet could not resolve an address to receive at                |
 
 ## Example
 

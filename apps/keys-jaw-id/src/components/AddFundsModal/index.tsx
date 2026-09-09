@@ -8,6 +8,7 @@ import {
   type NormalizedAddFundsParams,
   JAW_RPC_URL,
   MAINNET_CHAINS,
+  SUPPORTED_CHAINS,
   ensureIntNumber,
   normalizeAddFundsParams,
   resolveDestination,
@@ -80,11 +81,24 @@ export const AddFundsModal = ({
 
   const mainnetRpcUrl = prodApiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${prodApiKey}` : `${JAW_RPC_URL}?chainId=1`;
 
-  // MAINNET_CHAINS[0], not SUPPORTED_CHAINS[0]: the two are the same chain only
-  // because SUPPORTED_CHAINS happens to list mainnets first, so reordering it
-  // would silently make this fall back to a testnet. The stack shows mainnets,
-  // so the code this backstops should name one too.
-  const chainId = addFunds.chainId ? ensureIntNumber(addFunds.chainId) : (chain?.id ?? MAINNET_CHAINS[0]!.id);
+  // Checked against the chains we actually carry, not just parsed, and checked
+  // once on the resolved value rather than per input. `normalizeAddFundsParams`
+  // only proves the hint is a hex number, and `chain` arrives from the decrypted
+  // request too (`toRequestChain` in page.tsx reshapes it and nothing else), so
+  // both inputs are equally unverified: the SDK's support check runs before the
+  // popup opens, which is exactly the check a caller posting straight to this
+  // window skips. An unsupported id reached `chainName` (rendering "Chain 1234")
+  // and the EIP-681 payload, so the QR named a network nothing here supports.
+  //
+  // Falling back beats refusing: the address is the same on every chain, so the
+  // screen is still correct. MAINNET_CHAINS[0], not SUPPORTED_CHAINS[0], is the
+  // last resort: the two are the same chain only because SUPPORTED_CHAINS
+  // happens to list mainnets first, so reordering it would silently make this
+  // fall back to a testnet. The stack shows mainnets, so the code this backstops
+  // should name one too.
+  const candidate = addFunds.chainId ? ensureIntNumber(addFunds.chainId) : chain?.id;
+  const chainId =
+    candidate !== undefined && SUPPORTED_CHAINS.some((c) => c.id === candidate) ? candidate : MAINNET_CHAINS[0]!.id;
 
   // The session hands back a plain string, so the shape is checked before it
   // becomes a destination: an unchecked cast would let a truncated or malformed
@@ -123,8 +137,8 @@ export const AddFundsModal = ({
     <AddFundsDialog
       open
       // Still through `resolveDestination`, even with one account in hand: it is
-      // the single named place a destination is decided, and phase 3 swaps it
-      // for a routing address.
+      // the single named place a destination is decided, so a later routing
+      // address is swapped in there rather than in each host.
       address={resolveDestination([sessionAccount as Address])}
       chainId={chainId}
       mainnetRpcUrl={mainnetRpcUrl}
