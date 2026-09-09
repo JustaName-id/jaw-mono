@@ -1,5 +1,6 @@
 import { backendInstance, controlledAxiosPromise } from './axiosController.js';
 import { Routes, ROUTES } from './routes/index.js';
+import { store } from '../store/index.js';
 import qs from 'qs';
 
 /**
@@ -48,6 +49,8 @@ export const restCall = <
     // POST/DELETE: request goes to data
     const params = method === 'GET' ? request : method === 'PATCH' && queryParams ? queryParams : undefined;
 
+    const dappOrigin = store.config.get().dappOrigin;
+
     return controlledAxiosPromise<ROUTES[T]['response']>(
         backendInstance(dev, serverUrl).request({
             url,
@@ -57,7 +60,10 @@ export const restCall = <
                 return qs.stringify(params, { arrayFormat: 'repeat' });
             },
             data: method === 'POST' || method === 'PATCH' ? request : undefined,
-            headers: headers || {},
+            // Calls made from the keys origin all carry the same `Origin`, so the
+            // caller they act on behalf of travels alongside instead of in it.
+            // Every route here is ours; a dApp's own page sets no origin.
+            headers: { ...(headers ?? {}), ...(dappOrigin ? { 'x-dapp-origin': dappOrigin } : {}) },
         })
     );
 };

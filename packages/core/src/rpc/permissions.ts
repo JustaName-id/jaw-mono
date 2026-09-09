@@ -615,7 +615,7 @@ async function storePermissionInRelay(
     permissionHash: Hex,
     permission: Permission,
     chainId: string,
-    apiKey: string
+    apiKey?: string
 ): Promise<StorePermissionApiResponse> {
     const requestData: StorePermissionApiRequest = {
         permissionId: permissionHash,
@@ -644,7 +644,7 @@ async function storePermissionInRelay(
         'STORE_PERMISSION',
         'POST',
         requestData,
-        { 'x-api-key': apiKey },
+        apiKey ? { 'x-api-key': apiKey } : {},
         undefined,
         undefined,
         permissionsBaseUrl
@@ -654,14 +654,14 @@ async function storePermissionInRelay(
 /**
  * Delete permission from the relay using typed REST API call with path params
  */
-async function deletePermissionFromRelay(permissionHash: Hex, apiKey: string): Promise<RevokePermissionApiResponse> {
+async function deletePermissionFromRelay(permissionHash: Hex, apiKey?: string): Promise<RevokePermissionApiResponse> {
     const permissionsBaseUrl = JAW_PROXY_URL;
 
     return await restCall(
         'DELETE_PERMISSION',
         'DELETE',
         {},
-        { 'x-api-key': apiKey },
+        apiKey ? { 'x-api-key': apiKey } : {},
         { hash: permissionHash },
         undefined,
         permissionsBaseUrl
