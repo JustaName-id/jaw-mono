@@ -185,8 +185,8 @@ describe('Eip3009EoaPayer paying upto', () => {
     await expect(payer.pay(uptoRequirement)).rejects.toThrow(/approved Permit2/);
   });
 
-  // The bounded transport turns a hung node into an error sooner, so this path
-  // fires more often than it used to. An unreadable allowance must refuse the
+  // The bounded transport turns a hung node into an error sooner, which is what
+  // makes this path a common one. An unreadable allowance must refuse the
   // same way an unreadable delegation does: signing a Permit2 authorization the
   // proxy cannot execute reserves its whole ceiling against the cap for nothing.
   it('refuses before signing when the allowance cannot be read', async () => {
