@@ -7,24 +7,7 @@ import { JAW_PROXY_URL, JAW_RPC_URL } from '../../constants.js';
 import { getSupportedChains, SUPPORTED_CHAINS } from '../../account/smartAccount.js';
 import { createPaymasterFunctions } from '../../account/paymaster.js';
 import { store } from '../store.js';
-
-/**
- * An http transport that names the dApp this instance acts for, when it was told
- * one. Read per request rather than baked into the transport, because the clients
- * are built before the dApp is known.
- */
-function jawHttp(url: string) {
-    return http(url, {
-        onFetchRequest: (_request, init) => {
-            const dappOrigin = store.config.get().dappOrigin;
-            if (!dappOrigin) return undefined;
-
-            // viem uses whatever comes back here in place of `init` rather than
-            // merging it, so it goes back whole.
-            return { ...init, headers: { ...init.headers, 'x-dapp-origin': dappOrigin } };
-        },
-    });
-}
+import { jawHttp } from '../../utils/jawHttp.js';
 
 /**
  * Paymaster configuration for a chain

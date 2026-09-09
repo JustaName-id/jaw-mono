@@ -1,4 +1,4 @@
-import { Address, Hex, createPublicClient, encodeFunctionData, erc20Abi, formatUnits, getAddress, http } from 'viem';
+import { Address, Hex, createPublicClient, encodeFunctionData, erc20Abi, formatUnits, getAddress } from 'viem';
 import { SmartAccount, entryPoint08Address } from 'viem/account-abstraction';
 import { getBundlerClient } from './smartAccount.js';
 import { Chain, getClient } from '../store/index.js';
@@ -9,6 +9,7 @@ import {
     encodeExecuteBatchWithPermission,
 } from '../rpc/permissions.js';
 import { simulateUserOpGasUsage, type MeasuredUserOpGas } from './userOpGasSimulation.js';
+import { jawHttp } from '../utils/jawHttp.js';
 
 /**
  * Token quote from Pimlico's ERC-20 paymaster
@@ -291,7 +292,7 @@ export async function estimateErc20PaymasterCosts(
     // independent and the block is only consumed after the userOp resolves. Reuse the
     // cached per-chain client when the chain is registered in the store. Best-effort:
     // without a base fee the display falls back to the ceiling price.
-    const publicClient = getClient(chain.id) ?? createPublicClient({ transport: http(chain.rpcUrl) });
+    const publicClient = getClient(chain.id) ?? createPublicClient({ transport: jawHttp(chain.rpcUrl) });
     const blockPromise = publicClient.getBlock({ blockTag: 'latest' }).catch(() => null);
 
     const userOp = await bundlerClient.prepareUserOperation({
@@ -320,7 +321,7 @@ export async function estimateErc20PaymasterCosts(
     // really consume — the padded limits stay as the fallback (and the ceiling).
     // No retries + short timeout so a node without eth_simulateV1 can't stall the
     // fee estimate (viem would otherwise retry up to ~40s on every refetch).
-    const simClient = createPublicClient({ transport: http(chain.rpcUrl, { retryCount: 0, timeout: 2_500 }) });
+    const simClient = createPublicClient({ transport: jawHttp(chain.rpcUrl, { retryCount: 0, timeout: 2_500 }) });
     const measuredPromise = simulateUserOpGasUsage(simClient, userOp, smartAccount.entryPoint.address);
 
     // 6. Price the displayed estimate at the effective gas price instead of the
