@@ -63,7 +63,16 @@ export async function fetchRPCRequest(request: RequestArguments, rpcUrl: string)
     }
 
     if (rpcError) throw rpcError;
-    return envelope?.result;
+
+    // A 2xx whose body will not parse is the same silence as a refusal: returning
+    // undefined here is what wallet_getCapabilities would memoize for a minute.
+    if (!envelope) {
+        throw standardErrors.rpc.internal(
+            `JAW RPC request returned a body that is not JSON${body ? `: ${body.slice(0, 200)}` : ''}`
+        );
+    }
+
+    return envelope.result;
 }
 /**
  * Validates the arguments for an invalid request and returns an error if any validation fails.

@@ -76,6 +76,9 @@ vi.mock('../store/index.js', async (importOriginal) => {
             account: {
                 get: vi.fn(() => ({ chain: { id: 1 } })),
             },
+            config: {
+                get: vi.fn(() => ({ apiKey: 'test-api-key' })),
+            },
             callStatuses: {
                 get: vi.fn(),
                 set: vi.fn(),

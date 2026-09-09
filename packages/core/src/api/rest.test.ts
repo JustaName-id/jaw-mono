@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { restCall } from './rest.js';
 import { setDappOrigin } from '../dappOrigin.js';
+import { JAW_PROXY_URL } from '../constants.js';
 
 const request = vi.fn();
 
@@ -28,7 +29,7 @@ describe('restCall and the calling dApp', () => {
 
     async function callThrough(headers?: Record<string, string>) {
         request.mockResolvedValue({ data: { result: { data: {} } } });
-        await restCall('GET_PERMISSION', 'GET', {}, headers, { hash: '0xabc' });
+        await restCall('GET_PERMISSION', 'GET', {}, headers, { hash: '0xabc' }, undefined, JAW_PROXY_URL);
     }
 
     it('names the dApp alongside the key it was given', async () => {
@@ -49,6 +50,18 @@ describe('restCall and the calling dApp', () => {
 
     it('sends no dApp header from a dApp page, where the browser sets the Origin', async () => {
         await callThrough({ 'x-api-key': 'k1' });
+
+        expect(headersSent()).toEqual({ 'x-api-key': 'k1' });
+    });
+
+    // `x-dapp-origin` is not CORS-safelisted, so a route whose service does not list
+    // it in Access-Control-Allow-Headers would fail preflight and never leave the
+    // browser. The proxy is the only one that has to identify a keyless caller.
+    it('sends no dApp header to the wallet API', async () => {
+        setDappOrigin('https://dapp.example');
+        request.mockResolvedValue({ data: { result: { data: {} } } });
+
+        await restCall('LOG_SIGNATURE', 'POST', { address: '0xabc' }, { 'x-api-key': 'k1' });
 
         expect(headersSent()).toEqual({ 'x-api-key': 'k1' });
     });
