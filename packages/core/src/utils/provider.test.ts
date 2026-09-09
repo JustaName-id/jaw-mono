@@ -81,6 +81,16 @@ describe('fetchRPCRequest', () => {
         });
     });
 
+    // A 200 carrying an HTML error page from something in front of the proxy used to
+    // resolve to undefined, which wallet_getCapabilities then memoized for a minute.
+    it('fails on a 2xx whose body is not a JSON-RPC response', async () => {
+        stubResponse(200, '<html>upstream timeout</html>');
+
+        await expect(fetchRPCRequest({ method: 'wallet_getCapabilities' }, 'https://rpc.example')).rejects.toThrow(
+            /not a JSON-RPC response/
+        );
+    });
+
     it('still fails when the rejection body cannot be read', async () => {
         vi.stubGlobal(
             'fetch',

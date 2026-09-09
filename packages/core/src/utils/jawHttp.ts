@@ -10,8 +10,10 @@ import { store } from '../store/index.js';
  * Only for hosts of ours. A third-party paymaster is a different company's server
  * and has no business learning which dApp the user is on, so callers that may be
  * pointing at one check the url before reaching for this.
+ *
+ * `onFetchRequest` is this transport's whole point, so it is not a caller's to set.
  */
-export function jawHttp(url?: string, config?: HttpTransportConfig) {
+export function jawHttp(url?: string, config?: Omit<HttpTransportConfig, 'onFetchRequest'>) {
     return http(url, {
         ...config,
         onFetchRequest: (_request, init) => {

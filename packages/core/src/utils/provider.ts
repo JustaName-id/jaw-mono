@@ -41,11 +41,13 @@ export async function fetchRPCRequest(request: RequestArguments, rpcUrl: string)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the result is whatever the method returns, as before
     let envelope: { result?: any; error?: { code?: unknown; message?: unknown } } | undefined;
     try {
-        envelope = JSON.parse(body);
+        const parsed = JSON.parse(body);
+        if (parsed && typeof parsed === 'object') envelope = parsed;
     } catch {
-        envelope = undefined;
+        // Not JSON at all. Either the status below explains it, or the envelope check does.
     }
 
+    // A well-formed JSON-RPC error is the answer whatever the status says.
     const rpcError = envelope?.error;
     if (rpcError && typeof rpcError.code === 'number' && typeof rpcError.message === 'string') {
         throw rpcError;
@@ -62,13 +64,14 @@ export async function fetchRPCRequest(request: RequestArguments, rpcUrl: string)
             : standardErrors.rpc.internal(message);
     }
 
+    // On a 2xx, anything sitting in `error` is still a failure, however malformed.
     if (rpcError) throw rpcError;
 
-    // A 2xx whose body will not parse is the same silence as a refusal: returning
+    // A 2xx whose body is not an envelope is the same silence as a refusal: returning
     // undefined here is what wallet_getCapabilities would memoize for a minute.
     if (!envelope) {
         throw standardErrors.rpc.internal(
-            `JAW RPC request returned a body that is not JSON${body ? `: ${body.slice(0, 200)}` : ''}`
+            `JAW RPC request returned a body that is not a JSON-RPC response${body ? `: ${body.slice(0, 200)}` : ''}`
         );
     }
 
