@@ -190,8 +190,8 @@ describe('jaw x402 status', () => {
    * A config-set limit wins over the grant's, and the config file is read with
    * `JSON.parse` and a cast, so it can carry an allowance nobody can read.
    * `checkPolicy` refuses every payment on that input, which makes it the limit
-   * that binds; ranking it out of the reduction reported the next limit's
-   * healthy figure and `ready: true` for a session that could not pay at all.
+   * that binds; ranking it out of the reduction would report the next limit's
+   * healthy figure and `ready: true` for a session that cannot pay at all.
    */
   it('flags a binding allowance it cannot read instead of reporting ready', async () => {
     h.config.x402 = {

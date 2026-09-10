@@ -155,8 +155,8 @@ export function diagnose(facts: StatusFacts): string[] {
   }
 
   // A limit that binds and cannot be read. `checkPolicy` refuses every payment
-  // on that input, so a session reported ready over it sent an agent to a
-  // command that was never going to pay. Keyed on the label, which the caller
+  // on that input, so a session reported ready over it would send an agent to a
+  // command that cannot pay. Keyed on the label, which the caller
   // fills from the limit it found: a cap that is null beside a label that is
   // not is a limit that binds and whose figure nobody could parse.
   if (facts.periodLabel != null && facts.periodCap === null) {

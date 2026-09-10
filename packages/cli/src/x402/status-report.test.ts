@@ -183,7 +183,7 @@ describe('diagnose', () => {
   /**
    * The limit that binds is the one with the least room, and an allowance the
    * command cannot read has none: `checkPolicy` refuses every payment on it.
-   * Reported ready, an agent was sent to a command that could never pay.
+   * Reported ready, it sends an agent to a command that cannot pay.
    */
   it('flags a binding allowance it cannot read', () => {
     const problems = diagnose({ ...healthy, periodCap: null, periodSpent: null, periodLabel: 'day' });
