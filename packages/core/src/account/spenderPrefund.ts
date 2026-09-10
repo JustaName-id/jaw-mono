@@ -65,6 +65,16 @@ const PREFUND_GAS = 2_000_000n;
  * one to matter. Taking the minimum keeps the result independent of the order
  * the requester happened to write them in.
  *
+ * `@jaw.id/cli` encodes that same rule a second time, in `policyFromPermission`
+ * (`x402/policy.ts`), keeping every matching limit rather than reducing them
+ * because it has to report which one refuses. One fact, two encodings, either
+ * side of a boundary the CLI deliberately does not cross at startup. A change to
+ * what the contract charges lands in both.
+ *
+ * They fail differently, and on purpose. An unreadable allowance is null here
+ * and no prefund goes out; the CLI skips that entry and keeps enforcing the
+ * rest. This is the side that is about to move funds.
+ *
  * A clamped prefund can be too small to cover the first operation on an
  * expensive chain. That operation is then sponsored, which is what happened for
  * every session before this transfer existed, so the failure mode is the old
