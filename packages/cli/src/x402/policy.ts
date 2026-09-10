@@ -494,9 +494,14 @@ export function checkPolicy(
   // default there was then nothing bounding a pull at all.
   const exceeded: Array<{ limit: GrantedPeriodLimit; usage?: LimitUsage }> = [];
   for (const limit of policy.perPeriod ?? []) {
-    const cap = parseBigInt(limit.allowance);
-    if (cap === null) {
-      return { ok: false, reason: `invalid allowance from grant: ${limit.allowance}` };
+    // The rule `remainingOnLimit` ranks by. Read with `parseBigInt`, a negative
+    // allowance becomes a negative cap that every amount exceeds, so the refusal
+    // names it as a limit that was overrun rather than as a figure nobody can
+    // read. The source is not named either: a limit can come off the grant or
+    // out of the config file, which is merged over it.
+    const cap = parseNonNegativeBigInt(limit.allowance);
+    if (cap === undefined) {
+      return { ok: false, reason: `invalid spend allowance: ${limit.allowance}` };
     }
     const usage = (ctx.periodUsage ?? []).find((entry) => sameLimit(entry, limit));
     const spent = usage?.spent ?? 0n;

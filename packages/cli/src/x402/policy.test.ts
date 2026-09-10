@@ -621,7 +621,19 @@ describe('per-period cap', () => {
   it('refuses rather than passing an allowance it cannot read', () => {
     const result = checkPolicy(oneUsdc, { ...policy, perPeriod: [limit('abc')] }, {});
     expect(result.ok).toBe(false);
-    expect(result.reason).toContain('invalid allowance from grant');
+    expect(result.reason).toContain('invalid spend allowance');
+  });
+
+  /**
+   * A negative allowance is unreadable, not a limit that was overrun. Read with
+   * `parseBigInt` it becomes a negative cap, every amount exceeds it, and the
+   * refusal quotes it as if it were the figure the user granted.
+   */
+  it('names a negative allowance as unreadable rather than as an overrun limit', () => {
+    const result = checkPolicy(oneUsdc, { ...policy, perPeriod: [limit('-5000000')] }, {});
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain('invalid spend allowance');
+    expect(result.reason).not.toContain('would exceed');
   });
 
   /**
