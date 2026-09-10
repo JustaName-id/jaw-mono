@@ -102,9 +102,9 @@ export const DEFAULT_X402_POLICY: X402Policy = {
 
 /**
  * Two addresses are the same address, compared the way this module gets them:
- * out of a file a person can edit. Space around one is why a permission's token
- * stopped matching the registry's while `isSameToken` in `@jaw.id/core`, which
- * reads the same field for the prefund, went on matching it.
+ * out of a file a person can edit. Space around one keeps a permission's token
+ * from matching the registry's, while `isSameToken` in `@jaw.id/core`, which
+ * reads the same field for the prefund, goes on matching it.
  *
  * Only the configured side gains that tolerance in `checkPolicy`: an asset or a
  * `payTo` off the wire has already been through `isPayableAddress`, which takes
@@ -230,6 +230,9 @@ export function sameLimit(
   return a.unit === b.unit && a.multiplier === b.multiplier && a.allowance === b.allowance;
 }
 
+/** A limit that may already carry its own usage, as a joined one does. */
+type MeteredLimit = GrantedPeriodLimit & { toppedUp?: bigint };
+
 /**
  * What is left of one period limit right now, or null when its allowance cannot
  * be read.
@@ -239,29 +242,34 @@ export function sameLimit(
  * what the payer later sends out of the float it already holds. A limit whose
  * usage nobody managed to compute has its whole width left, since a figure
  * nobody read is not a measurement of zero.
+ *
+ * A limit that already carries `toppedUp` is read off itself. Looking only in
+ * `usage`, a caller passing joined limits and no second list would get every
+ * limit's full width back, and the ranking would fall through to the allowance.
  */
-function remainingOnLimit(limit: GrantedPeriodLimit, usage?: LimitUsage[]): bigint | null {
+function remainingOnLimit(limit: MeteredLimit, usage?: LimitUsage[]): bigint | null {
   const cap = parseNonNegativeBigInt(limit.allowance);
   if (cap === undefined) return null;
-  const toppedUp = (usage ?? []).find((entry) => sameLimit(entry, limit))?.toppedUp ?? 0n;
+  const toppedUp = limit.toppedUp ?? (usage ?? []).find((entry) => sameLimit(entry, limit))?.toppedUp ?? 0n;
   return cap > toppedUp ? cap - toppedUp : 0n;
 }
 
 /**
  * The limit with the least room left, which is the one that binds now. Sizing a
- * pull and reporting the verdict ask this same question, and answered it apart
- * they gave different answers to it.
+ * pull and reporting the verdict ask this same question, and answered apart they
+ * give different answers to it.
  *
  * Least room, not the smallest allowance: today's counter at zero under a
  * drained month is a session with nothing left, and ranking on the allowance
- * called it ready right under a printed line reading 100 of 100 used this month.
+ * would call it ready right under a printed line reading 100 of 100 used this
+ * month.
  *
  * An allowance that cannot be read counts as no room rather than dropping out of
  * the ranking. `checkPolicy` refuses every payment on that input, so ranking it
- * out reported the next limit's healthy figure for a session where nothing could
- * go through.
+ * out would report the next limit's healthy figure for a session where nothing
+ * can go through.
  */
-export function tightestLimit<T extends GrantedPeriodLimit>(limits: T[], usage?: LimitUsage[]): T | null {
+export function tightestLimit<T extends MeteredLimit>(limits: T[], usage?: LimitUsage[]): T | null {
   let tightest: T | null = null;
   let least: bigint | null = null;
   for (const limit of limits) {
@@ -306,8 +314,9 @@ export function topUpCeiling(
   const caps = [
     // Every limit the policy holds, not every entry the caller built. The
     // contract charges all of them, so a refill sized against any single one
-    // can still be refused by another, and a limit that dropped out here stopped
-    // bounding the pull at all once a seeded grant deleted the session default.
+    // can still be refused by another, and a limit that dropped out here would
+    // stop bounding the pull at all once a seeded grant deletes the session
+    // default.
     ...(policy.perPeriod ?? []).map((limit) => remainingOnLimit(limit, used.periodUsage) ?? 0n),
     left(policy.maxTotalPerSession, used.spentThisSession),
   ].filter((cap): cap is bigint => cap !== undefined);

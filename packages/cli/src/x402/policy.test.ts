@@ -464,9 +464,9 @@ describe('topUpCeiling', () => {
 
 describe('tightestLimit', () => {
   /**
-   * Sizing a top-up and reporting the verdict ask the same question, and each
-   * used to answer it with its own reduction: `jaw x402 status` said ready for a
-   * session whose month was drained because today's counter was at zero.
+   * Sizing a top-up and reporting the verdict ask the same question. Answered
+   * apart, `jaw x402 status` says ready for a session whose month is drained,
+   * because today's counter is still at zero.
    */
   it('takes the limit with the least room left, not the smallest allowance', () => {
     const day = limit('1000000');
@@ -476,8 +476,8 @@ describe('tightestLimit', () => {
 
   /**
    * `checkPolicy` refuses every payment on an allowance it cannot read, so a
-   * limit that ranked out of this reported the next one's healthy figure for a
-   * session where nothing could go through.
+   * limit ranked out of this would report the next one's healthy figure for a
+   * session where nothing can go through.
    */
   it('counts an unreadable allowance as no room rather than dropping it', () => {
     const unreadable = limit('abc');
@@ -486,6 +486,18 @@ describe('tightestLimit', () => {
 
   it('has nothing to report when the policy holds no limit', () => {
     expect(tightestLimit([])).toBeNull();
+  });
+
+  /**
+   * `jaw x402 status` joins usage onto its limits before ranking them, so the
+   * limits it passes already carry `toppedUp`. Read only out of the second
+   * argument, a caller with nothing to pass there would get every limit's full
+   * width back, and the ranking would fall through to the smallest allowance.
+   */
+  it('reads the usage a joined limit already carries', () => {
+    const day = usage('1000000');
+    const month = usage('100000000', 99_500_000n, 'month');
+    expect(tightestLimit([day, month])).toBe(month);
   });
 });
 
