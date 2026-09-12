@@ -4,15 +4,19 @@ import type { WSBridgeConfig } from './ws-bridge.js';
 
 const constructed: Array<{ config: WSBridgeConfig }> = [];
 
+/** What the browser filled in, set per test before `getBridge` runs. */
+let injectedApiKey: string | null = null;
+
 vi.mock('./ws-bridge.js', () => ({
   WSBridge: vi.fn().mockImplementation((options: { config: WSBridgeConfig }) => {
     constructed.push(options);
-    return { connect: vi.fn().mockResolvedValue(undefined) };
+    return { connect: vi.fn().mockResolvedValue(undefined), injectedApiKey };
   }),
 }));
 
 vi.mock('./config.js', () => ({
   loadConfig: vi.fn().mockReturnValue({}),
+  saveConfig: vi.fn(),
 }));
 
 // An existing session with a peer key, so getBridge reuses it and never reaches
@@ -31,7 +35,7 @@ vi.mock('./relay-session.js', () => ({
 }));
 
 import { getBridge } from './bridge-singleton.js';
-import { loadConfig } from './config.js';
+import { loadConfig, saveConfig } from './config.js';
 
 // Every command used to look up `config.paymasters[chainId]` itself and forward
 // only `.url` to getBridge, which then looked the same entry up again as a
@@ -44,6 +48,7 @@ describe('getBridge — paymaster threading', () => {
 
   beforeEach(() => {
     constructed.length = 0;
+    injectedApiKey = null;
     vi.clearAllMocks();
     vi.mocked(loadConfig).mockReturnValue({});
   });
@@ -80,5 +85,42 @@ describe('getBridge — paymaster threading', () => {
 
     expect(paymasterOf().paymasterUrl).toBe('https://configured.example/rpc');
     expect(paymasterOf().paymasterContext).toBeUndefined();
+  });
+});
+
+// `jaw x402 pay` runs unattended and reads the key off the config file, so a key
+// that lived only for the connecting process would leave the paying half of the
+// product without one.
+describe('getBridge — keeping the key the browser filled in', () => {
+  beforeEach(() => {
+    constructed.length = 0;
+    injectedApiKey = null;
+    vi.clearAllMocks();
+    vi.mocked(loadConfig).mockReturnValue({});
+  });
+
+  it('stores one the config did not have', async () => {
+    injectedApiKey = 'workspace-key';
+
+    await getBridge({ apiKey: '', chainId: 8453 });
+
+    expect(vi.mocked(saveConfig)).toHaveBeenCalledWith({ apiKey: 'workspace-key' });
+  });
+
+  // The user chose theirs and it is what carries their own attribution. This is
+  // the one that must not regress.
+  it('never replaces a key already in the config', async () => {
+    injectedApiKey = 'workspace-key';
+    vi.mocked(loadConfig).mockReturnValue({ apiKey: 'mine', defaultChain: 8453 });
+
+    await getBridge({ apiKey: 'mine', chainId: 8453 });
+
+    expect(vi.mocked(saveConfig)).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing when the browser filled in nothing', async () => {
+    await getBridge({ apiKey: 'mine', chainId: 8453 });
+
+    expect(vi.mocked(saveConfig)).not.toHaveBeenCalled();
   });
 });
