@@ -1207,10 +1207,16 @@ export class Account {
                 // same requester named. The amount stays the wallet's, like the
                 // destination and the token.
                 //
-                // No paymaster is no rate, and no rate is no prefund: the token
-                // the spender would be holding could not pay for anything.
-                const url = this._chain.paymaster?.url;
-                if (!url) return null;
+                // Falls back to JAW's own rather than giving up when the wallet
+                // has none configured. `chain.paymaster` is only set when the
+                // caller passed one, and the CLI bridge passes what the CLI's
+                // config holds, which is usually nothing; reading it alone meant
+                // the prefund declined for every session created that way, and
+                // said nothing, while the grant itself went through on the
+                // requester's override.
+                const url =
+                    this._chain.paymaster?.url ??
+                    `${JAW_PAYMASTER_URL}?chainId=${this._chain.id}&api-key=${this._apiKey}`;
                 try {
                     const { fetchTokenQuotes } = await import('./erc20Paymaster.js');
                     const quotes = await fetchTokenQuotes(url, this._chain.id, [token]);

@@ -1645,7 +1645,19 @@ describe('Account — prefunding the spender in the grant', () => {
     const SPENDER = '0x2222222222222222222222222222222222222222' as `0x${string}`;
     const PERMISSIONS = { spends: [{ token: TOKEN, allowance: '10000000', unit: 'day' }] };
 
-    async function grant(options?: { prefundSpender?: boolean }, balance = 5_000_000n, paymasterUrlOverride?: string) {
+    async function grant({
+        prefundSpender,
+        balance = 5_000_000n,
+        requesterPaymasterUrl,
+        walletPaymasterUrl = PAYMASTER_URL,
+    }: {
+        prefundSpender?: boolean;
+        balance?: bigint;
+        /** What the request named through `paymasterService`. */
+        requesterPaymasterUrl?: string;
+        /** What the wallet was configured with. Null is the CLI bridge, which configures none. */
+        walletPaymasterUrl?: string | null;
+    } = {}) {
         const { createSmartAccount } = await import('./smartAccount.js');
         const { grantPermissions } = await import('../rpc/permissions.js');
         const { fetchTokenQuotes } = await import('./erc20Paymaster.js');
@@ -1671,7 +1683,7 @@ describe('Account — prefunding the spender in the grant', () => {
         vi.mocked(grantPermissions).mockResolvedValue({ permissionId: '0xperm' } as never);
 
         const account = await Account.fromLocalAccount(
-            { chainId: 1, apiKey: 'test', paymasterUrl: PAYMASTER_URL } as never,
+            { chainId: 1, apiKey: 'test', paymasterUrl: walletPaymasterUrl ?? undefined } as never,
             { address: '0xabcdef1234567890abcdef1234567890abcdef12', type: 'local', sign: vi.fn() } as never
         );
 
@@ -1679,10 +1691,10 @@ describe('Account — prefunding the spender in the grant', () => {
             9999999999,
             SPENDER,
             PERMISSIONS as never,
-            paymasterUrlOverride,
+            requesterPaymasterUrl,
             undefined,
             undefined,
-            options
+            { prefundSpender }
         );
         const prepended = vi.mocked(grantPermissions).mock.calls.at(-1)?.[8] ?? [];
         // The parameter also takes a lone call, which this path never sends.
@@ -1716,7 +1728,7 @@ describe('Account — prefunding the spender in the grant', () => {
     it('prices the transfer against its own paymaster, not the one the request named', async () => {
         const { fetchTokenQuotes } = await import('./erc20Paymaster.js');
 
-        await grant({ prefundSpender: true }, 5_000_000n, 'https://paymaster.the-requester-chose');
+        await grant({ prefundSpender: true, requesterPaymasterUrl: 'https://paymaster.the-requester-chose' });
 
         for (const call of vi.mocked(fetchTokenQuotes).mock.calls) {
             expect(call[0]).toBe(PAYMASTER_URL);
@@ -1724,9 +1736,27 @@ describe('Account — prefunding the spender in the grant', () => {
         expect(vi.mocked(fetchTokenQuotes)).toHaveBeenCalled();
     });
 
+    // The CLI bridge creates the SDK with no paymaster of its own, so reading
+    // only the configured one declined every session created that way while the
+    // grant went through on the requester's override: charged, and seeded with
+    // nothing.
+    it('prices the transfer against JAW when the wallet has no paymaster of its own', async () => {
+        const { fetchTokenQuotes } = await import('./erc20Paymaster.js');
+
+        const prepended = await grant({ prefundSpender: true, walletPaymasterUrl: null });
+
+        expect(prepended).toHaveLength(1);
+        const decoded = decodeFunctionData({ abi: erc20Abi, data: prepended[0].data as `0x${string}` });
+        expect(decoded.args).toEqual([SPENDER, 6_000n]);
+        for (const call of vi.mocked(fetchTokenQuotes).mock.calls) {
+            expect(call[0]).toBe(`${JAW_PAYMASTER_URL}?chainId=1&api-key=test`);
+        }
+        expect(vi.mocked(fetchTokenQuotes)).toHaveBeenCalled();
+    });
+
     // Losing the grant to a reverted transfer is worse than the sponsored op it
     // was meant to replace.
     it('leaves the grant alone when the account cannot cover the transfer', async () => {
-        expect(await grant({ prefundSpender: true }, 1n)).toEqual([]);
+        expect(await grant({ prefundSpender: true, balance: 1n })).toEqual([]);
     });
 });
