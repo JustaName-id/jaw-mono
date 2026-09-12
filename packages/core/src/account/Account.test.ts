@@ -1655,7 +1655,10 @@ describe('Account — prefunding the spender in the grant', () => {
         balance?: bigint;
         /** What the request named through `paymasterService`. */
         requesterPaymasterUrl?: string;
-        /** What the wallet was configured with. Null is the CLI bridge, which configures none. */
+        /**
+         * The chain's paymaster, which arrives on the request from the dapp's
+         * own config. Null is the CLI bridge, which sends none.
+         */
         walletPaymasterUrl?: string | null;
     } = {}) {
         const { createSmartAccount } = await import('./smartAccount.js');
@@ -1722,36 +1725,37 @@ describe('Account — prefunding the spender in the grant', () => {
         expect(decoded.args).toEqual([SPENDER, 6_000n]);
     });
 
-    // The rate decides how much leaves the account, and `paymasterService` lets
-    // the requester name the server that answers with it. The destination and
-    // the token are already the wallet's to choose; so is the amount.
-    it('prices the transfer against its own paymaster, not the one the request named', async () => {
+    // The rate decides how much leaves the account, to a spender the requester
+    // chose. Neither URL the requester can reach is allowed to answer with it:
+    // `paymasterService` is theirs by definition, and the chain's own paymaster
+    // rides in on the request from the dapp's `paymasters` config, which keys
+    // then builds the account from. An inflated rate clamps the transfer to the
+    // whole allowance and lands it outside the permission.
+    it('prices the transfer against JAW, never a paymaster the request carried', async () => {
         const { fetchTokenQuotes } = await import('./erc20Paymaster.js');
 
-        await grant({ prefundSpender: true, requesterPaymasterUrl: 'https://paymaster.the-requester-chose' });
+        const prepended = await grant({
+            prefundSpender: true,
+            walletPaymasterUrl: 'https://paymaster.the-request-carried',
+            requesterPaymasterUrl: 'https://paymaster.the-requester-chose',
+        });
 
+        expect(prepended).toHaveLength(1);
         for (const call of vi.mocked(fetchTokenQuotes).mock.calls) {
-            expect(call[0]).toBe(PAYMASTER_URL);
+            expect(call[0]).toBe(`${JAW_PAYMASTER_URL}?chainId=1&api-key=test`);
         }
         expect(vi.mocked(fetchTokenQuotes)).toHaveBeenCalled();
     });
 
-    // The CLI bridge creates the SDK with no paymaster of its own, so reading
-    // only the configured one declined every session created that way while the
-    // grant went through on the requester's override: charged, and seeded with
-    // nothing.
-    it('prices the transfer against JAW when the wallet has no paymaster of its own', async () => {
-        const { fetchTokenQuotes } = await import('./erc20Paymaster.js');
-
+    // The CLI bridge creates the SDK with no paymaster at all, so reading one
+    // off the chain declined every session created that way while the grant
+    // itself went through: charged, and seeded with nothing.
+    it('still prices the transfer when the request carried no paymaster', async () => {
         const prepended = await grant({ prefundSpender: true, walletPaymasterUrl: null });
 
         expect(prepended).toHaveLength(1);
         const decoded = decodeFunctionData({ abi: erc20Abi, data: prepended[0].data as `0x${string}` });
         expect(decoded.args).toEqual([SPENDER, 6_000n]);
-        for (const call of vi.mocked(fetchTokenQuotes).mock.calls) {
-            expect(call[0]).toBe(`${JAW_PAYMASTER_URL}?chainId=1&api-key=test`);
-        }
-        expect(vi.mocked(fetchTokenQuotes)).toHaveBeenCalled();
     });
 
     // Losing the grant to a reverted transfer is worse than the sponsored op it

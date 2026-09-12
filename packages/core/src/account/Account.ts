@@ -1200,27 +1200,29 @@ export class Account {
                 publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [owner] }),
             gasPrice: () => publicClient.getGasPrice(),
             exchangeRate: async (token: Address) => {
-                // This wallet's own paymaster, deliberately not the one the
-                // request may have supplied through `paymasterService`. That URL
-                // is the requester's to choose, and the rate it answers with is
-                // what decides how much leaves the account, to a spender the
-                // same requester named. The amount stays the wallet's, like the
-                // destination and the token.
-                //
-                // Falls back to JAW's own rather than giving up when the wallet
-                // has none configured. `chain.paymaster` is only set when the
-                // caller passed one, and the CLI bridge passes what the CLI's
-                // config holds, which is usually nothing; reading it alone meant
-                // the prefund declined for every session created that way, and
-                // said nothing, while the grant itself went through on the
-                // requester's override.
-                const url =
-                    this._chain.paymaster?.url ??
-                    `${JAW_PAYMASTER_URL}?chainId=${this._chain.id}&api-key=${this._apiKey}`;
+                // JAW's own paymaster, never the one on the request. The rate
+                // decides how much leaves the account, to a spender the requester
+                // chose, so an inflated rate trims the transfer to the whole
+                // allowance and lands it outside the permission. `chain.paymaster`
+                // is the requester's too: it rides in on the request from the
+                // dapp's own `paymasters` config, and keys builds the account
+                // from it.
+                const url = `${JAW_PAYMASTER_URL}?chainId=${this._chain.id}${
+                    this._apiKey ? `&api-key=${this._apiKey}` : ''
+                }`;
                 try {
                     const { fetchTokenQuotes } = await import('./erc20Paymaster.js');
                     const quotes = await fetchTokenQuotes(url, this._chain.id, [token]);
-                    return quotes[0]?.exchangeRate ?? null;
+                    const rate = quotes[0]?.exchangeRate;
+                    // A paymaster that answers but does not take this token. Said
+                    // out loud for the same reason as the throw below: otherwise
+                    // it is a grant that landed and a session that cannot pay,
+                    // with nothing connecting the two.
+                    if (rate === undefined) {
+                        console.warn(`The paymaster does not quote ${token}, so the spender was not funded.`);
+                        return null;
+                    }
+                    return rate;
                 } catch (error) {
                     // The grant is what the user came to do; a paymaster that
                     // will not quote is not a reason to fail it. It is a reason
