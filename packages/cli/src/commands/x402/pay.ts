@@ -5,9 +5,10 @@ import { tryLoadSessionConfig } from '../../lib/session-config.js';
 import { SessionBridge } from '../../lib/session-bridge.js';
 import { Eip3009EoaPayer } from '../../x402/payer.js';
 import { payAndFetch } from '../../x402/http.js';
-import { appendX402Log, sumSpentSince } from '../../x402/ledger.js';
+import { appendX402Log, compactX402Log, readX402Log, sumSpentSince } from '../../x402/ledger.js';
+import { reconcileSettlements } from '../../x402/settlement.js';
 import { resolveSessionX402Policy, topUpCeiling } from '../../x402/policy.js';
-import { currentLimitUsageOnChain } from '../../x402/spend-window.js';
+import { capWindowStarts, currentLimitUsageOnChain } from '../../x402/spend-window.js';
 import { ensurePayerFunds } from '../../x402/topup.js';
 import { parseNonNegativeBigInt } from '../../x402/amount.js';
 import { usdcForNetwork, USDC_BY_NETWORK } from '../../x402/asset-registry.js';
@@ -59,6 +60,10 @@ export default class X402Pay extends BaseCommand {
     const { args, flags } = await this.parse(X402Pay);
     const format = flags.output as OutputFormat;
     const config = loadConfig();
+    // The user's own key when there is one, the workspace key the browser
+    // handed us otherwise. Without either there is no paymaster to charge a
+    // refill's gas to, which is what makes this the top-up's precondition.
+    const apiKey = this.resolveApiKey(flags);
 
     // Throws a clear "run jaw session setup" when there is no session key.
     const payer = Eip3009EoaPayer.fromSessionKey();
@@ -67,16 +72,21 @@ export default class X402Pay extends BaseCommand {
     // the two front ends enforced different caps for the same session.
     const policy = resolveSessionX402Policy(config.x402, session);
 
-    const spent = sumSpentSince(payer.address, session?.createdAt);
+    // Payer, deliberately, with no permission: this total is measured against
+    // `maxTotalPerSession`, which is the user's own ceiling rather than the
+    // chain's, and it spans permissions. `session add` preserves `createdAt` so
+    // that adding a capability cannot reset it; scoping to the new permission
+    // would hand back the same clean slate through the other door.
+    const scope = { payer: payer.address };
 
-    if (flags.pay && (!session || !config.apiKey)) {
+    if (flags.pay && (!session || !apiKey)) {
       // Without a session there is no permission to pull through, so the payer
       // spends whatever it already holds. Worth saying: the failure otherwise
       // arrives later as a bare insufficient-balance error with no hint that a
       // top-up was never on the table.
       this.warn(
         session
-          ? 'No apiKey configured, so a short payer cannot be topped up. Paying from its own balance.'
+          ? 'No API key, so a short payer cannot be topped up. Paying from its own balance.'
           : 'No session, so a short payer cannot be topped up through a permission. Paying from its own balance.'
       );
     }
@@ -86,11 +96,17 @@ export default class X402Pay extends BaseCommand {
     // payer reads a total that does not yet include the payment just made, which
     // is the race the lock exists to close.
     const run = async () => {
-      const periodUsage = await currentLimitUsageOnChain(policy, payer.address, session);
-      // Re-read here, not before the lock: another process may have paid while
-      // we waited our turn, and a stale total waves through a payment the cap
-      // should have stopped. Same for the period window, which moves on its own.
-      const spentThisSession = flags.pay ? sumSpentSince(payer.address, session?.createdAt) : spent;
+      // One read for the whole payment, taken here and not before the lock:
+      // another process may have paid while we waited our turn, and a stale
+      // total waves through a payment the cap should have stopped. Nothing can
+      // append while we hold it, so the session total and every period window
+      // count against the same rows.
+      //
+      // Reconciled first because an unverified row costs its ceiling, and this
+      // is where that figure comes down to what the chain shows actually moved.
+      const ledger = await reconcileSettlements(readX402Log());
+      const periodUsage = await currentLimitUsageOnChain(ledger, policy, payer.address, session);
+      const spentThisSession = sumSpentSince(ledger, scope, session?.createdAt);
 
       // Only wired for a real payment: a dry run returns before the funding hook,
       // so building a bridge for it would open a connection nothing uses. Built
@@ -99,8 +115,8 @@ export default class X402Pay extends BaseCommand {
       let ensureFunds:
         | ((requirement: X402PaymentRequirement, payerAddress: `0x${string}`) => ReturnType<typeof ensurePayerFunds>)
         | undefined;
-      if (flags.pay && session && config.apiKey) {
-        const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
+      if (flags.pay && session && apiKey) {
+        const bridge = new SessionBridge({ apiKey, chainId: session.chainId });
         const floatTarget = parseNonNegativeBigInt(config.x402?.topUpFloat);
         const maxTopUp = topUpCeiling(policy, { periodUsage, spentThisSession });
         ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
@@ -122,13 +138,18 @@ export default class X402Pay extends BaseCommand {
         dryRun: !flags.pay,
       });
 
-      // Only a real run touches the ledger. Recording dry runs would corrupt the
-      // spend totals that both this command and the agent read back.
+      // No payment row for a dry run: recording one would corrupt the spend
+      // totals that both this command and the agent read back. The reconcile
+      // above does write, and deliberately, though a dry run holds no lock. What
+      // it writes are corrections, which only ever bring a ceiling down to what
+      // the chain says moved, and a rehearsal that skipped them would measure
+      // against ceilings the real run would not have.
       if (flags.pay) {
         const settled = outcome.payment ?? outcome.attemptedPayment;
         const isPaymentEvent =
           outcome.paid || !!outcome.attemptedPayment || (outcome.status === 402 && !!outcome.refusedReason);
         if (isPaymentEvent) {
+          const status = outcome.paid ? 'paid' : outcome.attemptedPayment ? 'failed' : 'refused';
           // Field for field what the MCP handler writes: both read each other's
           // entries back for the session spend total, so a divergence here would
           // make the two disagree about what has been spent.
@@ -136,10 +157,12 @@ export default class X402Pay extends BaseCommand {
             at: new Date().toISOString(),
             url: args.url,
             payer: outcome.payer,
-            status: outcome.paid ? 'paid' : outcome.attemptedPayment ? 'failed' : 'refused',
+            permissionId: session?.permissionId,
+            status,
             amount: settled?.amount,
             authorized: settled?.authorized,
             deadline: settled?.deadline,
+            scheme: settled?.scheme,
             asset: settled?.asset,
             network: settled?.network,
             payTo: settled?.payTo,
@@ -149,7 +172,15 @@ export default class X402Pay extends BaseCommand {
             topUpBatchId: outcome.topUp?.batchId,
             approvalBatchId: outcome.permit2Approval?.batchId,
             reason: outcome.refusedReason,
+            // A signed authorization is worth its ceiling to whoever holds it
+            // until the chain says otherwise. A refusal signed nothing.
+            settlement: status === 'refused' ? undefined : 'unverified',
           });
+
+          // Fold the ledger down while the lock is still held and the windows
+          // this payment measured against are in hand. Below the threshold it
+          // is one `stat` and nothing else.
+          compactX402Log(capWindowStarts(periodUsage, session?.createdAt));
         }
       }
 

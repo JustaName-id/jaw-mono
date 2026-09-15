@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense, useRef, useCallback } from 'react';
 import { JAW, Mode } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
+import { resolveBridgeApiKey } from '../../lib/cli-api-key';
 import {
   generateKeyPair,
   deriveSharedSecret,
@@ -202,7 +203,6 @@ function CLIBridgeContent() {
 
               switch (inner.type) {
                 case 'init': {
-                  const apiKey = inner.apiKey as string;
                   const chainId = (inner.chainId as number) ?? 1;
                   const ens = inner.ens as string | undefined;
                   const paymasterUrl = inner.paymasterUrl as string | undefined;
@@ -210,9 +210,16 @@ function CLIBridgeContent() {
                   // sends the two together or not at all.
                   const paymasterContext = inner.paymasterContext as Record<string, unknown> | undefined;
 
+                  // A CLI that brought its own key keeps it, so anyone who wants
+                  // their own attribution or their own limits sets one and
+                  // nothing about their setup changes. Only the empty case is
+                  // filled in, and it is filled in from the CLI's own workspace
+                  // rather than this app's, which bills something else.
+                  const sentApiKey = typeof inner.apiKey === 'string' ? inner.apiKey : '';
+                  const apiKey = await resolveBridgeApiKey(sentApiKey);
                   if (!apiKey) {
                     setState('error');
-                    setError('CLI sent empty API key');
+                    setError('No API key: the CLI sent none and this deployment has none configured for it.');
                     return;
                   }
 
@@ -240,10 +247,14 @@ function CLIBridgeContent() {
                     });
                   }
 
-                  // Send encrypted ready
+                  // Send encrypted ready, carrying the key back only when we
+                  // are the ones who supplied it. Echoing a key the CLI already
+                  // has would hand it something to store that it did not need,
+                  // and this way it only ever persists what it lacked.
                   const readyEnvelope = await encryptAndSerialize(sharedSecretRef.current!, {
                     type: 'ready',
                     chainId,
+                    ...(sentApiKey ? {} : { apiKey }),
                   });
                   ws!.send(JSON.stringify(readyEnvelope));
                   break;
