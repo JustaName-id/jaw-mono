@@ -172,7 +172,7 @@ export function buildGrantPermissionCall(account: Address_2, spender: Address_2,
 };
 
 // @public
-export function buildHandleJawRpcUrl(baseUrl: string, apiKey: string): string;
+export function buildHandleJawRpcUrl(baseUrl: string, apiKey?: string): string;
 
 // @public
 export function buildRevokePermissionCall(relayPermission: StorePermissionApiResponse): {
@@ -346,7 +346,7 @@ export function createJAWProvider(options: CreateProviderOptions): JAWProvider;
 
 // @public (undocumented)
 export type CreateJAWSDKOptions = Partial<AppMetadata> & {
-    apiKey: string;
+    apiKey?: string;
     preference?: Partial<JawProviderPreference>;
     paymasters?: Record<number, PaymasterConfig>;
     ens?: string;
@@ -571,7 +571,7 @@ export function getErrorCode(error: unknown): number | undefined;
 export function getMessageFromCode(code: number | undefined, fallbackMessage?: string): string;
 
 // @public
-export function getPermissionFromRelay(permissionHash: Hex, apiKey: string): Promise<StorePermissionApiResponse>;
+export function getPermissionFromRelay(permissionHash: Hex, apiKey?: string): Promise<StorePermissionApiResponse>;
 
 // @public
 export function getSupportedChains(showTestnets?: boolean): readonly Chain_2[];
@@ -582,16 +582,16 @@ export interface GrantPermissionsOptions {
 }
 
 // @public
-export function handleGetAssetsRequest(request: RequestArguments, apiKey: string, showTestnets?: boolean): Promise<unknown>;
+export function handleGetAssetsRequest(request: RequestArguments, apiKey: string | undefined, showTestnets?: boolean): Promise<unknown>;
 
 // @public
-export function handleGetCallsHistoryRequest(request: RequestArguments, apiKey: string, connectedAddress?: Address_2): Promise<WalletGetCallsHistoryResponse>;
+export function handleGetCallsHistoryRequest(request: RequestArguments, apiKey: string | undefined, connectedAddress?: Address_2): Promise<WalletGetCallsHistoryResponse>;
 
 // @public
-export function handleGetCapabilitiesRequest(request: RequestArguments, apiKey: string, showTestnets?: boolean): Promise<CapabilitiesResult>;
+export function handleGetCapabilitiesRequest(request: RequestArguments, apiKey: string | undefined, showTestnets?: boolean): Promise<CapabilitiesResult>;
 
 // @public
-export function handleGetPermissionsRequest(request: RequestArguments, apiKey: string, connectedAddress?: Address_2): Promise<unknown>;
+export function handleGetPermissionsRequest(request: RequestArguments, apiKey: string | undefined, connectedAddress?: Address_2): Promise<unknown>;
 
 // Warning: (ae-forgotten-export) The symbol "HexString" needs to be exported by the entry point index.d.ts
 //
@@ -812,7 +812,7 @@ export function logAccountIssuance(params: LogAccountIssuanceParams): void;
 // @public
 export interface LogAccountIssuanceParams {
     address: Address_2;
-    apiKey: string;
+    apiKey?: string;
     type: IssuanceType;
 }
 
@@ -822,7 +822,7 @@ export function logSignature(params: LogSignatureParams): void;
 // @public
 export interface LogSignatureParams {
     address: Address_2;
-    apiKey: string;
+    apiKey?: string;
 }
 
 // @public
@@ -1217,6 +1217,9 @@ export interface ServerErrorOptions<T> extends EthereumErrorOptions<T> {
     // (undocumented)
     code: number;
 }
+
+// @public
+export function setDappOrigin(origin: string | undefined): void;
 
 // @public
 export interface SignatureUIRequest extends BaseUIRequest {

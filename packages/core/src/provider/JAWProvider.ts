@@ -37,7 +37,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     private readonly metadata: AppMetadata;
     private readonly preference: JawProviderPreference;
     private readonly communicator: Communicator;
-    private readonly apiKey: string;
+    private readonly apiKey?: string;
     private readonly paymasters?: Record<number, PaymasterConfig>;
     private theme?: JawTheme;
 

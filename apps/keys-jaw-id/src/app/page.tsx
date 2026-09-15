@@ -10,7 +10,7 @@ import { extractTransactionData } from '../lib/tx-handler';
 import type { TransactionRequestData } from '../components/TransactionModal';
 import { useAuth, usePasskeys } from '../hooks';
 import { SignInScreen, type AuthenticatedAccount } from '../components/OnboardingSection';
-import { PasskeyManager, type PasskeyAccount } from '@jaw.id/core';
+import { PasskeyManager, setDappOrigin, type PasskeyAccount } from '@jaw.id/core';
 import { SiweModal } from '../components/SiweModal';
 import { ensureIntNumber, type SignInWithEthereumCapabilityRequest } from '@jaw.id/core';
 import { ConnectModal } from '../components/ConnectModal';
@@ -563,6 +563,9 @@ function KeysJawIdAppContent({
       const origin = communicator.getOrigin() || '';
       setCurrentOrigin(origin);
       cryptoHandler.setOrigin(origin);
+      // Our own Origin is the same whichever dApp opened us, so the backend
+      // cannot tell which one a call belongs to unless we say.
+      setDappOrigin(origin);
 
       const peerPublicKey = request.sender;
       const method = request.content.handshake.method;
@@ -724,6 +727,10 @@ function KeysJawIdAppContent({
 
       // Update React state with current origin (needed for useAuth hook)
       setCurrentOrigin(origin);
+      // Set again rather than relying on the handshake having run in this
+      // document: the origin the backend is told comes from the request being
+      // served, not from an earlier one.
+      setDappOrigin(origin);
 
       // Reply to the SDK with a reconnect-required sentinel (tied to this
       // request id, carries no secret) so it re-establishes a session against
